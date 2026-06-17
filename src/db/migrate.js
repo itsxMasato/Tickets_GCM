@@ -38,6 +38,8 @@ function applyMissingColumns(db) {
   }
 }
 
+//vamos a probar esto
+
 function applyIndexes(db) {
   // CREATE INDEX IF NOT EXISTS: si la tabla ya existía y el índice nunca se creó
   // (porque en su momento la columna no estaba), se crea ahora.
