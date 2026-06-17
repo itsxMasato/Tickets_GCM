@@ -1,0 +1,230 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body { @apply h-full; }
+  body {
+    @apply bg-surface text-brand-ink font-sans antialiased;
+  }
+  a { @apply text-brand hover:text-brand-deep; }
+
+  /* Scrollbar sobria */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #D6DEE8; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #B6C2D2; background-clip: padding-box; border: 2px solid transparent; }
+}
+
+@layer components {
+  /* === Botones === */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md font-medium text-sm transition
+           focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-white hover:bg-brand-deep focus:ring-brand-ocean;
+  }
+  .btn-accent {
+    @apply btn bg-accent text-white hover:bg-accent-hover focus:ring-accent;
+  }
+  .btn-secondary {
+    @apply btn bg-white text-brand-ink border border-surface-border hover:bg-surface focus:ring-brand-ocean;
+  }
+  .btn-danger {
+    @apply btn bg-accent text-white hover:bg-accent-hover focus:ring-accent;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-brand-ink/80 hover:bg-surface;
+  }
+  .btn-sm { @apply px-2.5 py-1 text-xs; }
+  .btn-icon {
+    @apply inline-flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-md
+           text-brand-ink/70 hover:bg-surface hover:text-brand-ink
+           focus:outline-none focus:ring-2 focus:ring-brand-ocean/30 transition;
+  }
+  .btn-icon-sm {
+    @apply inline-flex items-center justify-center min-w-[36px] min-h-[36px] w-9 h-9 rounded-md
+           text-brand-ink/60 hover:bg-surface hover:text-brand-ink transition;
+  }
+
+  /* === Inputs === */
+  .input {
+    @apply w-full px-3 py-2 bg-white border border-surface-border rounded-md shadow-soft
+           text-sm text-brand-ink placeholder:text-slate-400
+           focus:outline-none focus:ring-2 focus:ring-brand-ocean/40 focus:border-brand-ocean;
+  }
+  .label { @apply block text-sm font-medium text-brand-ink mb-1; }
+
+  /* === Card / surfaces === */
+  .card {
+    @apply bg-white shadow-card rounded-xl p-5 border border-surface-border;
+  }
+  .card-tight { @apply bg-white shadow-card rounded-xl border border-surface-border; }
+
+  /* === Badges ===
+     Definidos arriba con dot de color (accesibilidad). Si necesitas una
+     variante sin dot, usa `.badge` directamente. */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  /* === Tablas === */
+  .table-wrap { @apply w-full overflow-x-auto rounded-xl border border-surface-border bg-white shadow-card; }
+  .table { @apply min-w-full text-sm; }
+  .table thead th {
+    @apply text-left text-xs font-semibold uppercase tracking-wide text-slate-500
+           bg-surface px-4 py-3 border-b border-surface-border;
+  }
+  .table tbody td { @apply px-4 py-3 border-b border-surface-border/60 align-top; }
+  .table tbody tr:hover { @apply bg-surface/60; }
+  .table tbody tr:last-child td { @apply border-b-0; }
+
+  /* === Sidebar corporativo (Navy) === */
+  .sidebar {
+    @apply w-64 bg-brand text-white flex flex-col shadow-sidebar;
+  }
+
+  /* Contenedor del sidebar: fijo en desktop, drawer en móvil */
+  .gcm-sidebar {
+    @apply hidden md:flex md:flex-none md:sticky md:top-0 md:h-screen;
+  }
+  body.gcm-sidebar-open .gcm-sidebar {
+    @apply flex fixed inset-y-0 left-0 z-40 animate-[slidein_0.2s_ease-out];
+  }
+  @keyframes slidein {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(0); }
+  }
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
+           text-white/80 hover:bg-white/10 hover:text-white transition;
+  }
+  .sidebar-link.active {
+    @apply bg-white/15 text-white shadow-soft;
+  }
+  .sidebar-icon { @apply w-5 h-5 flex-none; }
+  .sidebar-section {
+    @apply px-3 mt-4 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/50;
+  }
+  .sidebar-brand {
+    @apply px-5 py-5 border-b border-white/10 flex items-center gap-3;
+  }
+  .sidebar-foot {
+    @apply p-3 border-t border-white/10;
+  }
+
+  /* === Topbar === */
+  .topbar {
+    @apply h-16 bg-white border-b border-surface-border flex items-center
+           justify-between px-4 md:px-6 gap-4;
+  }
+  .topbar-search {
+    @apply flex items-center gap-2 bg-surface rounded-md px-3 h-11 w-full
+           max-w-md border border-transparent
+           focus-within:bg-white focus-within:border-surface-border
+           focus-within:ring-2 focus-within:ring-brand-ocean/30 transition;
+  }
+
+  /* === Chat === */
+  .chat-bubble {
+    @apply max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-soft;
+  }
+  .chat-bubble-me {
+    @apply bg-brand text-white rounded-br-sm;
+  }
+  .chat-bubble-other {
+    @apply bg-white text-brand-ink border border-surface-border rounded-bl-sm;
+  }
+  .chat-event {
+    @apply text-center text-xs text-slate-500 my-2 flex items-center gap-3;
+  }
+  .chat-event::before, .chat-event::after {
+    content: ''; @apply flex-1 border-t border-surface-border;
+  }
+
+  /* === Avatar / misc === */
+  .avatar {
+    @apply w-9 h-9 rounded-full flex items-center justify-center text-xs
+           font-semibold text-white flex-none;
+  }
+  .dot { @apply w-2 h-2 rounded-full inline-block; }
+
+  /* === KPI cards === */
+  .kpi-card {
+    @apply card flex flex-col gap-1.5 hover:shadow-pop transition;
+  }
+  .kpi-label { @apply text-xs uppercase tracking-wider text-slate-500 font-medium; }
+  .kpi-value { @apply text-2xl font-bold text-brand-ink; }
+  .kpi-hint  { @apply text-xs text-slate-400; }
+
+  /* === Brand dot (color chips) === */
+  .dot-brand   { @apply bg-brand; }
+  .dot-deep    { @apply bg-brand-deep; }
+  .dot-accent  { @apply bg-accent; }
+  .dot-ocean   { @apply bg-brand-ocean; }
+
+  /* === Badges con dot de color (accesibilidad para daltónicos) === */
+  .badge-dot {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-dot::before {
+    content: ''; @apply w-1.5 h-1.5 rounded-full flex-none;
+  }
+  .badge-recibido    { @apply badge-dot bg-slate-100 text-slate-700; }
+  .badge-recibido::before    { @apply bg-slate-400; }
+  .badge-asignado    { @apply badge-dot bg-blue-100 text-blue-800; }
+  .badge-asignado::before    { @apply bg-blue-500; }
+  .badge-en_proceso  { @apply badge-dot bg-amber-100 text-amber-800; }
+  .badge-en_proceso::before  { @apply bg-amber-500; }
+  .badge-solucionado { @apply badge-dot bg-emerald-100 text-emerald-800; }
+  .badge-solucionado::before { @apply bg-emerald-500; }
+  .badge-cerrado     { @apply badge-dot bg-slate-200 text-slate-800; }
+  .badge-cerrado::before     { @apply bg-slate-500; }
+  .badge-reabierto   { @apply badge-dot bg-orange-100 text-orange-800; }
+  .badge-reabierto::before   { @apply bg-orange-500; }
+
+  .prio-baja     { @apply badge-dot bg-slate-100 text-slate-700; }
+  .prio-baja::before     { @apply bg-slate-400; }
+  .prio-media    { @apply badge-dot bg-blue-100 text-blue-700; }
+  .prio-media::before    { @apply bg-blue-500; }
+  .prio-alta     { @apply badge-dot bg-amber-100 text-amber-800; }
+  .prio-alta::before     { @apply bg-amber-500; }
+  .prio-urgente  { @apply badge-dot bg-red-100 text-red-800; }
+  .prio-urgente::before  { @apply bg-red-500; }
+
+  /* === Login Page Styles === */
+  .login-gradient {
+    background: linear-gradient(135deg, #131b2e 0%, #0b1c30 100%);
+  }
+
+  .login-hero {
+    @apply rounded-3xl overflow-hidden;
+    background: radial-gradient(circle at top left, rgba(22, 172, 228, 0.22), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(207, 48, 29, 0.22), transparent 22%),
+                linear-gradient(180deg, #071D4C 0%, #0B1C30 100%);
+  }
+
+  .login-input-icon {
+    @apply transition-colors duration-200;
+  }
+
+  @keyframes spin-input {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .animate-spin-input {
+    animation: spin-input 1s linear infinite;
+  }
+
+  /* Accesibilidad: respetar prefers-reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

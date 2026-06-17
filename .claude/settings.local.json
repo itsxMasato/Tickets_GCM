@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"C:\\\\Users\\\\flore\\\\OneDrive\\\\Desktop\\\\Tickets_GCM\\\\src\")",
+      "Bash(ls -la \"C:\\\\Users\\\\flore\\\\OneDrive\\\\Desktop\\\\Tickets_GCM\\\\data\")",
+      "Bash(ls -la \"C:\\\\Users\\\\flore\\\\OneDrive\\\\Desktop\\\\Tickets_GCM\\\\public\")",
+      "Bash(mv client/components/chat-composer.js /tmp/cc-check.mjs)",
+      "Bash(node --check /tmp/cc-check.mjs)",
+      "Bash(npx esbuild *)",
+      "Bash(./node_modules/.bin/esbuild \"client/components/chat-composer.js\" --loader=js)",
+      "Bash(\"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe\" \"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/client/components/chat-composer.js\" --loader=js)",
+      "Bash(\"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe\" \"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/client/components/chat-composer.js\")",
+      "Bash(awk NR>=95 && NR<=108 {printf \"%3d: %s\\\\n\", NR, $0} *)",
+      "Bash(awk 'NR==101' \"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/client/components/chat-composer.js\")",
+      "Bash(awk NR>=102 && NR<=104 {printf \"L%d: [%s]\\\\n\", NR, $0} *)",
+      "Bash(\"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe\" \"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/client/components/chat-composer.js\" --log-level=verbose)",
+      "Bash(\"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe\" /tmp/cc.js)",
+      "Bash(\"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe\" --loader=js)",
+      "Bash(\"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe\" /tmp/cc100.js --loader=js)",
+      "Bash(\"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe\" /tmp/cc100.js)",
+      "Bash(\"C:/Users/flore/OneDrive/Desktop/Tickets_GCM/node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe\" /tmp/cc103.js)",
+      "Bash(awk NR>=99 && NR<=108 {printf \"L%d: [%s]\\\\n\", NR, $0} *)",
+      "Bash(awk NR>=6 && NR<=35 {printf \"L%d: %s\\\\n\", NR, $0} *)",
+      "Bash(awk NR>=35 && NR<=70 {printf \"L%d: %s\\\\n\", NR, $0} *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\flore\\\\OneDrive\\\\Desktop\\\\Tickets_GCM\\\\src\" -Recurse -File -Force | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object FullName | Format-List)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\flore\\\\OneDrive\\\\Desktop\\\\Tickets_GCM\\\\client\" -Recurse -File -Force | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object FullName | Format-List)",
+      "Bash(python src/ui-ux-pro-max/scripts/search.py \"internal ticketing system enterprise B2B operations manager dashboard\" --design-system -p \"GCM Tickets\")"
+    ]
+  }
+}

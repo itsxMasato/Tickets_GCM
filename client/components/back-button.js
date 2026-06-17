@@ -1,0 +1,31 @@
+import { h } from '../utils/dom.js';
+import { go } from '../router.js';
+import { ICON } from '../utils/icons.js';
+
+// SVG helper que cierra sobre h (local)
+function svg(path, cls = 'w-4 h-4') {
+  return h(`svg.${cls}`, {
+    fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8',
+    viewBox: '0 0 24 24', 'aria-hidden': 'true',
+    html: `<path stroke-linecap="round" stroke-linejoin="round" d="${path}" />`,
+  });
+}
+
+// Botón de navegación atrás reutilizable
+export function backButton({ 
+  href = '/tickets',
+  label = 'Volver',
+  icon = ICON.back,
+  className = 'text-brand-ink hover:text-brand',
+  minHeight = 'min-h-[44px]',
+} = {}) {
+  return h(`button.flex.items-center.gap-1.text-sm.font-medium.${className}.inline-flex.${minHeight}.-ml-1.px-1.rounded`, 
+    { onclick: () => go(href) }, 
+    [
+      svg(icon, 'w-4 h-4'),
+      label,
+    ]
+  );
+}
+
+export default backButton;
