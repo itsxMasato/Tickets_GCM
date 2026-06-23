@@ -8,66 +8,66 @@ const requireRole = require('../middleware/requireRole');
 const { upload } = require('../middleware/upload');
 
 // Listar
-router.get('/', requireAuth, (req, res, next) => {
+router.get('/', requireAuth, async (req, res, next) => {
   try {
-    const result = ticketsService.listTickets(req.query, req.user);
+    const result = await ticketsService.listTickets(req.query, req.user);
     res.json(result);
   } catch (err) { next(err); }
 });
 
 // Detalle
-router.get('/:id', requireAuth, (req, res, next) => {
+router.get('/:id', requireAuth, async (req, res, next) => {
   try {
-    const ticket = ticketsService.getTicket(parseInt(req.params.id, 10), req.user);
+    const ticket = await ticketsService.getTicket(parseInt(req.params.id, 10), req.user);
     res.json({ ticket });
   } catch (err) { next(err); }
 });
 
 // Crear
-router.post('/', requireAuth, (req, res, next) => {
+router.post('/', requireAuth, async (req, res, next) => {
   try {
-    const ticket = ticketsService.createTicket(req.body || {}, req.user);
+    const ticket = await ticketsService.createTicket(req.body || {}, req.user);
     res.status(201).json({ ticket });
   } catch (err) { next(err); }
 });
 
 // Editar metadatos
-router.patch('/:id', requireAuth, (req, res, next) => {
+router.patch('/:id', requireAuth, async (req, res, next) => {
   try {
-    const ticket = ticketsService.updateTicket(parseInt(req.params.id, 10), req.body || {}, req.user);
+    const ticket = await ticketsService.updateTicket(parseInt(req.params.id, 10), req.body || {}, req.user);
     res.json({ ticket });
   } catch (err) { next(err); }
 });
 
 // Asignar / reasignar
-router.post('/:id/assign', requireAuth, requireRole('sac', 'jefe_inmediato'), (req, res, next) => {
+router.post('/:id/assign', requireAuth, requireRole('sac', 'jefe_inmediato'), async (req, res, next) => {
   try {
-    const ticket = ticketsService.assignTicket(parseInt(req.params.id, 10), req.body || {}, req.user);
+    const ticket = await ticketsService.assignTicket(parseInt(req.params.id, 10), req.body || {}, req.user);
     res.json({ ticket });
   } catch (err) { next(err); }
 });
 
 // Cambiar estado
-router.post('/:id/status', requireAuth, (req, res, next) => {
+router.post('/:id/status', requireAuth, async (req, res, next) => {
   try {
-    const ticket = ticketsService.changeStatus(parseInt(req.params.id, 10), req.body || {}, req.user);
+    const ticket = await ticketsService.changeStatus(parseInt(req.params.id, 10), req.body || {}, req.user);
     res.json({ ticket });
   } catch (err) { next(err); }
 });
 
 // Comentar
-router.post('/:id/comments', requireAuth, (req, res, next) => {
+router.post('/:id/comments', requireAuth, async (req, res, next) => {
   try {
-    const comment = ticketsService.addComment(parseInt(req.params.id, 10), req.body || {}, req.user);
+    const comment = await ticketsService.addComment(parseInt(req.params.id, 10), req.body || {}, req.user);
     res.status(201).json({ comment });
   } catch (err) { next(err); }
 });
 
 // Subir adjunto
-router.post('/:id/attachments', requireAuth, upload.single('file'), (req, res, next) => {
+router.post('/:id/attachments', requireAuth, upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: { code: 'NO_FILE', message: 'No se envió ningún archivo.' } });
-    const att = ticketsService.addAttachment(parseInt(req.params.id, 10), req.file, req.user);
+    const att = await ticketsService.addAttachment(parseInt(req.params.id, 10), req.file, req.user);
     res.status(201).json({ attachment: att });
   } catch (err) {
     // Si multer guardó el archivo pero falló la lógica, intentar eliminarlo
@@ -79,9 +79,9 @@ router.post('/:id/attachments', requireAuth, upload.single('file'), (req, res, n
 });
 
 // Descargar adjunto
-router.get('/:id/attachments/:attId', requireAuth, (req, res, next) => {
+router.get('/:id/attachments/:attId', requireAuth, async (req, res, next) => {
   try {
-    const { filePath, att } = attachmentsService.streamAttachment(parseInt(req.params.attId, 10), req.user);
+    const { filePath, att } = await attachmentsService.streamAttachment(parseInt(req.params.attId, 10), req.user);
     res.setHeader('Content-Type', att.mime_type);
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(att.original_name)}"`);
     res.sendFile(filePath);
