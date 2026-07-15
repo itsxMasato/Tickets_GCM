@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-22T14:15:00Z",
+  "title": "Design System: GCM Tickets",
+  "extensions": {
+    "colorMeta": {
+      "brand-navy":           { "role": "primary",   "displayName": "Navy Mar Profundo",         "canonical": "#071D4C", "tonalRamp": ["#02071A","#050E2C","#08154A","#0B1E66","#152E80","#243F9C","#3E55B6","#5C71CC","#828FDC","#ACB3E5"] },
+      "brand-deep":           { "role": "primary-2", "displayName": "Azul Profundo Suavizado",   "canonical": "#44497B", "tonalRamp": ["#1A1B3A","#262848","#34355C","#44497B","#5B6094","#7378AC","#8C90C2","#A6A9D6","#C0C2E5","#D7D9EE"] },
+      "brand-ocean":          { "role": "info",      "displayName": "Azul Océano",               "canonical": "#16ACE4", "tonalRamp": ["#06344A","#0A4A66","#0E5F82","#13769F","#1690BF","#16ACE4","#45BEEC","#73CEF1","#9CDFF5","#C5EEFA"] },
+      "brand-ink":            { "role": "ink",       "displayName": "Tinta",                     "canonical": "#243447", "tonalRamp": ["#0B1119","#131A26","#1B2333","#243447","#3A4A5C","#525F72","#6B7787","#878F9E","#A4A9B5","#C0C3CB"] },
+      "accent-camaron":       { "role": "accent",    "displayName": "Rojo Camarón",              "canonical": "#CF301D", "tonalRamp": ["#3D0F08","#5C1810","#7C2117","#9C2A1F","#BD2F22","#CF301D","#DC4A38","#E66959","#EE8779","#F4A699"] },
+      "accent-camaron-hover": { "role": "accent-2",  "displayName": "Rojo Camarón Presionado",   "canonical": "#A8261A", "tonalRamp": ["#300B05","#481108","#60170C","#781D10","#902414","#A8261A","#B84131","#C85D4E","#D77A6D","#E5978D"] },
+      "surface-bg":           { "role": "neutral",   "displayName": "Superficie",                "canonical": "#F7F9FC", "tonalRamp": ["#7B8195","#9097A8","#A2A8B7","#B4B9C5","#C5C9D3","#D6D9E0","#E5E7EC","#F0F2F6","#F7F9FC","#FCFDFE"] },
+      "surface-alt":          { "role": "neutral-2", "displayName": "Superficie Alternativa",    "canonical": "#E1D9DB", "tonalRamp": ["#574E50","#6E6466","#857A7C","#9C9092","#B3A7A9","#C9BFBF","#D8CFD0","#E1D9DB","#EBE3E4","#F4EDEE"] },
+      "surface-border":       { "role": "neutral-3", "displayName": "Borde Superficie",          "canonical": "#D6DEE8", "tonalRamp": ["#4D5462","#646B79","#7B8390","#929BA7","#A9B1BC","#BEC5CF","#D6DEE8","#E0E6EE","#EBEFF4","#F4F7FA"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Dashboard h1s and large page headlines. Tight, confident." },
+      "body":    { "displayName": "Body",    "purpose": "All running text, table cells, descriptions, chat bubbles." },
+      "label":   { "displayName": "Label",   "purpose": "KPI labels, sidebar section labels, table column headers, button text." },
+      "icon":    { "displayName": "Icon",    "family": "Material Symbols Outlined", "purpose": "Single icon family. Variable font (wght/FILL/GRAD/opsz). Default: wght 400, FILL 0, opsz 24. Not a second typeface — it's a vocabulary of glyphs." }
+    },
+    "shadows": [
+      { "name": "soft",     "value": "0 1px 2px 0 rgba(7, 29, 76, 0.05)",                                                                "purpose": "Inputs, chat bubbles, small atoms." },
+      { "name": "card",     "value": "0 1px 3px 0 rgba(7, 29, 76, 0.06), 0 1px 2px -1px rgba(7, 29, 76, 0.06)",                          "purpose": "Resting cards, tables, modals at rest." },
+      { "name": "pop",      "value": "0 8px 24px -6px rgba(7, 29, 76, 0.18)",                                                            "purpose": "Hover state on KPI cards and elevated panels." },
+      { "name": "sidebar",  "value": "4px 0 24px -8px rgba(7, 29, 76, 0.18)",                                                            "purpose": "Sidebar — single asymmetric shadow in the system." }
+    ],
+    "motion": [
+      { "name": "ease-out-quart", "value": "cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Default easing for state transitions and the sidebar drawer." },
+      { "name": "duration-base",  "value": "200ms",                          "purpose": "Hover, focus, and drawer transitions." }
+    ],
+    "breakpoints": [
+      { "name": "sm",  "value": "640px" },
+      { "name": "md",  "value": "768px" },
+      { "name": "lg",  "value": "1024px" },
+      { "name": "xl",  "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Dominant action on a surface. Navy on white. The workhorse of every page.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Asignar</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; background: #071D4C; color: #FFFFFF; font: 600 0.875rem/1 Inter, system-ui, sans-serif; border: 0; border-radius: 8px; box-shadow: 0 1px 2px rgba(7,29,76,0.05); cursor: pointer; transition: background 200ms cubic-bezier(0.25,1,0.5,1); } .ds-btn-primary:hover { background: #44497B; } .ds-btn-primary:focus-visible { outline: 2px solid rgba(22,172,228,0.4); outline-offset: 1px; } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Accent Button (Rojo Camarón)",
+      "kind": "button",
+      "refersTo": "button-accent",
+      "description": "High-stakes action — Crear ticket, Cerrar, Reabrir. Used sparingly.",
+      "html": "<button class=\"ds-btn-accent\" type=\"button\">Cerrar ticket</button>",
+      "css": ".ds-btn-accent { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; background: #CF301D; color: #FFFFFF; font: 600 0.875rem/1 Inter, system-ui, sans-serif; border: 0; border-radius: 8px; cursor: pointer; transition: background 200ms cubic-bezier(0.25,1,0.5,1); } .ds-btn-accent:hover { background: #A8261A; } .ds-btn-accent:focus-visible { outline: 2px solid rgba(207,48,29,0.4); outline-offset: 1px; } .ds-btn-accent:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Default for secondary actions. White surface, ink text, surface-border outline.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Filtrar</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; background: #FFFFFF; color: #243447; font: 600 0.875rem/1 Inter, system-ui, sans-serif; border: 1px solid #D6DEE8; border-radius: 8px; cursor: pointer; transition: background 200ms cubic-bezier(0.25,1,0.5,1); } .ds-btn-secondary:hover { background: #F7F9FC; } .ds-btn-secondary:focus-visible { outline: 2px solid rgba(22,172,228,0.4); outline-offset: 1px; }"
+    },
+    {
+      "name": "Status Badge (dot + label)",
+      "kind": "chip",
+      "refersTo": "badge-status",
+      "description": "Pill with tinted background and leading colored dot. Color-blind safe (dot + label + color).",
+      "html": "<span class=\"ds-badge ds-badge-en-proceso\"><span class=\"ds-dot\"></span>En proceso</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; font: 600 0.75rem/1.4 Inter, sans-serif; border-radius: 999px; } .ds-badge .ds-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; opacity: 0.9; } .ds-badge-en-proceso { background: #FEF3C7; color: #92400E; } .ds-badge-solucionado { background: #D1FAE5; color: #065F46; } .ds-badge-asignado { background: #DBEAFE; color: #1E40AF; } .ds-badge-recibido { background: #F1F5F9; color: #334155; } .ds-badge-cerrado { background: #E2E8F0; color: #1E293B; } .ds-badge-reabierto { background: #FFEDD5; color: #9A3412; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Standard resting surface. White background, surface-border outline, soft shadow, 12px radius.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Tickets activos</div><div class=\"ds-card-body\">Cuerpo de la tarjeta.</div></div>",
+      "css": ".ds-card { background: #FFFFFF; border: 1px solid #D6DEE8; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(7,29,76,0.06), 0 1px 2px -1px rgba(7,29,76,0.06); } .ds-card-title { font: 600 1rem/1.4 Inter, sans-serif; color: #243447; margin-bottom: 12px; } .ds-card-body { font: 400 0.875rem/1.5 Inter, sans-serif; color: #243447; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "White field, surface-border outline, ocean focus ring. The default form atom.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Buscar código, título…\" />",
+      "css": ".ds-input { display: block; width: 100%; padding: 8px 12px; background: #FFFFFF; color: #243447; font: 400 0.875rem/1.5 Inter, sans-serif; border: 1px solid #D6DEE8; border-radius: 8px; box-shadow: 0 1px 2px rgba(7,29,76,0.05); transition: border-color 200ms, box-shadow 200ms; } .ds-input::placeholder { color: #94A3B8; } .ds-input:hover { border-color: #B6C2D2; } .ds-input:focus { outline: none; border-color: #16ACE4; box-shadow: 0 0 0 3px rgba(22,172,228,0.18); }"
+    },
+    {
+      "name": "Sidebar Link",
+      "kind": "nav",
+      "refersTo": "sidebar-link",
+      "description": "Single navigation row in the navy sidebar. Active state adds a 1.5px ocean indicator dot.",
+      "html": "<a class=\"ds-sidebar-link ds-sidebar-link-active\" href=\"#\"><svg class=\"ds-sidebar-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M3 12l9-9 9 9M5 10v10h14V10\"/></svg><span>Inicio</span><span class=\"ds-sidebar-dot\" aria-hidden=\"true\"></span></a>",
+      "css": ".ds-sidebar-link { display: flex; align-items: center; gap: 12px; padding: 8px 12px; font: 500 0.875rem/1.4 Inter, sans-serif; color: rgba(255,255,255,0.8); border-radius: 8px; text-decoration: none; transition: background 200ms, color 200ms; } .ds-sidebar-link:hover { background: rgba(255,255,255,0.1); color: #FFFFFF; } .ds-sidebar-link-active { background: rgba(255,255,255,0.15); color: #FFFFFF; } .ds-sidebar-icon { width: 20px; height: 20px; flex: none; } .ds-sidebar-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 999px; background: #16ACE4; }"
+    },
+    {
+      "name": "KPI Card",
+      "kind": "card",
+      "refersTo": "kpi-card",
+      "description": "Single metric tile. Label (uppercase tracked), value (24px bold), optional hint. Hover lifts to pop shadow.",
+      "html": "<div class=\"ds-kpi\"><div class=\"ds-kpi-label\">Tickets abiertos</div><div class=\"ds-kpi-value\">42</div><div class=\"ds-kpi-hint\">Monitoriza tu cola activa</div></div>",
+      "css": ".ds-kpi { background: #FFFFFF; border: 1px solid #D6DEE8; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 3px rgba(7,29,76,0.06), 0 1px 2px -1px rgba(7,29,76,0.06); transition: box-shadow 200ms cubic-bezier(0.25,1,0.5,1); } .ds-kpi:hover { box-shadow: 0 8px 24px -6px rgba(7,29,76,0.18); } .ds-kpi-label { font: 600 0.75rem/1 Inter, sans-serif; color: #64748B; text-transform: uppercase; letter-spacing: 0.08em; } .ds-kpi-value { font: 700 1.5rem/1.2 Inter, sans-serif; color: #243447; } .ds-kpi-hint { font: 400 0.75rem/1.4 Inter, sans-serif; color: #94A3B8; }"
+    },
+    {
+      "name": "Chat Bubble (mine)",
+      "kind": "custom",
+      "refersTo": "chat-bubble",
+      "description": "Outgoing message in the ticket chat. Navy fill, white text, 16px radius with a small bottom-right tail.",
+      "html": "<div class=\"ds-chat-mine\"><p class=\"ds-chat-text\">Recibimos el repuesto esta mañana, vamos a coordinar la instalación.</p><div class=\"ds-chat-meta\">14:32</div></div>",
+      "css": ".ds-chat-mine { max-width: 80%; background: #071D4C; color: #FFFFFF; border-radius: 16px; padding: 8px 14px; box-shadow: 0 1px 2px rgba(7,29,76,0.05); border-bottom-right-radius: 4px; } .ds-chat-text { font: 400 0.875rem/1.5 Inter, sans-serif; margin: 0; } .ds-chat-meta { font: 400 0.6875rem/1.4 Inter, sans-serif; opacity: 0.7; margin-top: 4px; text-align: right; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "La sala de control de operaciones",
+    "overview": "GCM Tickets is the operations nerve center for an internal shrimp-industry workflow. Four roles, one shared ticket lifecycle, every action visible to the people who need it. The visual language reflects that: a quiet, navy-grounded surface, real data on every screen, no decoration that doesn't carry information. The login is cinematic because first impressions of corporate systems earn trust; the in-app surface is calm because the work is dense. We are explicitly not a consumer SaaS. No pastel gradients. No celebratory micro-interactions. The aesthetic is closer to an air-traffic console than a meditation app — the user is operating, not browsing.",
+    "keyCharacteristics": [
+      "Navy-first, not gray-first. The brand color carries identity; surface gray is a quiet canvas for content.",
+      "One accent, used with intent. Rojo camarón (#CF301D) is reserved for primary actions, critical status, and the things the user must not miss.",
+      "Status communicated three ways. Dot + label + color on every status badge. Color-blind safe by design.",
+      "Calm density. Multiple KPIs, tables, and chat surfaces per screen, but a single accent, generous whitespace, no competing gradients.",
+      "Spanish, direct, no fluff. Imperative verb buttons. No exclamation marks. No emoji."
+    ],
+    "rules": [
+      { "name": "The One Voice Rule",           "section": "colors",     "body": "Rojo Camarón appears on ≤8% of any given screen, and only on actions the user must not miss. It is never used decoratively." },
+      { "name": "The Ink-Not-Black Rule",       "section": "colors",     "body": "All text uses brand-ink or a derived slate. Pure black is forbidden; it fights the navy." },
+      { "name": "The Color-Blind Rule",         "section": "colors",     "body": "Every status is communicated by dot + label + color. Color alone is never the only signal." },
+      { "name": "The Single-Family Rule",       "section": "typography", "body": "Inter is the only typeface. No second family, no display serif, no script. Material Symbols is icon vocabulary, not a second typeface." },
+      { "name": "The No-Serif-Display Rule",    "section": "typography", "body": "Display headlines stay sans. We are not an editorial; we are an operations console." },
+      { "name": "The Flat-By-Default Rule",     "section": "elevation",  "body": "Surfaces are flat at rest. Shadows appear only on hover, focus, or as a response to interaction." },
+      { "name": "The Brand-Tinted Shadow Rule", "section": "elevation",  "body": "All shadows use rgba(7,29,76, …) not pure black. This is what makes the elevation feel cool and premium." },
+      { "name": "The Consistency Rule",         "section": "components", "body": "Never mix radii inside one component. A button sitting on a 32px card is still 8px; a card inside a 16px surface is still 12px. Mixed-radius compositions are an AI-tell." },
+      { "name": "The Pill Exception",           "section": "components", "body": "Status badges and tag chips use rounded-full (pill). This is the only place pill is allowed. Reaching for rounded-full on a button reaches for a consumer-SaaS tell — stop." },
+      { "name": "The Glass Scope Rule",         "section": "components", "body": "The .login-card translucent surface is the only sanctioned glass surface in the project. Any new surface that wants the same treatment does not get glass — it gets a solid surface with the same brand palette." },
+      { "name": "The Glass Honesty Rule",       "section": "components", "body": "The login card's backdrop-filter is a web approximation of glassmorphism, not Apple Liquid Glass. Comments in styles.css already call this out." },
+      { "name": "The Glass Accessibility Rule", "section": "components", "body": "Any glass surface must provide a prefers-reduced-transparency: reduce fallback to a solid surface with the same contrast budget. The login card falls back to rgba(7, 29, 76, 0.88)." }
+    ],
+    "dos": [
+      "Do use the brand-navy as the page's primary identity. Sidebar, primary CTAs, and h1s all carry it.",
+      "Do use Rojo Camarón for \"Create\", \"Close\", \"Reopen\" and other high-stakes actions. Scarcity is the point.",
+      "Do communicate status with dot + label + color. Never color alone.",
+      "Do keep surfaces flat at rest. Shadows appear on hover or focus only.",
+      "Do cap body line length to 65–75ch on long prose (chat, descriptions).",
+      "Do honor prefers-reduced-motion. All animations collapse to instant transitions under that media query.",
+      "Do differentiate the four role dashboards. Each role's primary surface reflects its job."
+    ],
+    "donts": [
+      "Don't use side-stripe borders (border-left > 1px as a colored accent) on cards, list items, or alerts.",
+      "Don't use gradient text. background-clip: text is decorative, never meaningful.",
+      "Don't use glassmorphism as a default. Glass is reserved for the login card and nowhere else. Scope: the .login-card is the only sanctioned glass surface — no other surface gets glass. Honesty: the login card is a web approximation of glassmorphism, not Apple Liquid Glass. Accessibility: glass surfaces must fall back to a solid surface under prefers-reduced-transparency: reduce.",
+      "Don't ship a hero-metric template (big number + small label + supporting stats + gradient accent) on every screen.",
+      "Don't use the same dashboard layout for all four roles.",
+      "Don't use celebratory copy or friendly exclamation marks. This is an internal tool.",
+      "Don't fabricate hero metrics. The login may feel premium, but every number shown must come from real system state.",
+      "Don't use emoji as a UI element. SVG icons and Material Symbols only.",
+      "Don't show animation that gates content visibility. Reveals enhance, they don't unlock.",
+      "Don't ship a 'small uppercase tracked eyebrow' above every section.",
+      "Don't use sidebars with 8+ icon+label sections of identical weight. Three sections maximum.",
+      "Don't use zebra tables. Hover state only.",
+      "Don't mix radii inside one component. Use 8px on buttons/inputs/chips/sidebar links, 12px on cards/tables/modals, 16px on feature surfaces, 32px on the login card.",
+      "Don't reach for rounded-full on buttons. Pill is reserved for status badges and tag chips.",
+      "Don't use generic AI tells: 'Get started', 'Welcome back!', sparkles, 'Supercharge your workflow.'"
+    ]
+  }
+}

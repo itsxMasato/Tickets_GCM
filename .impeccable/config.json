@@ -1,0 +1,31 @@
+{
+  "detector": {
+    "ignoreRules": [
+      {
+        "rule": "layout-transition",
+        "reason": "Only the sidebar uses width/transition (collapse 256px<->64px on user click). It's a discrete user interaction, not a continuous animation, and switching to transform would break the push layout (main reflows to fill the space). DESIGN §layout: push sidebar requires animating the column width, not the layer transform."
+      }
+    ],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "reason": "Single-family rule per DESIGN.md §3 — ops console used 8h/day, density-first; distinctive display faces fight the brief",
+        "createdAt": "2026-06-22T14:11:44.058Z"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "4px",
+        "reason": "Focus ring radius (not a surface). DESIGN.md §5 token scale applies to surfaces; focus rings use a lighter radius to avoid competing with the outline.",
+        "createdAt": "2026-06-22T18:13:17.530Z"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "jetbrains mono",
+        "reason": "Monospace accent for operational numeric data via .login-meta-mono with tabular-nums. Single-Family rule applies to reading text; operational numbers use monospace by convention.",
+        "createdAt": "2026-06-22T18:13:21.536Z"
+      }
+    ]
+  }
+}
