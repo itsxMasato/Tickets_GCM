@@ -24,7 +24,26 @@
       "Bash(awk NR>=35 && NR<=70 {printf \"L%d: %s\\\\n\", NR, $0} *)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\flore\\\\OneDrive\\\\Desktop\\\\Tickets_GCM\\\\src\" -Recurse -File -Force | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object FullName | Format-List)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\flore\\\\OneDrive\\\\Desktop\\\\Tickets_GCM\\\\client\" -Recurse -File -Force | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object FullName | Format-List)",
-      "Bash(python src/ui-ux-pro-max/scripts/search.py \"internal ticketing system enterprise B2B operations manager dashboard\" --design-system -p \"GCM Tickets\")"
+      "Bash(python src/ui-ux-pro-max/scripts/search.py \"internal ticketing system enterprise B2B operations manager dashboard\" --design-system -p \"GCM Tickets\")",
+      "Bash(node *)",
+      "Bash(git rm *)",
+      "Bash(git add *)"
     ]
-  }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:\\\\Users\\\\flore\\\\.claude\\\\skills\\\\impeccable\\\\scripts\\\\hook.mjs\"",
+            "timeout": 5,
+            "statusMessage": "Checking UI changes"
+          }
+        ]
+      }
+    ]
+  },
+  "description": "Impeccable design detector: runs after Edit/Write/MultiEdit on UI files and surfaces findings as system reminders."
 }

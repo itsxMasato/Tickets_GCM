@@ -19,6 +19,7 @@ module.exports = {
           DEFAULT: '#F7F9FC', // Fondo principal
           alt:     '#E1D9DB', // Fondo secciones
           border:  '#D6DEE8', // Bordes / separadores
+          'border-strong': '#B6C2D2', // Bordes con mayor peso (dots, scrollbar hover)
         },
         // Mantener compatibilidad con clases previas
         sac: {

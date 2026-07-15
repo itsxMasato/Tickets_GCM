@@ -3,6 +3,11 @@ data/
 uploads/*
 !uploads/.gitkeep
 .env
+keys/
 public/css/styles.css
+# Vite build output — regenerable con `pnpm build`. No se commitea el HTML
+# ni los assets con hash; los assets originales de runtime viven en public/
+# (img/, videos/, css/) y se sirven con express.static.
+public/dist/
 *.log
 .DS_Store
