@@ -27,7 +27,12 @@
       "Bash(python src/ui-ux-pro-max/scripts/search.py \"internal ticketing system enterprise B2B operations manager dashboard\" --design-system -p \"GCM Tickets\")",
       "Bash(node *)",
       "Bash(git rm *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m 'chore: housekeeping base \\(deps, env, ignore public/dist\\) *)",
+      "Bash(git reset *)",
+      "Bash(xargs -I{} sh -c 'wc -c \"{}\" 2>/dev/null')",
+      "Bash(git commit -m 'feat: firestore migration + new modules + UI refresh *)",
+      "Bash(git commit -m 'docs: product, design system, modules y .impeccable *)"
     ]
   },
   "hooks": {

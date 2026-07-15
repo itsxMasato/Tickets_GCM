@@ -1,6 +1,7 @@
 import { h, escapeHtml } from '../utils/dom.js';
 import { attachmentThumb } from './attachments.js';
 import { relativeFromNow, formatDateTime, ROLE_LABEL } from '../utils/format.js';
+import { sameId } from '../utils/ids.js';
 
 function avatarColor(seed) {
   const colors = ['#2563eb', '#16a34a', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9', '#db2777', '#14b8a6', '#7c3aed', '#f97316'];
@@ -92,7 +93,7 @@ export function renderChat({ ticket, user, onRefresh }) {
       }
     } else if (e.kind === 'comment') {
       const c = e.payload;
-      const mine = me && c.user_id === me.id;
+      const mine = me && sameId(c.user_id, me.id);
       const author = c.user_name || 'Usuario';
       const wrap = h('div.flex.items-start.gap-2', { class: mine ? 'flex-row-reverse' : '' }, [
         avatarOf({ id: c.user_id, full_name: author }),

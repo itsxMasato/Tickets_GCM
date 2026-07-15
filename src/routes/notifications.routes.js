@@ -7,9 +7,21 @@ const requireAuth = require('../middleware/requireAuth');
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const { limit, unread } = req.query;
-    const list = await notificationsService.listForUser(req.user.id, {
+    const opts = {
       limit: limit ? Math.min(100, parseInt(limit, 10)) : 30,
       onlyUnread: unread === 'true',
+    };
+    const list = await notificationsService.listForUser(req.user.id, opts);
+    // [DIAG-2026-07-15] Temporal: diagnosticar por qué la campanita llega vacía.
+    console.log('[diag:bell] GET /api/notifications', {
+      userId: req.user.id,
+      role: req.user.role,
+      query: { limit, unread },
+      opts,
+      resultCount: list.length,
+      firstItems: list.slice(0, 2).map((n) => ({
+        id: n.id, type: n.type, read: n.read, ticket_id: n.ticket_id, created_at: n.created_at,
+      })),
     });
     res.json({ notifications: list });
   } catch (err) { next(err); }

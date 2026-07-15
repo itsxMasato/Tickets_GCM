@@ -88,8 +88,8 @@ function quickActions(user) {
 
 // ── Buscador (atajo "/") ─────────────────────────────────────────────────────
 // El listener se registra UNA SOLA VEZ en window (atajo global) y consulta
-// el input actual del topbar en cada pulsación. Antes capturaba el `input`
-// del primer topbar en closure — si ese nodo se desmontaba, `input.focus()`
+// el input actual del topbar en cada pulsación. Antes capturaba el input
+// del primer topbar en closure — si ese nodo se desmontaba, input.focus()
 // fallaba silenciosamente. Ahora la referencia se actualiza por re-mount.
 function renderSearch() {
   const input = h('input.flex-1.bg-transparent.border-0.outline-none.text-sm.placeholder\\:text-slate-500', {
@@ -165,7 +165,7 @@ function bellPill(type) {
   return h(`span.badge.${cls}.inline-flex.items-center`, { html: `${iconHtml}${escapeHtml(BELL_TYPE_LABEL[type] || type)}` });
 }
 function bellCheckIcon() {
-  return h('svg.w-3.5.h-3.5', { fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.check}" />` });
+  return h('svg.w-3.5.h-3.5', { fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.check}" /> });
 }
 
 function renderBell() {
@@ -257,8 +257,6 @@ function renderBell() {
       fetched = true;
       drawList(notifications);
     } catch (e) {
-      // [DIAG-2026-07-15] Temporal: ver el error en consola del navegador.
-      console.error('[diag:bell] loadList failed:', e);
       listEl.innerHTML = '';
       listEl.appendChild(h('div.px-4.py-6.text-center.text-sm.text-red-600', {}, e.message || 'Error al cargar'));
     }
@@ -399,7 +397,7 @@ function renderUserMenu({ user, onLogout }) {
     h('span.avatar.ring-2.ring-white', { style: { backgroundColor: avatarColor(user.id) } }, initials(user.full_name)),
     // El nombre y rol del usuario se muestran en TODOS los viewports — el
     // usuario pidió explícitamente que estén siempre visibles. Antes
-    // usaba `hidden md:block`, lo que dejaba al usuario anónimo en mobile.
+    // usaba hidden md:block, lo que dejaba al usuario anónimo en mobile.
     h('div.text-left.flex.flex-col.justify-center', {}, [
       h('div.text-sm.font-semibold.text-brand-ink.leading-tight.max-w-[160px].truncate', {}, user.full_name),
       h('div.text-[11px].font-medium.text-slate-500.leading-tight.truncate', {}, [roleLabel, areaLabel ? ` · ${areaLabel}` : ''].join('')),
@@ -526,7 +524,7 @@ export function renderTopbar({ user, onLogout }) {
   // Re-render de la campana cuando cambia el sidebar (no frecuente) o
   // cuando cambia el unreadCount del store (frecuente). Importante:
   // cada re-render del bell crea un nuevo wrapper con sus propios listeners;
-  // hay que limpiar el anterior y guardar el nuevo en `bellWrapper`.
+  // hay que limpiar el anterior y guardar el nuevo en bellWrapper.
   const refreshBell = () => {
     if (!mountedRoot || !bellWrapper.parentNode) return;
     if (typeof bellWrapper._bellDropdownCleanup === 'function') bellWrapper._bellDropdownCleanup();

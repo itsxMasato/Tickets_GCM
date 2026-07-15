@@ -896,6 +896,7 @@ async function getStatsForUser(userId, user) {
 }
 
 module.exports = {
+  toId,
   getUserByIdentifier,
   listUsers,
   getUserById,

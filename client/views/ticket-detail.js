@@ -14,6 +14,7 @@ import { on as onSocket } from '../socket.js';
 import { backButton } from '../components/back-button.js';
 import { exportButton } from '../components/export-button.js';
 import { ICON } from '../utils/icons.js';
+import { attachmentThumb } from '../components/attachments.js';
 
 // Almacena el cleanup de listeners del ticket actual para limpiar cuando se desmonta
 let currentSocketCleanup = null;
@@ -104,6 +105,16 @@ export async function renderTicketDetail({ params, user }) {
           h('span.badge.bg-slate-100.text-slate-700', {}, ticket.category_name || 'Sin categoría'),
           h('span.badge.bg-slate-100.text-slate-700', {}, AREA_LABEL[ticket.area] || 'Sin área'),
         ]),
+        h('div.mt-3.grid.grid-cols-2.gap-3.text-sm', {}, [
+          h('div', {}, [
+            h('div.text-xs.text-slate-500', {}, 'Código'),
+            h('div.font-mono.text-sm.font-semibold.text-slate-900', {}, ticket.code),
+          ]),
+          h('div', {}, [
+            h('div.text-xs.text-slate-500', {}, 'Prioridad'),
+            h('div.text-sm.font-semibold.text-slate-900', {}, PRIORITY_LABEL[ticket.priority] || ticket.priority),
+          ]),
+        ]),
         h('div.mt-4.grid.grid-cols-1.gap-3 text-sm', {}, [
           h('div', {}, [h('div.text-xs.text-slate-500', {}, 'Creado'), h('div.text-sm.font-semibold.text-slate-900', {}, `${formatDateTime(ticket.created_at)}`)]),
           h('div', {}, [h('div.text-xs.text-slate-500', {}, 'Actualizado'), h('div.text-sm.font-semibold.text-slate-900', {}, relativeFromNow(ticket.updated_at))]),
@@ -119,6 +130,16 @@ export async function renderTicketDetail({ params, user }) {
   const center = h('div.lg\\:col-span-2.flex.flex-col.gap-3', {});
   // Columna derecha (sidebar info + acciones)
   const right = h('div.flex.flex-col.gap-3', {});
+
+  // Descripción completa del reporte — destacada arriba del chat para que
+  // el asignado vea de un vistazo la información que se llenó al crear
+  // (la `description` NO se muestra en el chat como mensaje normal porque
+  // queda enterrada bajo adjuntos y comentarios posteriores).
+  const descCard = h('div.card', {}, [
+    h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Descripción del reporte'),
+    h('p.text-sm.text-slate-800.whitespace-pre-wrap.leading-relaxed', {}, ticket.description || '—'),
+  ]);
+  center.appendChild(descCard);
 
   // Chat
   const chat = h('div.card', {});
@@ -188,7 +209,7 @@ function renderSidebarInfo(ticket) {
     h('span.text-xs.text-slate-500.uppercase.tracking-wide', {}, label),
     h('span.text-sm.text-slate-800.text-right', isCode ? { class: 'font-mono text-xs' } : {}, value || '—'),
   ]);
-  return h('div.card', {}, [
+  const info = h('div.card', {}, [
     h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Información'),
     row('Código', ticket.code, true),
     row('Creado por', `${ticket.created_by_name || '—'}${ticket.created_by_role ? ` (${getRoleLabel(ticket.created_by_role)})` : ''}`),
@@ -199,6 +220,17 @@ function renderSidebarInfo(ticket) {
     row('Actualizado', relativeFromNow(ticket.updated_at)),
     row('Cerrado', ticket.closed_at ? formatDateTime(ticket.closed_at) : '—'),
   ]);
+  // Adjuntos subidos al crear o durante el ciclo de vida del ticket.
+  // `ticket.attachments` ya viene populado desde firestoreData.getTicketDetail.
+  if (ticket.attachments?.length > 0) {
+    info.appendChild(h('h4.text-xs.font-semibold.text-slate-700.mt-3.mb-2.uppercase.tracking-wider', {}, 'Adjuntos'));
+    const list = h('ul.flex.flex-col.gap-1\\.5', {});
+    for (const att of ticket.attachments) {
+      list.appendChild(h('li', {}, attachmentThumb(att, ticket.id)));
+    }
+    info.appendChild(list);
+  }
+  return info;
 }
 
 function renderActions(ticket, user, onChange) {

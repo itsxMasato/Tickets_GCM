@@ -1,6 +1,8 @@
 // Permisos del frontend — espejo simple de la lógica del backend
 // user: { id, role, area }
 
+import { sameId } from './ids.js';
+
 export const ROLES = ['supervisor_campo', 'sac', 'admin_area', 'jefe_inmediato'];
 export const AREAS = ['operaciones', 'logistica', 'mantenimiento', 'sistemas', 'otro'];
 
@@ -16,15 +18,15 @@ export function canCreateTicket(user) {
 export function canSeeTicket(user, ticket) {
   if (!user || !ticket) return false;
   if (isSAC(user) || isJefe(user)) return true;
-  if (isAdmin(user)) return ticket.assigned_to === user.id || ticket.created_by === user.id;
-  if (isSupervisor(user)) return ticket.created_by === user.id;
+  if (isAdmin(user)) return sameId(ticket.assigned_to, user.id) || sameId(ticket.created_by, user.id);
+  if (isSupervisor(user)) return sameId(ticket.created_by, user.id);
   return false;
 }
 
 export function canEditMeta(user, ticket) {
   if (!user || !ticket) return false;
   if (isSAC(user)) return true;
-  if (isSupervisor(user)) return ticket.created_by === user.id && ticket.status === 'recibido';
+  if (isSupervisor(user)) return sameId(ticket.created_by, user.id) && ticket.status === 'recibido';
   return false;
 }
 
@@ -55,7 +57,7 @@ export function nextStates(user, ticket) {
     }[cur] || [];
   }
   if (isAdmin(user)) {
-    if (ticket.assigned_to !== user.id) return [];
+    if (!sameId(ticket.assigned_to, user.id)) return [];
     return {
       asignado:    ['en_proceso'],
       en_proceso:  ['solucionado'],
