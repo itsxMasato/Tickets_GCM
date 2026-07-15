@@ -55,7 +55,6 @@ export function renderLayout({ content, user, onLogout }) {
   // que un click en link cierre el drawer antes de navegar.
   const sidebar = renderSidebar({
     user,
-    onLogout,
     onClose: () => { if (isMobileViewport()) closeMobileSidebar(); },
   });
 

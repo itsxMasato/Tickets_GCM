@@ -4,10 +4,7 @@ import {
   isSAC, isJefe, isAdmin, isSupervisor,
   canManageUsers, canManageCategories,
 } from '../utils/permissions.js';
-import { AREA_LABEL } from '../utils/format.js';
-import { getRoleLabel, subscribe as subscribeRoleLabel } from '../utils/role-labels.js';
 import { ICON } from '../utils/icons.js';
-import { avatarColor, initials } from '../utils/avatar.js';
 
 function icon(path, cls = 'sidebar-icon') {
   return h(`svg.${cls}`, {
@@ -146,18 +143,9 @@ function navFor(user) {
 }
 
 // ── Sidebar export ───────────────────────────────────────────────────────────
-export function renderSidebar({ user, onLogout, onClose }) {
+export function renderSidebar({ user, onClose }) {
   const p = path();
   const sections = navFor(user);
-  const roleLabelEl = h('span', {}, getRoleLabel(user.role) || user.role);
-  const areaLabel = user.area ? AREA_LABEL[user.area] : null;
-  // Si el SAC renombra el rol del usuario actual mientras el sidebar
-  // está montado, actualizamos el texto en vivo sin re-render del shell.
-  const unsub = subscribeRoleLabel((e) => {
-    if (e.detail?.role === user.role) {
-      roleLabelEl.textContent = e.detail.label || user.role;
-    }
-  });
 
   return h('aside.sidebar', {}, [
     // Brand
@@ -201,21 +189,5 @@ export function renderSidebar({ user, onLogout, onClose }) {
         })),
       ]);
     })),
-
-    // Pie: usuario + cerrar sidebar (mobile) + logout
-    h('div.sidebar-foot', {}, [
-      h('div.sidebar-user.flex.items-center.gap-3.px-2.py-2.rounded-md.bg-white/10', {}, [
-        h('div.avatar', { style: { backgroundColor: avatarColor(user.id) } }, initials(user.full_name)),
-        h('div.sidebar-foot-meta.flex-1.min-w-0', {}, [
-          h('div.text-sm.font-semibold.truncate', {}, user.full_name),
-          h('div.text-[11px].text-white/60.truncate', {}, [roleLabelEl, areaLabel ? ` · ${areaLabel}` : ''].join('')),
-        ]),
-        h('button.btn-logout', {
-          onclick: (e) => { e.stopPropagation(); if (typeof onLogout === 'function') onLogout(); },
-          'aria-label': 'Cerrar sesión',
-          title: 'Cerrar sesión',
-        }, [icon(ICON.logout, 'w-4 h-4')]),
-      ]),
-    ]),
   ]);
 }

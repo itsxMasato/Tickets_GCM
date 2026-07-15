@@ -130,15 +130,14 @@
   /* Estado colapsado (mini-rail, sólo íconos) — sólo desktop. */
   @media (min-width: 768px) {
     body.gcm-sidebar-collapsed .sidebar { @apply w-16; }
-    body.gcm-sidebar-collapsed .sidebar-label,
     body.gcm-sidebar-collapsed .sidebar-section,
-    body.gcm-sidebar-collapsed .sidebar-brand-meta { display: none; }
+    body.gcm-sidebar-collapsed .sidebar-brand-meta,
+    /* El <span> del label de cada link no tiene clase; lo agarramos por
+       estructura (.sidebar-link > span) y lo ocultamos. El ícono queda
+       solo y se centra sin el gap-3 que .sidebar-link define en abierto. */
+    body.gcm-sidebar-collapsed .sidebar-link > span { display: none; }
     body.gcm-sidebar-collapsed .sidebar-brand { @apply justify-center px-2; }
-    body.gcm-sidebar-collapsed .sidebar-link { @apply justify-center px-2; }
-    body.gcm-sidebar-collapsed .sidebar-foot-meta { display: none; }
-    body.gcm-sidebar-collapsed .sidebar-foot { @apply p-2; }
-    body.gcm-sidebar-collapsed .sidebar-foot { @apply gap-0; }
-    body.gcm-sidebar-collapsed .sidebar-user { @apply justify-center px-0; }
+    body.gcm-sidebar-collapsed .sidebar-link { @apply justify-center px-2 gap-0; }
     /* En colapsado: cada link se centra y el dot activo se posiciona a la
        izquierda (en lugar de a la derecha) para no romper la simetría. */
     body.gcm-sidebar-collapsed .sidebar-link.active::before {
@@ -194,9 +193,6 @@
   }
   .sidebar-brand {
     @apply px-5 py-5 border-b border-white/10 flex items-center gap-3 transition-[padding] duration-200 ease-out;
-  }
-  .sidebar-foot {
-    @apply p-3 border-t border-white/10 transition-[padding] duration-200 ease-out;
   }
 
   /* === Topbar: botones de iconos prominentes ===
