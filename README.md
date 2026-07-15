@@ -68,21 +68,9 @@ ORM_LOGGING=false
 
 Detalle completo de setup Firebase en `docs/FIREBASE_SETUP.md`.
 
-## Usuarios seed
+## Seguridad
 
-| Usuario | Contraseña | Rol | Área |
-|---|---|---|---|
-| sac  | sac123  | sac              | — |
-| jope | jefe123 | jefe_inmediato   | operaciones |
-| jlog | jefe123 | jefe_inmediato   | logistica |
-| jman | jefe123 | jefe_inmediato   | mantenimiento |
-| aope | area123 | admin_area       | operaciones |
-| alog | area123 | admin_area       | logistica |
-| aman | area123 | admin_area       | mantenimiento |
-| sup1 | sup123  | supervisor_campo | operaciones |
-| sup2 | sup123  | supervisor_campo | logistica |
-
-El seed se ejecuta desde `src/db/seed.js` (idempotente: no sobrescribe contraseñas existentes, solo asegura que el usuario exista con su rol/área/email correctos).
+No se documentan credenciales ni usuarios por defecto en este repositorio. Cualquier acceso inicial debe gestionarse mediante variables de entorno seguras y usuarios creados por el administrador del sistema.
 
 ## API
 
