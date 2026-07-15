@@ -7,7 +7,8 @@ import { renderChat } from '../components/chat.js';
 import { chatComposer } from '../components/chat-composer.js';
 import { openModal, confirmModal } from '../components/modal.js';
 import { canAssign, canEditMeta, canComment, canUpload, nextStates } from '../utils/permissions.js';
-import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, ROLE_LABEL, formatDateTime, relativeFromNow } from '../utils/format.js';
+import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, formatDateTime, relativeFromNow } from '../utils/format.js';
+import { getRoleLabel } from '../utils/role-labels.js';
 import { exportTicketToPDF } from '../utils/exports.js';
 import { on as onSocket } from '../socket.js';
 import { backButton } from '../components/back-button.js';
@@ -75,8 +76,8 @@ export async function renderTicketDetail({ params, user }) {
     ]),
     h('div.grid.grid-cols-1.md:grid-cols-2.gap-3', {}, [
       h('div.card.bg-slate-50.p-5', {}, [
-        h('div.text-xs.font-semibold.uppercase.tracking-[0.3em].text-slate-500', {}, 'Resumen del ticket'),
-        h('div.mt-4.grid.grid-cols-2.gap-4', {}, [
+        h('h2.text-sm.font-semibold.text-brand-ink.mb-3', {}, 'Resumen del ticket'),
+        h('div.grid.grid-cols-2.gap-4', {}, [
           h('div.space-y-3', {}, [
             h('div.text-sm.text-slate-500', {}, 'Categoría'),
             h('div.text-sm.font-semibold.text-slate-900', {}, ticket.category_name || 'Sin categoría'),
@@ -87,7 +88,7 @@ export async function renderTicketDetail({ params, user }) {
           ]),
           h('div.space-y-3', {}, [
             h('div.text-sm.text-slate-500', {}, 'Creado por'),
-            h('div.text-sm.font-semibold.text-slate-900', {}, `${ticket.created_by_name || '—'}${ticket.created_by_role ? ` (${ROLE_LABEL[ticket.created_by_role] || ticket.created_by_role})` : ''}`),
+            h('div.text-sm.font-semibold.text-slate-900', {}, `${ticket.created_by_name || '—'}${ticket.created_by_role ? ` (${getRoleLabel(ticket.created_by_role)})` : ''}`),
           ]),
           h('div.space-y-3', {}, [
             h('div.text-sm.text-slate-500', {}, 'Asignado a'),
@@ -96,8 +97,8 @@ export async function renderTicketDetail({ params, user }) {
         ]),
       ]),
       h('div.card.bg-slate-50.p-5', {}, [
-        h('div.text-xs.font-semibold.uppercase.tracking-[0.3em].text-slate-500', {}, 'Estado'),
-        h('div.mt-4.flex.flex-wrap.items-center.gap-2', {}, [
+        h('h2.text-sm.font-semibold.text-brand-ink.mb-3', {}, 'Estado'),
+        h('div.flex.flex-wrap.items-center.gap-2', {}, [
           statusBadge(ticket.status),
           priorityBadge(ticket.priority),
           h('span.badge.bg-slate-100.text-slate-700', {}, ticket.category_name || 'Sin categoría'),
@@ -153,7 +154,13 @@ export async function renderTicketDetail({ params, user }) {
     try {
       const data = await api.tickets.get(id);
       Object.assign(ticket, data.ticket);
-      // Re-renderiza la página (esto disparará el cleanup anterior automáticamente)
+      // Re-renderiza la página (esto disparará el cleanup anterior automáticamente).
+      // Antes: parent.innerHTML='' directo dejaba los listeners de socket del
+      // root anterior enganchados (no ejecutaba _gcmCleanup). Ahora invocamos
+      // el cleanup explícitamente antes de sustituir.
+      if (typeof root._gcmCleanup === 'function') {
+        try { root._gcmCleanup(); } catch {}
+      }
       const fresh = await renderTicketDetail({ params, user });
       const parent = root.parentNode;
       if (parent) {
@@ -184,7 +191,7 @@ function renderSidebarInfo(ticket) {
   return h('div.card', {}, [
     h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Información'),
     row('Código', ticket.code, true),
-    row('Creado por', `${ticket.created_by_name || '—'}${ticket.created_by_role ? ` (${ROLE_LABEL[ticket.created_by_role] || ticket.created_by_role})` : ''}`),
+    row('Creado por', `${ticket.created_by_name || '—'}${ticket.created_by_role ? ` (${getRoleLabel(ticket.created_by_role)})` : ''}`),
     row('Asignado a', ticket.assigned_to_name || '—'),
     row('Categoría', ticket.category_name || '—'),
     row('Área', AREA_LABEL[ticket.area] || '—'),
@@ -211,7 +218,7 @@ function renderActions(ticket, user, onChange) {
   const nexts = nextStates(user, ticket);
   for (const s of nexts) {
     const label = STATUS_LABEL[s] || s;
-    const cls = s === 'cerrado' ? 'btn-danger btn-sm justify-start gap-2' : s === 'reabierto' ? 'btn-secondary btn-sm justify-start gap-2' : 'btn-primary btn-sm justify-start gap-2';
+    const cls = s === 'cerrado' ? 'btn-accent btn-sm justify-start gap-2' : s === 'reabierto' ? 'btn-secondary btn-sm justify-start gap-2' : 'btn-primary btn-sm justify-start gap-2';
     wrap.appendChild(h('button.btn', { class: cls, onclick: () => changeStatus(ticket, s, onChange) }, [
       svg('arrow', 'w-4 h-4'),
       `Marcar como ${label}`,
@@ -238,7 +245,7 @@ async function openAssignModal(ticket, onChange) {
   try { users = (await api.users.list({ active: true })).users.filter((u) => u.role === 'admin_area' || u.role === 'jefe_inmediato'); } catch {}
   const sel = h('select.input', {}, [
     h('option', { value: '' }, '— Selecciona un encargado —'),
-    ...users.map((u) => h('option', { value: String(u.id) }, `${u.full_name} (${ROLE_LABEL[u.role] || u.role}${u.area ? ` · ${AREA_LABEL[u.area] || u.area}` : ''})`)),
+    ...users.map((u) => h('option', { value: String(u.id) }, `${u.full_name} (${getRoleLabel(u.role)}${u.area ? ` · ${AREA_LABEL[u.area] || u.area}` : ''})`)),
   ]);
   const notes = h('textarea.input', { rows: '3', placeholder: 'Notas para el encargado (opcional)' });
   const error = h('div.hidden.text-sm.text-red-600', {});

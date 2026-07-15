@@ -11,7 +11,7 @@ function initials(name = '') {
 }
 
 function avatarOf(user) {
-  if (!user) return h('span.avatar', { style: { backgroundColor: '#94a3b8' } }, '?');
+  if (!user) return h('span.avatar', { style: { backgroundColor: 'var(--color-slate-400, #94a3b8)' } }, '?');
   return h('span.avatar', { style: { backgroundColor: avatarColor(user.id) } }, initials(user.full_name));
 }
 
@@ -36,7 +36,8 @@ function eventNode({ icon, text, when }) {
   const wrap = h('div.chat-event', {}, [
     h('span.inline-flex.items-center.gap-1\\.5.px-2\\.5.py-0\\.5.bg-white.border.border-surface-border.rounded-full.text-xs.text-slate-600.shadow-soft', {}, [
       svgIcon(icon),
-      h('span', { html: `${escapeHtml(text)} · <span class="text-slate-400">${escapeHtml(relativeFromNow(when))}</span>` }),
+      // text-slate-500 — WCAG AA: el timestamp relativo en eventos de chat es texto.
+      h('span', { html: `${escapeHtml(text)} · <span class="text-slate-500">${escapeHtml(relativeFromNow(when))}</span>` }),
     ]),
   ]);
   return wrap;

@@ -57,6 +57,14 @@ export async function renderTicketsList({ query, user }) {
   const applyBtn = h('button.btn.btn-primary', { onclick: () => apply(1) }, 'Filtrar');
   const resetBtn = h('button.btn.btn-ghost', { onclick: () => { Object.assign(filters, { status: '', priority: '', search: '', area: '', assigned_to: '', page: 1 }); render(); } }, 'Limpiar');
 
+  // Enter en cualquier input/select de filtro dispara apply(1) — sin esto
+  // el usuario tiene que tabular hasta el botón "Filtrar" para confirmar.
+  for (const el of [searchInput, statusSel, prioSel, areaSel]) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); apply(1); }
+    });
+  }
+
   filtersBar.appendChild(h('div.flex-1.min-w-\\[200px\\]', {}, [h('label.label', {}, 'Búsqueda'), searchInput]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Estado'), statusSel]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Prioridad'), prioSel]));
@@ -114,12 +122,12 @@ export async function renderTicketsList({ query, user }) {
     const { tickets, total, page, limit } = state.result;
     if (tickets.length === 0) {
       tableWrap.innerHTML = '';
-      tableWrap.appendChild(emptyState(EMPTY_STATES.tickets));
+      tableWrap.appendChild(emptyState({ ...EMPTY_STATES.tickets, className: 'py-10' }));
       pagWrap.innerHTML = '';
       return;
     }
     const rows = tickets.map((t) => `
-      <tr class="cursor-pointer" data-id="${t.id}">
+      <tr class="cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:ring-inset" data-id="${t.id}" tabindex="0" role="link" aria-label="Abrir ticket ${escapeHtml(t.code)}: ${escapeHtml(t.title)}">
         <td class="font-mono text-xs text-slate-500">${escapeHtml(t.code)}</td>
         <td>
           <div class="font-medium text-slate-800">${escapeHtml(t.title)}</div>
@@ -147,7 +155,15 @@ export async function renderTicketsList({ query, user }) {
       </table>
     `;
     tableWrap.querySelectorAll('tr[data-id]').forEach((tr) => {
-      tr.addEventListener('click', () => go(`/tickets/${tr.dataset.id}`));
+      const open = () => go(`/tickets/${tr.dataset.id}`);
+      tr.addEventListener('click', open);
+      // Enter o Space en una fila marcada como role=link → navega al detalle.
+      tr.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
+      });
     });
     const totalPages = Math.max(1, Math.ceil(total / limit));
     pagWrap.innerHTML = `

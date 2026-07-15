@@ -19,12 +19,12 @@ export async function renderCategories({ user }) {
   root.appendChild(tableWrap);
 
   async function reload() {
-    tableWrap.innerHTML = '<div class="p-8 text-center text-sm text-slate-500">Cargando…</div>';
+    tableWrap.innerHTML = '<div class="card flex items-center justify-center gap-2 py-10 text-sm text-slate-600" role="status" aria-live="polite"><svg class="animate-spin w-4 h-4 text-brand-ocean" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg><span>Cargando categorías…</span></div>';
     try {
       const { categories } = await api.categories.list(true);
       draw(categories);
     } catch (e) {
-      tableWrap.innerHTML = `<div class="p-8 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
+      tableWrap.innerHTML = `<div class="card p-8 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
     }
   }
   function draw(cats) {
@@ -40,7 +40,7 @@ export async function renderCategories({ user }) {
         <td>${c.active ? '<span class="badge bg-emerald-100 text-emerald-800">Activa</span>' : '<span class="badge bg-slate-200 text-slate-700">Inactiva</span>'}</td>
         <td class="text-right">
           <button class="btn btn-ghost btn-sm" data-edit="${c.id}">Editar</button>
-          <button class="btn btn-ghost btn-sm text-red-600" data-toggle="${c.id}">${c.active ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn btn-ghost btn-sm text-accent hover:bg-accent/10" data-toggle="${c.id}">${c.active ? 'Desactivar' : 'Activar'}</button>
         </td>
       </tr>
     `).join('');
@@ -64,6 +64,18 @@ export async function renderCategories({ user }) {
   }
 
   await reload();
+
+  // Realtime: refresca cuando otro SAC crea/edita categorías.
+  const onRealtime = (e) => {
+    const t = e.detail?.event;
+    if (t === 'category:created' || t === 'category:updated') reload();
+  };
+  window.addEventListener('gcm:realtime', onRealtime);
+
+  root._gcmCleanup = () => {
+    window.removeEventListener('gcm:realtime', onRealtime);
+  };
+
   return root;
 }
 

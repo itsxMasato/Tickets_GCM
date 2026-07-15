@@ -17,8 +17,11 @@ export function h(selector, props = {}, children = []) {
   const idMatch = selector.match(/#([\w-]+)/);
   const classMatch = selector.match(/\.([\w-]+)/g) || [];
   const tag = selector.split(/[.#]/)[0] || 'div';
+  const svgTags = new Set(['svg','path','circle','rect','line','polyline','polygon','g','defs','linearGradient','stop','mask','ellipse','text']);
 
-  const el = document.createElement(tag);
+  const el = svgTags.has(tag)
+    ? document.createElementNS('http://www.w3.org/2000/svg', tag)
+    : document.createElement(tag);
   if (idMatch) el.id = idMatch[1];
   for (const c of classMatch) el.classList.add(c.slice(1));
 

@@ -38,6 +38,7 @@ export const api = {
   users: {
     list:    (q = {})     => request('GET',    '/api/users?' + new URLSearchParams(q)),
     create:  (body)       => request('POST',   '/api/users', { body }),
+    get:     (id)         => request('GET',    `/api/users/${id}`),
     update:  (id, body)   => request('PATCH',  `/api/users/${id}`, { body }),
   },
   categories: {
@@ -64,5 +65,19 @@ export const api = {
   stats: {
     dashboard: () => request('GET', '/api/stats/dashboard'),
     me:        () => request('GET', '/api/stats/me'),
+  },
+  audit: {
+    list: (q = {}) => request('GET', '/api/stats/audit?' + new URLSearchParams(q)),
+    actionTypes: () => request('GET', '/api/stats/audit/action-types'),
+    activeUsers: () => request('GET', '/api/stats/audit/active-users'),
+  },
+  roles: {
+    list: () => request('GET', '/api/roles'),
+    get: (role) => request('GET', `/api/roles/${role}`),
+    update: (role, body) => request('PATCH', `/api/roles/${role}`, { body }),
+    labels: {
+      list: () => request('GET', '/api/role-labels'),
+      update: (role, label) => request('PATCH', `/api/role-labels/${role}`, { body: { label } }),
+    },
   },
 };

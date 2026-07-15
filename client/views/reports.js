@@ -2,7 +2,7 @@ import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { exportToExcel, fetchAllForExport } from '../utils/exports.js';
 import { statusBadge, priorityBadge } from '../components/badge.js';
-import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL } from '../utils/format.js';
+import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, formatDateTime } from '../utils/format.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { exportButton } from '../components/export-button.js';
 import { toast } from '../utils/toast.js';
@@ -15,11 +15,8 @@ export async function renderReports({ user }) {
 
   root.appendChild(h('div.flex.items-center.justify-between.flex-wrap.gap-3', {}, [
     h('div', {}, [
-      h('h1.text-2xl.font-bold.text-slate-800', {}, 'Reportes'),
-      h('p.text-sm.text-slate-500', {}, 'Filtra, visualiza y exporta los tickets.'),
-    ]),
-    h('div.flex.items-center.gap-2', {}, [
-      exportButton({ label: 'Exportar', format: 'excel', kind: 'secondary', onclick: doExportExcel }),
+      h('h1.text-2xl.font-bold.text-slate-800', {}, 'Reportes de Tickets'),
+      h('p.text-sm.text-slate-500', {}, 'Analiza y visualiza el estado de todos los tickets.'),
     ]),
   ]));
 
@@ -43,6 +40,11 @@ export async function renderReports({ user }) {
   filtersBar.appendChild(apply);
   root.appendChild(filtersBar);
 
+  // Botón de export
+  root.appendChild(h('div.flex.items-center.gap-2', {}, [
+    exportButton({ label: 'Exportar', format: 'excel', kind: 'secondary', onclick: doExportExcel }),
+  ]));
+
   // KPIs
   const kpis = h('div.grid.grid-cols-2.md\\:grid-cols-5.gap-3', {});
   root.appendChild(kpis);
@@ -55,6 +57,8 @@ export async function renderReports({ user }) {
   const charts = h('div.grid.grid-cols-1.lg\\:grid-cols-2.gap-3', {});
   root.appendChild(charts);
 
+  const spinnerSvg = '<svg class="animate-spin w-4 h-4 text-brand-ocean" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+
   async function render() {
     filters.status = statusSel.value;
     filters.priority = prioSel.value;
@@ -62,7 +66,7 @@ export async function renderReports({ user }) {
     filters.search = search.value.trim();
     filters.date_from = from.value;
     filters.date_to = to.value;
-    tableWrap.innerHTML = '<div class="p-8 text-center text-sm text-slate-500">Cargando…</div>';
+    tableWrap.innerHTML = `<div class="card flex items-center justify-center gap-2 py-10 text-sm text-slate-600" role="status" aria-live="polite">${spinnerSvg}<span>Cargando reportes…</span></div>`;
     charts.innerHTML = '';
     kpis.innerHTML = '';
     try {
@@ -72,7 +76,7 @@ export async function renderReports({ user }) {
       drawTable(data);
       drawChartsAndKpis(data);
     } catch (e) {
-      tableWrap.innerHTML = `<div class="p-8 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
+      tableWrap.innerHTML = `<div class="card p-8 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
     }
   }
 

@@ -1,6 +1,5 @@
 'use strict';
 const { Server } = require('socket.io');
-const sessionStore = require('connect-sqlite3')(require('express-session'));
 const config = require('../config');
 
 let io = null;
@@ -35,4 +34,32 @@ function getIO() {
   return io;
 }
 
-module.exports = { setup, getIO };
+/**
+ * Emite un evento a las salas indicadas. Diseñado para ser seguro cuando
+ * el socket aún no está inicializado (arranque en frío, tests).
+ *
+ * @param {string} event  Nombre del evento (p. ej. 'role:permissions_updated')
+ * @param {object} payload  Datos del evento
+ * @param {object} [opts]
+ * @param {string} [opts.user]  ID de usuario → emite a `user:{id}`
+ * @param {string|boolean} [opts.role]  'sac' / 'admin_area' → sala de rol
+ * @param {string|boolean} [opts.broadcast]  true → sala 'tickets' (todos)
+ * @param {string[]} [opts.extraRooms]  Salas adicionales
+ */
+function emit(event, payload, opts = {}) {
+  try {
+    const target = getIO();
+    if (!target) return;
+    const { user, role, broadcast, extraRooms } = opts;
+    if (user) target.to(`user:${user}`).emit(event, payload);
+    if (role === 'sac' || role === 'admin_area') target.to(role).emit(event, payload);
+    if (broadcast) target.to('tickets').emit(event, payload);
+    if (Array.isArray(extraRooms)) {
+      for (const room of extraRooms) target.to(room).emit(event, payload);
+    }
+  } catch (e) {
+    /* socket no inicializado aún */
+  }
+}
+
+module.exports = { setup, getIO, emit };

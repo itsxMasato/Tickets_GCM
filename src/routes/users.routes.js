@@ -6,10 +6,10 @@ const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 
 // Solo SAC puede gestionar usuarios
-router.get('/', requireAuth, requireRole('sac'), (req, res, next) => {
+router.get('/', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     const { role, active, area } = req.query;
-    const list = authService.listUsers({
+    const list = await authService.listUsers({
       role,
       active: active === undefined ? undefined : active === 'true',
       area,
@@ -25,9 +25,23 @@ router.post('/', requireAuth, requireRole('sac'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Obtener usuario por id
+router.get('/:id', requireAuth, requireRole('sac'), async (req, res, next) => {
+  try {
+    const user = await authService.getById(parseInt(req.params.id, 10));
+    res.json({ user });
+  } catch (err) { next(err); }
+});
+
 router.patch('/:id', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
-    const user = await authService.updateUser(parseInt(req.params.id, 10), req.body || {});
+    // Pasamos req.user al service para que updateUser aplique anti-self-demote
+    // (un SAC no puede desactivarse ni cambiar su propio rol).
+    const user = await authService.updateUser(
+      parseInt(req.params.id, 10),
+      req.body || {},
+      req.user,
+    );
     res.json({ user });
   } catch (err) { next(err); }
 });

@@ -5,6 +5,8 @@ import { api } from './api.js';
 import { connectSocket, on as onSocket } from './socket.js';
 import { toast } from './utils/toast.js';
 import { renderLayout } from './components/layout.js';
+import { initializeFirebase } from './firebase.js';
+import { init as initRoleLabels, applyRoleLabel } from './utils/role-labels.js';
 
 // Vistas
 import { renderLogin } from './views/login.js';
@@ -16,6 +18,8 @@ import { renderUsers } from './views/users.js';
 import { renderCategories } from './views/categories.js';
 import { renderNotifications } from './views/notifications.js';
 import { renderReports } from './views/reports.js';
+import { renderAudit } from './views/audit.js';
+import { renderRoles } from './views/roles.js';
 
 // Registro de rutas (devuelven un { view, cleanup } o un HTMLElement)
 const handlers = {
@@ -28,9 +32,32 @@ const handlers = {
   '/categories':    ({ params, query, user }) => ({ view: renderCategories({ params, query, user }) }),
   '/notifications': ({ params, query, user }) => ({ view: renderNotifications({ params, query, user }) }),
   '/reports':       ({ params, query, user }) => ({ view: renderReports({ params, query, user }) }),
+  '/audit':         ({ params, query, user }) => ({ view: renderAudit({ params, query, user }) }),
+  '/roles':         ({ params, query, user }) => ({ view: renderRoles({ params, query, user }) }),
 };
 
 const app = document.getElementById('app');
+
+// Flag para mostrar app solo una vez cuando esté lista
+let appShown = false;
+function showAppWhenReady() {
+  if (appShown) return;
+  appShown = true;
+  
+  // Limpiar timeout fallback del HTML
+  if (typeof window.clearShowTimeout === 'function') {
+    window.clearShowTimeout();
+  }
+  
+  // Usar requestAnimationFrame para asegurar que el DOM se haya renderizado
+  requestAnimationFrame(() => {
+    const appEl = document.getElementById('app');
+    const overlay = document.getElementById('loading-overlay');
+    
+    if (appEl) appEl.style.display = 'block';
+    if (overlay) overlay.classList.add('hidden');
+  });
+}
 
 function mount(node) {
   // Ejecuta cleanup de listeners en tiempo real registrados por la vista previa
@@ -54,6 +81,9 @@ async function onLogin(user) {
   setState({ user });
   go('/dashboard');
   try {
+    // Cargar labels de roles antes del primer render del sidebar/topbar
+    // (que los muestran). Si falla, la app sigue con defaults locales.
+    await initRoleLabels();
     await connectSocket();
     wireRealtime();
     await refreshBell();
@@ -110,6 +140,24 @@ function wireRealtime() {
   forward('ticket:commented');
   forward('attachment:added');
 
+  // Eventos administrativos — refrescan vistas de SAC
+  // (usuarios, roles, categorías, dashboard).
+  forward('user:created');
+  forward('user:updated');
+  forward('user:deactivated');
+  forward('role:permissions_updated');
+  // Renombre de etiqueta de rol. Aplica al cache y lo difunde a las
+  // vistas vivas vía gcm:role_label_updated; el forward a gcm:realtime
+  // permite que la vista /roles detecte conflictos con cambios locales.
+  onSocket('role:label_updated', (payload = {}) => {
+    if (payload.role && typeof payload.label === 'string') {
+      applyRoleLabel(payload.role, payload.label);
+    }
+    emitRealtime('role:label_updated', payload);
+  });
+  forward('category:created');
+  forward('category:updated');
+
   // Reconexión: cuando el socket vuelve, sincroniza contador
   onSocket('connect', async () => { try { await refreshBell(); } catch {} });
 }
@@ -126,11 +174,18 @@ if (typeof window !== 'undefined') {
 // Adaptador: monta vistas respetando layout
 function withLayout(view, user) {
   if (!view) return null;
-  // Acepta { view, cleanup } (nuevo) o un Node directo (legacy)
+  // Acepta { view, cleanup } (nuevo) o un Node directo (legacy).
+  // Para el caso legacy (Node), si la vista expone un _gcmCleanup propio
+  // (p.ej. listeners de realtime en /roles, /users, /audit), lo heredamos
+  // para que mount() pueda limpiarlo en la próxima navegación — antes se
+  // perdía y los listeners se duplicaban en cada re-mount.
   const inner = view.view ?? view;
-  const cleanup = typeof view.cleanup === 'function' ? view.cleanup : null;
+  const innerCleanup = (typeof view.view === 'undefined' && typeof inner?._gcmCleanup === 'function')
+    ? inner._gcmCleanup
+    : null;
+  const cleanup = typeof view.cleanup === 'function' ? view.cleanup : innerCleanup;
   const wrapper = renderLayout({ content: inner, user, onLogout });
-  
+
   // Combinar cleanups: del layout + de la vista
   const layoutCleanup = typeof wrapper._gcmLayoutCleanup === 'function' ? wrapper._gcmLayoutCleanup : null;
   if (cleanup || layoutCleanup) {
@@ -146,15 +201,30 @@ async function dispatch(rawPath, query) {
   const user = getState().user;
   if (rawPath === '/login') {
     const loginResult = await handlers['/login']({ params: {}, query });
-    return mount(await Promise.resolve(loginResult.view));
+    mount(await Promise.resolve(loginResult.view));
+    showAppWhenReady();
+    return;
   }
   if (!user) {
     try {
       const me = await api.auth.me();
       setState({ user: me.user });
     } catch {
-      return go('/login');
+      go('/login');
+      showAppWhenReady();
+      return;
     }
+  }
+  // Guard de rutas restringidas a SAC. El backend también lo aplica
+  // (requireRole('sac') en cada router), pero lo bloqueamos aquí para
+  // evitar un 403 visible y para que la UI no muestre estados vacíos
+  // a roles sin permiso.
+  const SAC_ONLY = new Set(['/users', '/categories', '/roles', '/audit']);
+  if (SAC_ONLY.has(rawPath) && getState().user?.role !== 'sac') {
+    toast('No tienes permiso para acceder a esa sección.', 'error');
+    go('/dashboard');
+    showAppWhenReady();
+    return;
   }
   // matchear
   for (const [pattern, fn] of Object.entries(handlers)) {
@@ -171,9 +241,12 @@ async function dispatch(rawPath, query) {
     if (!ok) continue;
     const result = await fn({ params, query, user: getState().user });
     const view = await Promise.resolve(result.view);
-    return mount(withLayout(view, getState().user));
+    mount(withLayout(view, getState().user));
+    showAppWhenReady();
+    return;
   }
   go('/dashboard');
+  showAppWhenReady();
 }
 
 function onHashChange() {
@@ -184,6 +257,12 @@ function onHashChange() {
 }
 
 async function bootstrap() {
+  try {
+    await initializeFirebase();
+  } catch (error) {
+    console.warn('[firebase] No se pudo inicializar Firestore:', error);
+  }
+
   // Rehidratar sesión
   try {
     const me = await api.auth.me();
@@ -198,6 +277,7 @@ async function bootstrap() {
 
   if (getState().user) {
     try {
+      await initRoleLabels();
       await connectSocket();
       wireRealtime();
       await refreshBell();

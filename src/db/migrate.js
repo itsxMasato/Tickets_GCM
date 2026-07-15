@@ -38,8 +38,6 @@ function applyMissingColumns(db) {
   }
 }
 
-//vamos a probar esto
-
 function applyIndexes(db) {
   // CREATE INDEX IF NOT EXISTS: si la tabla ya existía y el índice nunca se creó
   // (porque en su momento la columna no estaba), se crea ahora.
@@ -60,6 +58,36 @@ function applyIndexes(db) {
   }
 }
 
+function getTableSql(db, table) {
+  const row = db.prepare('SELECT sql FROM sqlite_master WHERE type = ? AND name = ?').get('table', table);
+  return row ? row.sql : null;
+}
+
+function getColumnNames(db, table) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().map((col) => col.name);
+}
+
+function repairTicketsStatusConstraint(db) {
+  const sql = getTableSql(db, 'tickets');
+  if (!sql) return;
+  const hasLegacyStatus = sql.includes("('recibido','asignado','en_proceso','resuelto','cerrado','reabierto')");
+  if (!hasLegacyStatus) return;
+
+  console.log('[migrate] Reparando constraint legacy de tickets.status...');
+  db.exec('ALTER TABLE tickets RENAME TO tickets_old');
+  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  db.exec(schema);
+
+  const oldCols = getColumnNames(db, 'tickets_old');
+  const newCols = getColumnNames(db, 'tickets');
+  const commonCols = oldCols.filter((name) => newCols.includes(name));
+  if (commonCols.length > 0) {
+    const cols = commonCols.join(', ');
+    db.prepare(`INSERT INTO tickets (${cols}) SELECT ${cols} FROM tickets_old`).run();
+  }
+  db.exec('DROP TABLE tickets_old');
+}
+
 async function migrate() {
   const db = getDb();
   // 1) Asegurar columnas nuevas antes de correr el schema (los índices dependen de ellas)
@@ -67,6 +95,8 @@ async function migrate() {
   // 2) Aplicar schema (CREATE IF NOT EXISTS, idempotente)
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
+  // 2a) Reparar tablas legacy que no pueden migrar con CREATE TABLE IF NOT EXISTS
+  repairTicketsStatusConstraint(db);
   // 3) Reasegurar índices por si la tabla existía con la migración previa
   applyIndexes(db);
   console.log('[migrate] Esquema aplicado.');

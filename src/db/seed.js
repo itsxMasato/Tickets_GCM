@@ -34,17 +34,24 @@ const CATEGORIES = [
 
 async function seed() {
   const db = getDb();
-  const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
-  if (userCount === 0) {
-    const insertUser = db.prepare(
-      'INSERT INTO users (username, password_hash, full_name, email, role, area) VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    for (const u of USERS) {
-      const hash = await bcrypt.hash(u.password, 10);
+  const insertUser = db.prepare(
+    'INSERT INTO users (username, password_hash, full_name, email, role, area) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+
+  for (const u of USERS) {
+    const hash = await bcrypt.hash(u.password, 10);
+    const existing = db.prepare('SELECT id FROM users WHERE lower(username) = ?').get(u.username.toLowerCase());
+    if (existing) {
+      // No sobrescribimos la contraseña de usuarios existentes para no invalidar
+      // cambios manuales en entornos de desarrollo. Actualizamos metadatos y
+      // el email/rol/área, pero preservamos `password_hash` si ya existe.
+      db.prepare('UPDATE users SET full_name = ?, email = ?, role = ?, area = ?, active = 1 WHERE id = ?')
+        .run(u.full_name, u.email, u.role, u.area, existing.id);
+    } else {
       insertUser.run(u.username, hash, u.full_name, u.email, u.role, u.area);
     }
-    console.log(`[seed] Insertados ${USERS.length} usuarios.`);
   }
+  console.log(`[seed] Usuarios asegurados (${USERS.length}).`);
 
   const catCount = db.prepare('SELECT COUNT(*) AS c FROM categories').get().c;
   if (catCount === 0) {

@@ -15,7 +15,8 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
   const filesInput = h('input.hidden', { type: 'file', multiple: true, 'aria-label': 'Adjuntar archivos', onchange: (e) => addFiles(e.target.files) });
   const dropZone = h('div.relative.border.border-slate-200.rounded-lg.bg-white.transition', { 'data-composer': '' });
   const preview = h('div.hidden.px-3.py-2.border-b.border-slate-200.bg-slate-50.flex.flex-wrap.gap-2.text-xs', {});
-  const counter = h('div.text-\\[10px\\].text-slate-400.px-1', {}, '0/4000');
+  // text-slate-500 — WCAG AA: el counter "0/4000" es body text, no decoración.
+  const counter = h('div.text-\\[10px\\].text-slate-500.px-1', {}, '0/4000');
   const textarea = h('textarea.w-full.resize-none.px-3.py-2.rounded-md.focus\\:outline-none.text-sm.bg-transparent', {
     rows: '2',
     maxlength: '4000',
@@ -63,7 +64,9 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
         h('span.text-slate-500.flex-none', {}, [svg(isImage(f.type) ? 'image' : 'file', 'w-3.5 h-3.5')]),
         h('span.font-medium.text-slate-700.max-w-\\[160px\\].truncate', {}, f.name),
         h('span.text-slate-500', {}, `· ${fileSize(f.size)}`),
-        h('button.text-slate-400.hover\\:text-accent.min-w-\\[24px\\].min-h-\\[24px\\].rounded', {
+        // text-slate-500 — el × de quitar archivo es un control visual sobre fondo slate-50;
+        // subir contraste para que no compita con el texto del nombre de archivo.
+        h('button.text-slate-500.hover\\:text-accent.min-w-\\[24px\\].min-h-\\[24px\\].rounded', {
           onclick: () => removeAt(i),
           'aria-label': `Quitar ${f.name}`,
         }, '×'),

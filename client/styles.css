@@ -2,18 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
+/* === Tokens canónicos ===
+   Una sola fuente de verdad para los colores de marca. El mapa de Tailwind
+   los referencia; el sidebar y el login usan estas variables como red de
+   seguridad si el @apply no se procesa. */
+:root {
+  --color-brand-navy: #071D4C;
+  --color-brand-deep: #44497B;
+  --color-brand-ocean: #16ACE4;
+  --color-accent: #CF301D;
+  --color-accent-hover: #A8261A;
+  --color-ink: #243447;
+  --color-surface: #F7F9FC;
+  --color-surface-border: #D6DEE8;
+  --color-surface-border-strong: #B6C2D2;
+}
+
 @layer base {
   html, body { @apply h-full; }
+  /* Fallback duro: si las directivas de Tailwind no se procesan, evitamos pantalla en blanco */
+  html { background-color: var(--color-surface); color: var(--color-ink); }
   body {
     @apply bg-surface text-brand-ink font-sans antialiased;
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
   a { @apply text-brand hover:text-brand-deep; }
 
   /* Scrollbar sobria */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #D6DEE8; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
-  ::-webkit-scrollbar-thumb:hover { background: #B6C2D2; background-clip: padding-box; border: 2px solid transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--color-surface-border); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-surface-border-strong); background-clip: padding-box; border: 2px solid transparent; }
 }
 
 @layer components {
@@ -31,9 +52,6 @@
   .btn-secondary {
     @apply btn bg-white text-brand-ink border border-surface-border hover:bg-surface focus:ring-brand-ocean;
   }
-  .btn-danger {
-    @apply btn bg-accent text-white hover:bg-accent-hover focus:ring-accent;
-  }
   .btn-ghost {
     @apply btn bg-transparent text-brand-ink/80 hover:bg-surface;
   }
@@ -41,18 +59,28 @@
   .btn-icon {
     @apply inline-flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-md
            text-brand-ink/70 hover:bg-surface hover:text-brand-ink
-           focus:outline-none focus:ring-2 focus:ring-brand-ocean/30 transition;
+           /* brand-ocean/60 — sube del 2.4:1 anterior al ~3.2:1 (WCAG AA non-text). */
+           focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 transition;
   }
   .btn-icon-sm {
     @apply inline-flex items-center justify-center min-w-[36px] min-h-[36px] w-9 h-9 rounded-md
            text-brand-ink/60 hover:bg-surface hover:text-brand-ink transition;
   }
+  /* Botón logout del sidebar: nav-rail sobre navy, hover rojo accent para
+     señalar acción destructiva sin gritar. min-w/h-44px = WCAG 2.5.5.
+     Único elemento rojo del sidebar — comunica "no es navegación normal". */
+  .btn-logout {
+    @apply inline-flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-md
+           text-white/80 hover:bg-accent/15 hover:text-accent
+           focus:outline-none focus:ring-2 focus:ring-accent/60 transition;
+  }
 
   /* === Inputs === */
   .input {
     @apply w-full px-3 py-2 bg-white border border-surface-border rounded-md shadow-soft
-           text-sm text-brand-ink placeholder:text-slate-400
-           focus:outline-none focus:ring-2 focus:ring-brand-ocean/40 focus:border-brand-ocean;
+           text-sm text-brand-ink placeholder:text-slate-500
+           /* brand-ocean/60 — cumple WCAG AA non-text ≥ 3:1. */
+           focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:border-brand-ocean;
   }
   .label { @apply block text-sm font-medium text-brand-ink mb-1; }
 
@@ -80,38 +108,112 @@
   .table tbody tr:hover { @apply bg-surface/60; }
   .table tbody tr:last-child td { @apply border-b-0; }
 
-  /* === Sidebar corporativo (Navy) === */
+  /* === Sidebar corporativo (Navy) ===
+     Comportamiento: el sidebar SIEMPRE empuja al main (push layout).
+     - Desktop: vive como columna flex pegajosa, ancho w-64 (256px). Puede
+       colapsarse a mini-rail w-16 (gcm-sidebar-collapsed) con un click en
+       el toggle del topbar; la preferencia persiste en localStorage.
+     - Mobile: vive como columna flex; cuando está cerrado, se desliza fuera
+       de pantalla con translateX(-100%) y el main ocupa el 100%. Cuando
+       está abierto, empuja al main (que se reduce). En el primer load
+       siempre está ABIERTO (gcm-sidebar-open), por requisito explícito del
+       producto.
+     La decisión de push (no overlay) garantiza que ningún contenido queda
+     "tapado" por el sidebar: el main siempre se reacomoda, nunca se
+     superpone. */
   .sidebar {
-    @apply w-64 bg-brand text-white flex flex-col shadow-sidebar;
+    @apply w-64 bg-brand text-white flex flex-col shadow-sidebar transition-[width] duration-200 ease-out flex-none;
+  }
+  /* Red de seguridad: si @apply no se procesa (orden de CSS), garantizamos el fondo. */
+  .sidebar { background-color: var(--color-brand-navy); }
+
+  /* Estado colapsado (mini-rail, sólo íconos) — sólo desktop. */
+  @media (min-width: 768px) {
+    body.gcm-sidebar-collapsed .sidebar { @apply w-16; }
+    body.gcm-sidebar-collapsed .sidebar-label,
+    body.gcm-sidebar-collapsed .sidebar-section,
+    body.gcm-sidebar-collapsed .sidebar-brand-meta { display: none; }
+    body.gcm-sidebar-collapsed .sidebar-brand { @apply justify-center px-2; }
+    body.gcm-sidebar-collapsed .sidebar-link { @apply justify-center px-2; }
+    body.gcm-sidebar-collapsed .sidebar-foot-meta { display: none; }
+    body.gcm-sidebar-collapsed .sidebar-foot { @apply p-2; }
+    body.gcm-sidebar-collapsed .sidebar-foot { @apply gap-0; }
+    body.gcm-sidebar-collapsed .sidebar-user { @apply justify-center px-0; }
+    /* En colapsado: cada link se centra y el dot activo se posiciona a la
+       izquierda (en lugar de a la derecha) para no romper la simetría. */
+    body.gcm-sidebar-collapsed .sidebar-link.active::before {
+      content: '';
+      @apply absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-brand-ocean;
+    }
+    body.gcm-sidebar-collapsed .sidebar-link { position: relative; }
+    body.gcm-sidebar-collapsed .sidebar-link .sidebar-active-dot { display: none; }
   }
 
-  /* Contenedor del sidebar: fijo en desktop, drawer en móvil */
+  /* Contenedor del sidebar: en desktop sticky/columna, en mobile desliza con
+     translateX (push) — el main siempre se reacomoda. */
   .gcm-sidebar {
-    @apply hidden md:flex md:flex-none md:sticky md:top-0 md:h-screen;
+    @apply md:flex md:flex-none md:sticky md:top-0 md:h-screen overflow-hidden;
+    transition: transform 220ms ease-out, width 220ms ease-out;
   }
-  body.gcm-sidebar-open .gcm-sidebar {
-    @apply flex fixed inset-y-0 left-0 z-40 animate-[slidein_0.2s_ease-out];
+  @media (max-width: 767.95px) {
+    .gcm-sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      z-index: 40;
+      width: 84vw;
+      max-width: 320px;
+      height: 100dvh;
+      transform: translateX(-100%);
+      will-change: transform;
+    }
+    body.gcm-sidebar-open .gcm-sidebar { transform: translateX(0); }
   }
-  @keyframes slidein {
-    from { transform: translateX(-100%); }
-    to   { transform: translateX(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar, .gcm-sidebar { animation: none; transition: none; }
   }
+
   .sidebar-link {
     @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
-           text-white/80 hover:bg-white/10 hover:text-white transition;
+           text-white/80 hover:bg-white/10 hover:text-white
+           /* brand-ocean/60 — focus ring consistente con el sistema; sin él,
+              el link de navegación queda invisible al tabular. */
+           focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 transition;
   }
   .sidebar-link.active {
     @apply bg-white/15 text-white shadow-soft;
   }
-  .sidebar-icon { @apply w-5 h-5 flex-none; }
+  .sidebar-icon { @apply w-5 h-5 flex-none text-white; }
+  /* Header de sección: ícono pequeño + label en mayúsculas tracking-wider.
+     Flex row con gap-1.5 para alinear el ícono a la izquierda.
+     text-white/75 (~6.2:1 sobre brand-navy) y tracking-wider (en vez de
+     tracking-widest) para que el label se lea como agrupador claro y NO
+     se confunda con un botón perdido. Sigue subordinado al .sidebar-link
+     (text-white/80). */
   .sidebar-section {
-    @apply px-3 mt-4 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/50;
+    @apply flex items-center gap-1.5 px-3 mt-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/75;
   }
   .sidebar-brand {
-    @apply px-5 py-5 border-b border-white/10 flex items-center gap-3;
+    @apply px-5 py-5 border-b border-white/10 flex items-center gap-3 transition-[padding] duration-200 ease-out;
   }
   .sidebar-foot {
-    @apply p-3 border-t border-white/10;
+    @apply p-3 border-t border-white/10 transition-[padding] duration-200 ease-out;
+  }
+
+  /* === Topbar: botones de iconos prominentes ===
+     Antes los icon buttons (bell, toggle, ayuda) usaban text-brand-ink/70
+     con stroke 1.8 — visualmente débiles. Esta clase sube a text-brand-ink
+     (contraste 1.6x mayor) y stroke 2, sin perder la jerarquía del sistema. */
+  .topbar-icon-btn {
+    @apply inline-flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-md
+           text-brand-ink bg-white border border-surface-border
+           hover:bg-surface hover:border-surface-border-strong
+           focus:outline-none focus:ring-2 focus:ring-brand-ocean/60
+           transition shadow-soft;
+  }
+  .topbar-user-trigger {
+    /* El trigger del menú de usuario no necesita borde; usa la jerarquía
+       "clickable surface" sin container. */
+    @apply border-0 shadow-none;
   }
 
   /* === Topbar === */
@@ -156,7 +258,8 @@
   }
   .kpi-label { @apply text-xs uppercase tracking-wider text-slate-500 font-medium; }
   .kpi-value { @apply text-2xl font-bold text-brand-ink; }
-  .kpi-hint  { @apply text-xs text-slate-400; }
+  /* text-slate-500 (no -400) — WCAG AA body text ≥ 4.5:1 sobre blanco. */
+  .kpi-hint  { @apply text-xs text-slate-500; }
 
   /* === Brand dot (color chips) === */
   .dot-brand   { @apply bg-brand; }
@@ -171,54 +274,387 @@
   .badge-dot::before {
     content: ''; @apply w-1.5 h-1.5 rounded-full flex-none;
   }
-  .badge-recibido    { @apply badge-dot bg-slate-100 text-slate-700; }
-  .badge-recibido::before    { @apply bg-slate-400; }
-  .badge-asignado    { @apply badge-dot bg-blue-100 text-blue-800; }
-  .badge-asignado::before    { @apply bg-blue-500; }
-  .badge-en_proceso  { @apply badge-dot bg-amber-100 text-amber-800; }
-  .badge-en_proceso::before  { @apply bg-amber-500; }
-  .badge-solucionado { @apply badge-dot bg-emerald-100 text-emerald-800; }
-  .badge-solucionado::before { @apply bg-emerald-500; }
-  .badge-cerrado     { @apply badge-dot bg-slate-200 text-slate-800; }
-  .badge-cerrado::before     { @apply bg-slate-500; }
-  .badge-reabierto   { @apply badge-dot bg-orange-100 text-orange-800; }
-  .badge-reabierto::before   { @apply bg-orange-500; }
+  .badge-recibido    { @apply badge-dot bg-slate-100 text-slate-800; }
+  .badge-recibido::before    { @apply bg-slate-500; }
+  .badge-asignado    { @apply badge-dot bg-blue-100 text-blue-900; }
+  .badge-asignado::before    { @apply bg-blue-600; }
+  .badge-en_proceso  { @apply badge-dot bg-amber-100 text-amber-900; }
+  .badge-en_proceso::before  { @apply bg-amber-600; }
+  .badge-solucionado { @apply badge-dot bg-emerald-100 text-emerald-900; }
+  .badge-solucionado::before { @apply bg-emerald-600; }
+  .badge-cerrado     { @apply badge-dot bg-slate-200 text-slate-900; }
+  .badge-cerrado::before     { @apply bg-slate-600; }
+  .badge-reabierto   { @apply badge-dot bg-orange-100 text-orange-900; }
+  .badge-reabierto::before   { @apply bg-orange-600; }
 
-  .prio-baja     { @apply badge-dot bg-slate-100 text-slate-700; }
-  .prio-baja::before     { @apply bg-slate-400; }
-  .prio-media    { @apply badge-dot bg-blue-100 text-blue-700; }
-  .prio-media::before    { @apply bg-blue-500; }
-  .prio-alta     { @apply badge-dot bg-amber-100 text-amber-800; }
-  .prio-alta::before     { @apply bg-amber-500; }
-  .prio-urgente  { @apply badge-dot bg-red-100 text-red-800; }
-  .prio-urgente::before  { @apply bg-red-500; }
+  .prio-baja     { @apply badge-dot bg-slate-100 text-slate-800; }
+  .prio-baja::before     { @apply bg-slate-500; }
+  .prio-media    { @apply badge-dot bg-blue-100 text-blue-900; }
+  .prio-media::before    { @apply bg-blue-600; }
+  .prio-alta     { @apply badge-dot bg-amber-100 text-amber-900; }
+  .prio-alta::before     { @apply bg-amber-600; }
+  .prio-urgente  { @apply badge-dot bg-red-100 text-red-900; }
+  .prio-urgente::before  { @apply bg-red-600; }
 
-  /* === Login Page Styles === */
-  .login-gradient {
-    background: linear-gradient(135deg, #131b2e 0%, #0b1c30 100%);
+  /* === Login Page Styles ===
+     El glassmorphism está reservado al login card (DESIGN_SYSTEM.md §7).
+     Es una aproximación web (backdrop-filter), no Apple Liquid Glass oficial.
+     Tono general: operacional premium. La paleta navy + glass + un solo acento
+     ocean mantienen la jerarquía sin gritar. Nada de gradientes compitiendo. */
+
+  /* ── Root ─────────────────────────────────────────────────────────── */
+  .login-root {
+    @apply relative overflow-x-hidden flex flex-col lg:flex-row bg-brand text-white;
+    min-height: 100dvh;
+    /* patrón sutil de grano para dar textura al navy en superficies grandes */
+    background-image:
+      radial-gradient(1200px 600px at 15% -10%, rgba(22, 172, 228, 0.10), transparent 60%),
+      radial-gradient(900px 500px at 110% 110%, rgba(68, 73, 123, 0.55), transparent 55%),
+      linear-gradient(180deg, var(--color-brand-navy) 0%, color-mix(in srgb, var(--color-brand-navy) 92%, #000) 50%, color-mix(in srgb, var(--color-brand-navy) 75%, #000) 100%);
+    background-blend-mode: screen, screen, normal;
   }
 
-  .login-hero {
-    @apply rounded-3xl overflow-hidden;
-    background: radial-gradient(circle at top left, rgba(22, 172, 228, 0.22), transparent 28%),
-                radial-gradient(circle at bottom right, rgba(207, 48, 29, 0.22), transparent 22%),
-                linear-gradient(180deg, #071D4C 0%, #0B1C30 100%);
+  /* ── Background full-bleed (video + overlay) ─────────────────────── */
+  .login-video-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    will-change: transform, opacity;
   }
 
+  .login-bg-video {
+    @apply absolute inset-0 w-full h-full object-cover;
+    /* oscuro pero presente: el navy manda, el footage respira. */
+    filter: saturate(0.85) brightness(0.62) contrast(1.08);
+    transform: scale(1.08);
+  }
+
+  .login-video-overlay {
+    position: absolute;
+    inset: 0;
+    /* overlay liviano: dos viñetas + degradado vertical navy. La capa es
+       lo bastante delgada para que el footage se vea, lo bastante opaca
+       para que el card glass tenga contraste consistente. */
+    background:
+      radial-gradient(ellipse at top left, rgba(22, 172, 228, 0.06), transparent 38%),
+      radial-gradient(ellipse at bottom right, rgba(7, 29, 76, 0.30), transparent 45%),
+      linear-gradient(180deg, rgba(7, 29, 76, 0.32) 0%, rgba(5, 15, 44, 0.62) 100%);
+  }
+
+  /* grain muy sutil sobre el overlay — rompe el banding del degradado */
+  .login-video-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.06;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  /* ── Card glass ──────────────────────────────────────────────────── */
+  /* Aproximación web de glassmorphism navy-tinted: la translucidez lleva el
+     azul marino de marca, no blanco lechoso. El card queda anclado al sistema
+     visual y respeta "The Glass Scope Rule" del DESIGN_SYSTEM.md §7. */
+  .login-card {
+    @apply backdrop-blur-2xl rounded-[28px] border;
+    background: linear-gradient(180deg, rgba(7, 29, 76, 0.32), rgba(7, 29, 76, 0.18));
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.10) inset,        /* highlight superior */
+      0 30px 60px -20px rgba(5, 12, 30, 0.55),       /* sombra de marca */
+      0 12px 30px -12px rgba(5, 12, 30, 0.45);
+  }
+
+  /* Variante opaca para prefers-reduced-transparency */
+  @media (prefers-reduced-transparency: reduce) {
+    .login-card {
+      background: linear-gradient(180deg, rgba(7, 29, 76, 0.94), rgba(68, 73, 123, 0.92));
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
+  /* ── Fallback si el video falla ──────────────────────────────────── */
+  [data-video-failed='true'] .login-bg-video { display: none; }
+  [data-video-failed='true'] .login-video-overlay { display: none; }
+
+  /* ── Estados de campo: estados tipográficos finos ────────────────── */
+  .login-card .input {
+    @apply bg-white/[0.06] border border-white/15 text-white shadow-none;
+    transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+    height: 46px;
+  }
+  .login-card .input::placeholder {
+    color: rgba(226, 232, 240, 0.55); /* slate-200/55: secundario honesto */
+  }
+  .login-card .input:hover:not(:focus) {
+    background-color: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+  .login-card .input:focus {
+    background-color: rgba(255, 255, 255, 0.10);
+    border-color: var(--color-brand-ocean);
+    box-shadow: 0 0 0 4px rgba(22, 172, 228, 0.18);
+  }
+  .login-card .input[aria-invalid="true"] {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 4px rgba(207, 48, 29, 0.18);
+  }
+
+  /* Botón submit: el navy manda (no el negro azulado). Estado loading visible. */
+  .login-card .btn-primary.login-submit {
+    @apply bg-brand text-white shadow-none;
+    height: 46px;
+    letter-spacing: 0.005em;
+  }
+  .login-card .btn-primary.login-submit:hover:not(:disabled) {
+    background-color: var(--color-brand-deep);
+  }
+  .login-card .btn-primary.login-submit:focus-visible {
+    box-shadow: 0 0 0 4px rgba(22, 172, 228, 0.30);
+    outline: none;
+  }
+  .login-card .btn-primary.login-submit:disabled {
+    opacity: 0.7;
+  }
+
+  /* ── Distribución y layout ───────────────────────────────────────── */
+  .login-grid   { @apply relative z-10 flex-1 flex flex-col lg:flex-row min-h-0; }
+  .login-aside  { @apply flex flex-[3] flex-col relative min-h-0; }
+  .login-side   { @apply hidden lg:flex flex-[2] flex-col min-h-0; }
+
+  /* Bordes verticales sutiles para anclar los dos paneles en desktop */
+  @media (min-width: 1024px) {
+    .login-aside { border-right: 1px solid rgba(255, 255, 255, 0.06); }
+  }
+
+  /* Bloques internos del panel — padding generoso y consistente */
+  .login-aside-inner {
+    @apply flex flex-col justify-between flex-1 min-h-0;
+    padding: clamp(24px, 4vw, 56px);
+    gap: 32px;
+  }
+  .login-side-inner {
+    @apply flex flex-col justify-between flex-1 min-h-0;
+    padding: clamp(32px, 4vw, 64px);
+    gap: 32px;
+  }
+
+  /* En mobile/tablet el side no existe; el aside tiene padding ajustado */
+  @media (max-width: 1023px) {
+    .login-aside-inner { padding: 24px 20px 28px; gap: 24px; }
+  }
+
+  /* ── Brand lockup (logo + nombre + tagline + ubicación) ─────────── */
+  .login-brand {
+    @apply flex items-center gap-3 select-none;
+  }
+  .login-brand-logo {
+    @apply w-10 h-10 rounded-full object-cover;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 4px 14px rgba(7, 29, 76, 0.35);
+  }
+  .login-brand-name {
+    @apply text-[15px] font-semibold tracking-tight text-white leading-tight;
+  }
+  .login-brand-tag {
+    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-ocean/90;
+  }
+  .login-brand-meta {
+    @apply text-[11px] text-white/55 mt-0.5;
+  }
+
+  /* ── Card head (h2 + sub) ────────────────────────────────────────── */
+  .login-card-head { @apply mb-2; }
+  .login-card-head .eyebrow {
+    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-ocean/90 mb-2;
+  }
+  .login-card-head h2 {
+    @apply text-[22px] sm:text-[24px] font-semibold tracking-tight text-white leading-tight;
+  }
+  .login-card-head p {
+    @apply text-[13.5px] text-white/65 leading-relaxed mt-1.5;
+  }
+
+  /* ── Form rows y opciones ────────────────────────────────────────── */
+  .login-form-row {
+    @apply flex items-center justify-between flex-wrap gap-3 mt-1;
+  }
+  .login-link {
+    @apply text-[12.5px] font-medium text-white/75 transition;
+  }
+  .login-link:hover { color: var(--color-brand-ocean); }
+  .login-link:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(22, 172, 228, 0.30);
+    border-radius: 4px;
+  }
+
+  /* ── Inputs: iconos y validación ─────────────────────────────────── */
+  .login-input-wrap { @apply relative; }
   .login-input-icon {
-    @apply transition-colors duration-200;
+    @apply absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 transition-colors duration-200 pointer-events-none;
+  }
+  .login-input-icon-active { @apply text-brand-ocean; }
+
+  .login-input-helper {
+    @apply mt-1.5 text-[11.5px] text-white/55 leading-snug;
+  }
+  .login-input-helper-error {
+    @apply mt-1.5 text-[11.5px] text-red-200/95 leading-snug flex items-center gap-1.5;
   }
 
-  @keyframes spin-input {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+  /* Toggle de visibilidad: discreto, área click 44x44 */
+  .login-toggle {
+    @apply absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 rounded-md
+           inline-flex items-center justify-center
+           text-white/55 hover:text-white hover:bg-white/10 transition;
+  }
+  .login-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(22, 172, 228, 0.30);
   }
 
-  .animate-spin-input {
-    animation: spin-input 1s linear infinite;
+  /* ── Checkbox recordarme ─────────────────────────────────────────── */
+  .login-checkbox {
+    @apply appearance-none w-[16px] h-[16px] rounded-[4px] border border-white/35 bg-white/[0.04]
+           checked:bg-brand-ocean checked:border-brand-ocean
+           /* brand-ocean/60 — sube contraste non-text sobre glass. */
+           focus:ring-2 focus:ring-brand-ocean/60 cursor-pointer transition;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 11px 11px;
+  }
+  .login-checkbox:checked {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>");
+  }
+  .login-checkbox-row {
+    @apply inline-flex items-center gap-2.5 cursor-pointer text-white/80
+           min-h-[28px] py-1 select-none;
+  }
+  .login-checkbox-row input[type="checkbox"] { @apply flex-none; }
+  .login-checkbox-row .label-text { @apply text-[13px]; }
+
+  /* ── Divider con label (continuar con SSO, etc.) ─────────────────── */
+  .login-divider {
+    @apply relative flex items-center my-1;
+  }
+  .login-divider::before,
+  .login-divider::after {
+    content: '';
+    @apply flex-1 border-t border-white/10;
+  }
+  .login-divider > span {
+    @apply px-3 text-[10.5px] uppercase tracking-[0.18em] text-white/45 font-medium;
   }
 
-  /* Accesibilidad: respetar prefers-reduced-motion */
+  /* ── Banner de error / hint / info ───────────────────────────────── */
+  /* Sin border-left de 3px (DESIGN §8 lo prohíbe como tell de IA). En su
+     lugar: border 1px en todo el contorno + el icono a color lleva la
+     señal de estado (tres canales: icono + color + texto). */
+  .login-banner {
+    @apply rounded-lg border px-3.5 py-2.5 flex items-start gap-2.5 text-[12.5px] leading-snug;
+  }
+  .login-banner-error {
+    @apply bg-accent/[0.08] border-accent/30 text-red-100;
+  }
+  .login-banner-warning {
+    @apply bg-amber-500/[0.08] border-amber-400/25 text-amber-100;
+  }
+  .login-banner-info {
+    @apply bg-brand-ocean/[0.08] border-brand-ocean/30 text-white/85;
+  }
+  .login-banner-icon { @apply w-4 h-4 mt-0.5 flex-none; }
+  .login-banner-error .login-banner-icon { @apply text-red-300; }
+  .login-banner-warning .login-banner-icon { @apply text-amber-300; }
+  .login-banner-info .login-banner-icon { @apply text-brand-ocean; }
+
+  /* ── Foot del card (legal / cifrado) ─────────────────────────────── */
+  .login-card-foot {
+    @apply mt-5 flex items-center gap-3 text-[11.5px] text-white/55 leading-snug;
+  }
+  .login-card-foot .lock-dot {
+    @apply w-1.5 h-1.5 rounded-full bg-brand-ocean/70 flex-none;
+  }
+  .login-card-foot a {
+    @apply text-white/70 hover:text-white underline underline-offset-2 decoration-white/20;
+  }
+
+  /* ── Status row al pie del aside (datos reales) ──────────────────── */
+  .login-aside-foot {
+    @apply flex flex-wrap items-center justify-between gap-3
+           text-[10.5px] uppercase tracking-[0.16em] text-white/45;
+  }
+  .login-status {
+    @apply inline-flex items-center gap-2 normal-case tracking-normal text-[11.5px] text-white/70;
+  }
+  .login-status-dot {
+    @apply w-1.5 h-1.5 rounded-full flex-none;
+    box-shadow: 0 0 0 3px rgba(22, 172, 228, 0.18);
+  }
+  .login-status-dot.ok { @apply bg-brand-ocean; }
+  .login-status-dot.degraded { @apply bg-accent; box-shadow: 0 0 0 3px rgba(207, 48, 29, 0.18); }
+
+  /* ── Side: superficie de contexto (40%) ──────────────────────────── */
+  .login-side-eyebrow {
+    @apply text-[10px] font-semibold uppercase tracking-[0.20em] text-brand-ocean/90;
+  }
+  .login-side h2 {
+    @apply text-[26px] sm:text-[30px] font-semibold leading-[1.15] tracking-tight text-white mt-3;
+  }
+  .login-side-lede {
+    @apply text-[14px] text-white/70 leading-relaxed mt-3 max-w-[42ch];
+  }
+
+  .login-cap {
+    @apply flex items-start gap-3 py-2.5;
+  }
+  .login-cap-icon {
+    @apply w-7 h-7 rounded-md flex-none flex items-center justify-center
+           bg-brand-ocean/15 text-brand-ocean;
+  }
+  .login-cap-title { @apply text-[13.5px] font-semibold text-white leading-snug; }
+  .login-cap-sub   { @apply text-[12px] text-white/55 leading-snug mt-0.5; }
+
+  .login-side-foot {
+    @apply flex flex-wrap items-center justify-between gap-3
+           text-[10.5px] uppercase tracking-[0.16em] text-white/45;
+  }
+  .login-side-foot .pill {
+    @apply inline-flex items-center gap-1.5 px-2 py-1 rounded-md
+           border border-white/10 bg-white/[0.04] normal-case tracking-normal text-[11px] text-white/70;
+  }
+
+  /* ── Soporte / corporativo ──────────────────────────────────────── */
+  .login-support {
+    @apply flex flex-wrap items-center gap-x-5 gap-y-2 text-[11.5px] text-white/55;
+  }
+  .login-support a {
+    @apply inline-flex items-center gap-1.5 text-white/70 hover:text-white transition;
+  }
+  .login-support svg { @apply w-3.5 h-3.5 opacity-80; }
+
+  .login-meta-mono {
+    font-variant-numeric: tabular-nums;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  /* ── Submit spinner ──────────────────────────────────────────────── */
+  .login-submit .spinner { @apply w-4 h-4 animate-spin; }
+  .login-submit[aria-busy="true"] { @apply cursor-progress; }
+
+  /* ── Animación de entrada (sutil, < 200ms) ──────────────────────── */
+  @media (prefers-reduced-motion: no-preference) {
+    .login-card { animation: login-card-in 220ms cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes login-card-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: none; }
+    }
+  }
+
+  /* ── Accesibilidad: respetar prefers-reduced-motion ──────────────── */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
@@ -227,4 +663,149 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /* === Dashboard primitives (módulo /dashboard) ============================
+     Primitivas exclusivas del módulo Inicio. Encapsulan la jerarquía
+     "welcome → hero → kpi → chart → listas → quick actions" sin
+     contaminar el resto del sistema. El acento rojo camarón sólo aparece
+     en el CTA del hero (regla The One Voice del design system). */
+  .dash-welcome {
+    @apply flex items-center flex-wrap gap-x-2 gap-y-1 text-sm text-brand-ink;
+  }
+  .dash-welcome-name { @apply font-semibold text-brand-ink; }
+  .dash-welcome-meta { @apply text-xs text-slate-500; }
+  .dash-welcome-role { @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-ocean; }
+  .dash-welcome-dot  { @apply w-1 h-1 rounded-full bg-surface-border-strong flex-none; }
+  .dash-welcome-time { @apply text-xs text-slate-500 tabular-nums; }
+
+  .dash-hero {
+    @apply card flex flex-col md:flex-row md:items-center md:justify-between gap-4
+           bg-brand-ocean/[0.04] border-brand-ocean/30;
+  }
+  .dash-hero-eyebrow {
+    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-ocean mb-1.5;
+  }
+  .dash-hero-title { @apply text-base font-semibold text-brand-ink leading-snug; }
+  /* Tinte del propio ink (#243447) al 60% — no slate genérico: sobre
+     tinte ocean-4% el gris frío se ve lavado, mientras que un navy
+     translúcido armoniza con la paleta y mantiene contraste WCAG AA. */
+  .dash-hero-sub   { @apply text-xs text-brand-ink/60 mt-0.5; }
+  .dash-hero-quiet {
+    @apply card flex items-center gap-3 bg-emerald-50/60 border-emerald-200;
+  }
+  .dash-hero-quiet-dot { @apply w-2 h-2 rounded-full bg-emerald-500 flex-none; }
+  .dash-hero-quiet-text { @apply text-sm text-emerald-900 font-medium; }
+  .dash-hero-quiet-sub  { @apply text-xs text-emerald-700/80 ml-2; }
+
+  .dash-kpi-pulse { animation: kpi-pulse 600ms ease-out; }
+  @keyframes kpi-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(22, 172, 228, 0.45); }
+    100% { box-shadow: 0 0 0 0 rgba(22, 172, 228, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-kpi-pulse { animation: none; }
+  }
+  .dash-kpi-accent { @apply text-accent; }
+  .dash-kpi-ocean  { @apply text-brand-ocean; }
+
+  .dash-list { @apply divide-y divide-surface-border/60; }
+  .dash-list-row {
+    @apply flex items-center gap-3 py-2.5 px-1 transition-colors;
+  }
+  .dash-list-row:hover { @apply bg-surface/40; }
+  /* text-slate-500 — WCAG AA: el índice "01, 02…" es texto pequeño pero texto al fin.
+     slate-400 daba ~3.4:1 sobre blanco, slate-500 sube a ~4.6:1. */
+  .dash-list-index { @apply text-[10px] font-mono text-slate-500 w-5 flex-none tabular-nums text-right; }
+  .dash-list-name  { @apply flex-1 min-w-0 text-sm text-brand-ink truncate; }
+  .dash-list-meta  { @apply text-xs text-slate-500 hidden sm:inline; }
+  .dash-list-count { @apply badge bg-surface-alt text-brand-ink tabular-nums flex-none; }
+
+  .dash-chart { @apply relative flex items-end gap-1 h-32 md:h-40; }
+  .dash-chart-avg {
+    @apply absolute left-0 right-0 border-t border-dashed border-slate-300 pointer-events-none;
+  }
+  .dash-chart-avg-label {
+    @apply absolute right-0 text-[10px] text-slate-500 bg-white px-1.5 rounded
+           border border-surface-border;
+    transform: translate(0, -50%);
+  }
+  .dash-chart-bar {
+    @apply flex-1 flex flex-col items-center justify-end cursor-default;
+  }
+  .dash-chart-bar-fill {
+    @apply w-full bg-brand-ocean rounded-t transition-all duration-300 ease-out
+           group-hover:bg-brand-deep group-focus-visible:ring-2
+           group-focus-visible:ring-brand-ocean/40;
+  }
+  .dash-chart-bar-label {
+    @apply text-[10px] text-slate-300 mt-1 transition-colors
+           group-hover:text-slate-900 group-hover:font-semibold;
+    font-variant-numeric: tabular-nums;
+  }
+  .dash-chart-bar-label.is-major { @apply text-slate-600; }
+  .dash-chart-bar-value {
+    @apply text-[10px] font-medium text-slate-600 mb-0.5
+           opacity-0 group-hover:opacity-100 transition-opacity;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dash-section-head {
+    @apply flex items-center justify-between mb-3;
+  }
+  .dash-section-title { @apply text-sm font-semibold text-brand-ink; }
+  .dash-section-sub   { @apply text-xs text-slate-500 mt-0.5; }
+  .dash-section-link  {
+    @apply text-xs text-brand-ocean hover:text-brand-deep font-medium inline-flex items-center gap-1;
+  }
+
+  .dash-prio-row {
+    @apply flex items-center gap-2 mb-2;
+  }
+  .dash-prio-dot-urgente { @apply w-1.5 h-1.5 rounded-full bg-accent flex-none; }
+  .dash-prio-dot-default { @apply w-1.5 h-1.5 rounded-full bg-surface-border-strong flex-none; }
+
+  .dash-quick {
+    @apply card-tight flex items-start gap-3 p-3 hover:border-brand-ocean
+           hover:shadow-card transition cursor-pointer text-left w-full
+           /* brand-ocean/60 — focus ring en quick actions; antes era invisible
+              al tabular y dependía del outline default del navegador. */
+           focus:outline-none focus:ring-2 focus:ring-brand-ocean/60;
+  }
+  .dash-quick-icon {
+    @apply w-9 h-9 rounded-md flex items-center justify-center flex-none
+           bg-brand-ocean/10 text-brand-ocean;
+  }
+
+  /* === Attachments dropzone (ticket-new + reutilizable) ===
+     El estado de hover (mouse encima) NO debe verse idéntico al estado de
+     drag-over — el drag-over tiene que decir "suelta aquí". Usamos dos
+     clases separadas:
+       - hover: nativo del browser (definido arriba en el template)
+       - .gcm-dropzone-active: cuando hay un dragover O un paste reciente
+     Focus ring: como es role=button, comparte el brand-ocean/60. */
+  .gcm-dropzone {
+    /* El background/border se aplican en clases utilitarias del template.
+       Aquí sólo afinamos el estado de dragover y focus. */
+  }
+  .gcm-dropzone.gcm-dropzone-active {
+    @apply bg-brand-ocean/10 border-brand-ocean ring-2 ring-brand-ocean/40;
+  }
+  .gcm-dropzone:focus-visible {
+    outline: none;
+    @apply ring-2 ring-brand-ocean/60;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gcm-dropzone { transition: none; }
+  }
+
+  /* Lista de archivos pendientes: separación vertical + croma. */
+  .gcm-dropzone-list > li {
+    /* El hover sobre la lista es raro (no se "borra" un item al hacer hover)
+       pero el focus del botón × debe ser visible. */
+  }
+  .gcm-dropzone-list > li:hover { background-color: var(--color-surface); }
+  .gcm-dropzone-invalids > li + li { @apply mt-0.5; }
+  .dash-quick-body { @apply flex-1 min-w-0; }
+  .dash-quick-title { @apply text-sm font-medium text-brand-ink leading-snug; }
+  .dash-quick-sub   { @apply text-xs text-slate-500 mt-0.5; }
 }

@@ -1,143 +1,324 @@
 import { h } from '../utils/dom.js';
 import { api } from '../api.js';
+import { svg } from '../utils/icons.js';
+import {
+  BrandLockup,
+  LoginField,
+  PasswordField,
+  LoginCheckbox,
+  PrimaryButton,
+  Banner,
+  Capability,
+  SystemStatus,
+  SupportRow,
+} from '../components/login.js';
 
-export async function renderLogin({ onLogin }) {
-  const root = h('div.min-h-screen.flex.flex-col.lg:flex-row.bg-slate-50', {});
+// ───────────────────────────────────────────────────────────────────────
+// Copy localizado (Honduras · es-HN)
+// ───────────────────────────────────────────────────────────────────────
+const ERROR_COPY = {
+  invalid_credentials: 'Usuario o contraseña incorrectos. Verifica los datos e intenta de nuevo.',
+  network_error: 'No se pudo contactar al servidor. Revisa tu conexión a la red.',
+  rate_limited: 'Demasiados intentos. Espera un momento antes de volver a intentar.',
+  server_error: 'El servicio no responde en este momento. Intenta de nuevo en unos minutos.',
+};
 
-  const leftSection = h('div.flex-1.flex.items-center.justify-center.p-6.sm:p-10.lg:p-14', {});
-  const formContainer = h('div.w-full.max-w-xl.space-y-10', {});
+function describeError(err) {
+  if (!err) return ERROR_COPY.server_error;
+  if (err.status === 401) return ERROR_COPY.invalid_credentials;
+  if (err.status === 429) return ERROR_COPY.rate_limited;
+  if (err.status >= 500) return ERROR_COPY.server_error;
+  if (err.code && ERROR_COPY[err.code]) return ERROR_COPY[err.code];
+  if (!navigator.onLine) return ERROR_COPY.network_error;
+  return err.message || ERROR_COPY.server_error;
+}
 
-  formContainer.appendChild(h('div.space-y-4', {}, [
-    h('div.flex.items-center.gap-3', {}, [
-      h('img.w-12.h-12.rounded-full.object-cover.shadow-sm', { src: '/img/Logo.png', alt: 'Logo' }),
-      h('div', {}, [
-        h('p.text-xs.font-semibold.uppercase.tracking-[0.3em].text-brand-ink/70', {}, 'GCM'),
-        h('h1.text-3xl.sm:text-4xl.font-bold.text-slate-900', {}, 'Bienvenido al panel ejecutivo'),
-      ]),
-    ]),
-    h('p.text-sm.text-slate-600.max-w-2xl', {}, 'Accede a tu entorno de tickets, inventario y reportes con seguridad corporativa. Gestiona solicitudes, estados y prioridades desde un panel centralizado.'),
-  ]));
+// ───────────────────────────────────────────────────────────────────────
+// Vista
+// ───────────────────────────────────────────────────────────────────────
+export async function renderLogin({ params, query, onLogin }) {
+  const nextUrl = typeof query?.next === 'string' ? query.next : null;
+  const root = h('div.login-root', {});
 
-  const card = h('div.card.bg-white.p-8.space-y-6', {});
-  const form = h('form.flex.flex-col.gap-5', { onsubmit: onSubmit });
+  // ── Background — video siempre activo, con transparencia ───────────
+  // El video de producción (public/videos/DJI_0495.mp4) es la superficie de
+  // contexto del login. Se muestra en loop, autoplay, silenciado. El CSS del
+  // overlay aplica una capa navy translúcida encima para que el card glass
+  // tenga contraste sin tapar el footage. Si la decodificación del MP4 falla,
+  // el listener `error` activa el fallback CSS (fondo brand sólido).
+  const videoWrapper = h('div.login-video-bg', { 'aria-hidden': 'true' });
+  const videoElement = h('video.login-bg-video', {
+    muted: true,
+    autoplay: true,
+    loop: true,
+    playsinline: true,
+    preload: 'metadata',
+    poster: '/img/Logo.png',
+    'aria-hidden': 'true',
+  });
+  videoElement.addEventListener('error', () => {
+    root.setAttribute('data-video-failed', 'true');
+  });
+  const videoSource = h('source', {
+    src: '/videos/DJI_0495.mp4',
+    type: 'video/mp4',
+  });
+  videoElement.appendChild(videoSource);
+  const videoOverlay = h('div.login-video-overlay', {});
+  videoWrapper.appendChild(videoElement);
+  videoWrapper.appendChild(videoOverlay);
+  root.appendChild(videoWrapper);
 
-  const userInputWrapper = h('div.space-y-2', {});
-  userInputWrapper.appendChild(h('label.label', { for: 'username' }, 'Usuario'));
-  const userInputContainer = h('div.relative', {});
-  const userIcon = h('span.material-symbols-outlined.absolute.left-3.top-1/2.-translate-y-1/2.text-slate-400.login-input-icon', {}, 'person');
-  const userInput = h('input.input.pl-10', {
-    type: 'text',
+  // ── Grid principal ─────────────────────────────────────────────────
+  const grid = h('div.login-grid', {});
+
+  // ── Panel de tarea (60% en desktop) ─────────────────────────────────
+  const aside = h('div.login-aside', {});
+  const asideInner = h('div.login-aside-inner', {});
+
+  // Brand arriba — sin ubicación específica.
+  asideInner.appendChild(BrandLockup({
+    name: 'GCM Tickets',
+    tagline: 'Sala de control',
+    location: 'Acceso corporativo seguro',
+  }));
+
+  // Card glass con el form
+  const card = h('div.login-card.p-7.sm\\:p-9', {});
+  const cardHead = h('div.login-card-head', {}, [
+    h('div.eyebrow', {}, 'Acceso corporativo'),
+    h('h2', {}, 'Iniciar sesión'),
+    h('p', {}, 'Ingresa con tus credenciales corporativas para gestionar tickets, reportes y asignaciones.'),
+  ]);
+  card.appendChild(cardHead);
+
+  const state = { attempts: 0, busy: false };
+
+  const form = h('form.flex.flex-col.gap-4', {
+    onsubmit: onSubmit,
+    autocomplete: 'on',
+    novalidate: true,
+  });
+
+  // Username
+  const { node: userNode, input: userInput } = LoginField({
     id: 'username',
-    placeholder: 'usuario@empresa.com',
+    label: 'Usuario o correo',
+    type: 'text',
+    icon: 'user',
     autocomplete: 'username',
-    required: true,
+    placeholder: 'jperez · juan@empresa.com',
     autofocus: true,
+    inputmode: 'text',
+    helper: 'Tu usuario de red o tu correo corporativo.',
   });
-  userInputContainer.appendChild(userIcon);
-  userInputContainer.appendChild(userInput);
-  userInputWrapper.appendChild(userInputContainer);
-  form.appendChild(userInputWrapper);
+  form.appendChild(userNode);
 
-  const passInputWrapper = h('div.space-y-2', {});
-  passInputWrapper.appendChild(h('label.label', { for: 'password' }, 'Contraseña'));
-  const passInputContainer = h('div.relative', {});
-  const passIcon = h('span.material-symbols-outlined.absolute.left-3.top-1/2.-translate-y-1/2.text-slate-400.login-input-icon', {}, 'lock');
-  const passInput = h('input.input.pl-10', {
-    type: 'password',
+  // Password
+  const { node: passNode, input: passInput } = PasswordField({
     id: 'password',
-    placeholder: '••••••••',
-    autocomplete: 'current-password',
-    required: true,
+    label: 'Contraseña',
+    autofocus: false,
   });
-  passInputContainer.appendChild(passIcon);
-  passInputContainer.appendChild(passInput);
-  passInputWrapper.appendChild(passInputContainer);
-  form.appendChild(passInputWrapper);
+  form.appendChild(passNode);
 
-  const optionsRow = h('div.flex.items-center.justify-between.flex-wrap.gap-3', {});
-  const rememberLabel = h('label.flex.items-center.space-x-2.cursor-pointer', {});
-  rememberLabel.appendChild(h('input.w-4.h-4.rounded.border-slate-300.text-brand.focus\:ring-brand-ocean', { type: 'checkbox' }));
-  rememberLabel.appendChild(h('span.text-sm.text-slate-600', {}, 'Recordarme'));
-  optionsRow.appendChild(rememberLabel);
-  optionsRow.appendChild(h('a.text-sm.font-semibold.text-brand.hover:underline', { href: '#' }, 'Olvidé mi acceso'));
+  // Opciones (recordarme + olvidé mi acceso)
+  const optionsRow = h('div.login-form-row', {});
+  optionsRow.appendChild(LoginCheckbox({ id: 'remember', label: 'Recordarme en este dispositivo' }));
+  optionsRow.appendChild(h('a.login-link.inline-flex.items-center.gap-1', {
+    href: '/recuperar',
+    tabindex: '0',
+  }, ['Olvidé mi acceso']));
   form.appendChild(optionsRow);
 
-  const error = h('div.hidden.text-sm.text-red-600.bg-red-50.px-3.py-2.rounded-md.border.border-red-200', { role: 'alert', 'aria-live': 'polite' });
-  form.appendChild(error);
+  // Banner de error (oculto al inicio)
+  const errorBox = h('div.hidden', {});
+  form.appendChild(errorBox);
 
-  const submitBtn = h('button.btn.btn-primary.w-full.py-3.flex.items-center.justify-center.space-x-2', { type: 'submit' }, [
-    h('span', {}, 'Ingresar'),
-    h('span.material-symbols-outlined', {}, 'chevron_right'),
+  // Banner de pista tras 3 intentos
+  const hintBox = h('div.hidden', {});
+  form.appendChild(hintBox);
+
+  // Submit
+  const submit = PrimaryButton({ label: 'Ingresar', loadingLabel: 'Verificando…' });
+  form.appendChild(submit);
+
+  // Foot del card: cifrado + caducidad + términos
+  const foot = h('div.login-card-foot', {}, [
+    h('span.lock-dot', { 'aria-hidden': 'true' }),
+    h('span', {}, [
+      'Conexión cifrada TLS · La sesión caduca a los 7 días. ',
+      h('a', { href: '/legal/privacidad' }, 'Privacidad'),
+      ' · ',
+      h('a', { href: '/legal/terminos' }, 'Términos'),
+      '.',
+    ]),
   ]);
-  form.appendChild(submitBtn);
+  form.appendChild(foot);
 
   card.appendChild(form);
-  card.appendChild(h('div.text-xs.text-slate-500', {}, 'Inicia sesión con tu cuenta corporativa para ver tickets asignados, crear solicitudes y revisar métricas en tiempo real.'));
-  formContainer.appendChild(card);
+  asideInner.appendChild(card);
 
-  formContainer.appendChild(h('div.flex.items-center.justify-between.text-xs.text-slate-500', {}, [
-    h('span', {}, 'SISTEMA OPERACIONAL'),
-    h('span', {}, 'v4.12.0-STABLE'),
-  ]));
+  // Pie del aside: status del sistema + atajo al centro de ayuda.
+  // Sin teléfono ni correo: el usuario ya está en una sesión autenticable,
+  // no necesita canales de soporte pre-login que filtren datos de contacto.
+  const since = window.__GCM_CONFIG__?.serviceSince;
+  const asideFoot = h('div.login-aside-foot', {}, [
+    SystemStatus({ status: 'ok', since }),
+    SupportRow({ helpHref: '/ayuda' }),
+  ]);
+  asideInner.appendChild(asideFoot);
 
-  leftSection.appendChild(formContainer);
-  root.appendChild(leftSection);
+  aside.appendChild(asideInner);
+  grid.appendChild(aside);
 
-  const rightSection = h('div.hidden.lg:flex.flex-1.relative.login-hero.overflow-hidden.items-center.justify-center.p-12', {});
-  rightSection.appendChild(h('div.absolute.inset-0.opacity-80', {}));
-  rightSection.appendChild(h('div.absolute.left-0.top-0.w-72.h-72.rounded-full.bg-brand-ocean/20.blur-3xl', {}));
-  rightSection.appendChild(h('div.absolute.right-0.bottom-10.w-64.h-64.rounded-full.bg-accent/20.blur-3xl', {}));
+  // ── Panel de contexto (40%, solo ≥ lg) ─────────────────────────────
+  const side = h('div.login-side', {});
+  const sideInner = h('div.login-side-inner', {});
 
-  const brandingContent = h('div.relative.z-10.max-w-xl.space-y-6.text-white', {});
-  brandingContent.appendChild(h('div.inline-flex.items-center.gap-2.rounded-full.bg-white/10.px-3.py-1.text-xs.font-semibold.uppercase.tracking-[0.3em]', {}, [
-    h('span.material-symbols-outlined.text-lg', {}, 'trending_up'),
-    'Control total',
-  ]));
-  brandingContent.appendChild(h('h2.text-4xl.font-bold.leading-tight', {}, 'Monitorea tickets y operaciones desde una sola vista')); 
-  brandingContent.appendChild(h('p.text-base.text-slate-200.leading-relaxed', {}, 'Optimiza tiempos de respuesta, reduce cuellos de botella y controla el flujo de trabajo con una experiencia clara, rápida y confiable.'));
+  const sideHead = h('div', {}, [
+    h('span.login-side-eyebrow', {}, 'Operación'),
+    h('h2', {}, 'Una vista del ciclo completo de tickets.'),
+    h('p.login-side-lede', {}, 'Tiempos claros, flujo visible y trazabilidad por ticket. Diseñado para que cada rol vea solo lo que le corresponde.'),
+  ]);
+  sideInner.appendChild(sideHead);
 
-  const statsGrid = h('div.grid.grid-cols-3.gap-4.pt-8', {});
-  statsGrid.appendChild(createStatItem('99.98%', 'Uptime')); 
-  statsGrid.appendChild(createStatItem('12.4M', 'Registros activos'));
-  statsGrid.appendChild(createStatItem('< 40ms', 'Latencia')); 
-  brandingContent.appendChild(statsGrid);
+  const capList = h('div.flex.flex-col.gap-1.max-w-md', {}, [
+    Capability({
+      title: 'Cuatro roles con vistas dedicadas',
+      subtitle: 'Triage, ejecución, auditoría y captura. Cada equipo ve solo lo que le corresponde.',
+    }),
+    Capability({
+      title: 'Trazabilidad completa del ciclo',
+      subtitle: 'Estados, comentarios y adjuntos quedan registrados en el historial del ticket.',
+    }),
+    Capability({
+      title: 'Reportes y exportación',
+      subtitle: 'Excel y PDF con los datos vivos al momento del cierre.',
+    }),
+    Capability({
+      title: 'Respaldo y cifrado',
+      subtitle: 'Conexión cifrada TLS y caducidad de sesión a los 7 días.',
+    }),
+  ]);
+  sideInner.appendChild(capList);
 
-  rightSection.appendChild(brandingContent);
-  root.appendChild(rightSection);
+  // Pie del side: línea de producto neutra. Sin build SHA ni reloj local
+  // (filtrarían entorno y zona); sin nombre de equipo interno.
+  const sideFoot = h('div.login-side-foot', {}, [
+    h('div.flex.items-center.gap-2.normal-case.tracking-normal', {}, [
+      svg(h, 'shield', 'w-3.5 h-3.5 text-white\\/40'),
+      h('span.normal-case.tracking-normal.text-\\[11px\\].text-white\\/65', {}, 'Plataforma de tickets · v1'),
+    ]),
+  ]);
+  sideInner.appendChild(sideFoot);
 
-  function createStatItem(value, label) {
-    return h('div.space-y-1', {}, [
-      h('div.text-2xl.font-bold.text-white', {}, value),
-      h('div.text-xs.font-semibold.uppercase.tracking-wider.text-slate-200/80', {}, label),
-    ]);
-  }
+  side.appendChild(sideInner);
+  grid.appendChild(side);
 
+  root.appendChild(grid);
+
+  // Atajo "/" para mover foco a username si no hay foco en un input.
+  root.addEventListener('keydown', (e) => {
+    if (e.key === '/' && !/^(input|textarea|select)$/i.test(document.activeElement?.tagName)) {
+      e.preventDefault();
+      userInput.focus();
+    }
+  });
+
+  // ── Submit ─────────────────────────────────────────────────────────
   async function onSubmit(e) {
     e.preventDefault();
-    error.classList.add('hidden');
-    submitBtn.disabled = true;
-    const originalHTML = submitBtn.innerHTML;
-    submitBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span><span>Ingresando…</span>';
+    if (state.busy) return;
 
+    hideError();
+    hideHint();
+
+    const user = userInput.value.trim();
+    const pass = passInput.value;
+    if (!user || !pass) return;
+
+    setBusy(true);
     try {
-      const { user } = await api.auth.login({
-        username: userInput.value.trim(),
-        password: passInput.value,
-      });
-      onLogin?.(user);
+      const { user: u } = await api.auth.login({ username: user, password: pass });
+      if (nextUrl) {
+        try { sessionStorage.setItem('gcm:postLoginNext', nextUrl); } catch {}
+      }
+      onLogin?.(u);
     } catch (err) {
-      error.textContent = err.message;
-      error.classList.remove('hidden');
+      state.attempts += 1;
+      showError(describeError(err));
+      if (err.status === 401) {
+        passInput.focus();
+        try { passInput.select(); } catch {}
+      }
+      if (state.attempts >= 3) {
+        showHint('Si no recuerdas tu contraseña, usa "Olvidé mi acceso" o contacta a soporte para restablecerla.');
+      }
     } finally {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalHTML;
+      setBusy(false);
     }
   }
 
-  userInput.addEventListener('focus', () => userIcon.classList.add('text-brand'));
-  userInput.addEventListener('blur', () => userIcon.classList.remove('text-brand'));
-  passInput.addEventListener('focus', () => passIcon.classList.add('text-brand'));
-  passInput.addEventListener('blur', () => passIcon.classList.remove('text-brand'));
+  function setBusy(b) {
+    state.busy = b;
+    submit.setAttribute('aria-busy', b ? 'true' : 'false');
+    submit.disabled = b;
+    submit.innerHTML = '';
+    if (b) {
+      const NS = 'http://www.w3.org/2000/svg';
+      const s = document.createElementNS(NS, 'svg');
+      s.setAttribute('class', 'spinner w-4 h-4 animate-spin');
+      s.setAttribute('fill', 'none');
+      s.setAttribute('stroke', 'currentColor');
+      s.setAttribute('stroke-width', '2');
+      s.setAttribute('viewBox', '0 0 24 24');
+      s.setAttribute('aria-hidden', 'true');
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('stroke-linecap', 'round');
+      p.setAttribute('stroke-linejoin', 'round');
+      p.setAttribute('d', 'M21 12a9 9 0 11-6.2-8.55');
+      s.appendChild(p);
+      submit.appendChild(s);
+    } else {
+      // icono login (mismo path que el componente)
+      const NS = 'http://www.w3.org/2000/svg';
+      const s = document.createElementNS(NS, 'svg');
+      s.setAttribute('class', 'w-4 h-4');
+      s.setAttribute('fill', 'none');
+      s.setAttribute('stroke', 'currentColor');
+      s.setAttribute('stroke-width', '1.8');
+      s.setAttribute('viewBox', '0 0 24 24');
+      s.setAttribute('aria-hidden', 'true');
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('stroke-linecap', 'round');
+      p.setAttribute('stroke-linejoin', 'round');
+      p.setAttribute('d', 'M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3');
+      s.appendChild(p);
+      submit.appendChild(s);
+    }
+    const text = h('span.tracking-\\[0\\.005em\\]', {}, b ? 'Verificando…' : 'Ingresar');
+    submit.appendChild(text);
+  }
+
+  function showError(message) {
+    errorBox.innerHTML = '';
+    errorBox.appendChild(Banner({ message, variant: 'error' }));
+    errorBox.classList.remove('hidden');
+  }
+  function hideError() {
+    errorBox.innerHTML = '';
+    errorBox.classList.add('hidden');
+  }
+  function showHint(message) {
+    hintBox.innerHTML = '';
+    hintBox.appendChild(Banner({ message, variant: 'warning' }));
+    hintBox.classList.remove('hidden');
+  }
+  function hideHint() {
+    hintBox.innerHTML = '';
+    hintBox.classList.add('hidden');
+  }
 
   return root;
 }

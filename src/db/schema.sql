@@ -99,3 +99,21 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read, created_at);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+  action_type     TEXT NOT NULL,                        -- 'ticket_created', 'ticket_assigned', 'status_changed', 'comment_added', 'attachment_added', 'user_created', 'user_modified', etc.
+  target_type     TEXT NOT NULL,                        -- 'ticket', 'user', 'category'
+  target_id       INTEGER,                              -- ID del recurso afectado (ticket_id, user_id, category_id)
+  target_code     TEXT,                                 -- código del ticket para referencia rápida
+  description     TEXT,                                 -- descripción legible: "Cambió estado a cerrado", "Asignó a Juan", etc.
+  old_value       TEXT,                                 -- valor anterior (JSON string si es complejo)
+  new_value       TEXT,                                 -- valor nuevo (JSON string si es complejo)
+  ip_address      TEXT,                                 -- IP del cliente (si se captura)
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action_type);
+CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);

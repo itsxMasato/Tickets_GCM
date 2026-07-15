@@ -1,7 +1,6 @@
 'use strict';
 const express = require('express');
 const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
 const cookieParser = require('cookie-parser');
 const path = require('path');
 
@@ -15,7 +14,6 @@ function createApp() {
   app.use(cookieParser());
 
   const sessionMiddleware = session({
-    store: new SQLiteStore({ db: 'sessions.db', dir: path.resolve(__dirname, '..', 'data') }),
     secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
@@ -27,6 +25,14 @@ function createApp() {
     },
   });
   app.use(sessionMiddleware);
+
+  // Evita caché agresiva de videos estáticos con el mismo nombre.
+  app.use('/videos', express.static(path.join(__dirname, '..', 'public', 'videos'), {
+    maxAge: 0,
+    setHeaders(res) {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    },
+  }));
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.get('/favicon.ico', (req, res) => {
@@ -40,11 +46,26 @@ function createApp() {
   app.use('/api/tickets', require('./routes/tickets.routes'));
   app.use('/api/notifications', require('./routes/notifications.routes'));
   app.use('/api/stats', require('./routes/stats.routes'));
+  app.use('/api/roles', require('./routes/roles.routes'));
+  app.use('/api/role-labels', require('./routes/role-labels.routes'));
 
   // 404 para API
   app.use('/api', (req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ruta no encontrada.' } });
   });
+
+  // Fallback SPA: cualquier ruta no-API y no-asset devuelve la app cliente
+  // (sirve `public/dist/index.html` si existe; si no, `public/index.html`).
+  // Evita el "fallo en blanco" en producción cuando se hace deep-link a una ruta interna.
+  const fs = require('fs');
+  const distIndex = path.join(__dirname, '..', 'public', 'dist', 'index.html');
+  const rootIndex = path.join(__dirname, '..', 'public', 'index.html');
+  const spaIndex = fs.existsSync(distIndex) ? distIndex : (fs.existsSync(rootIndex) ? rootIndex : null);
+  if (spaIndex) {
+    app.get(/^\/(?!api|socket\.io|uploads|img|css|js|assets|favicon\.ico).*/, (req, res) => {
+      res.sendFile(spaIndex);
+    });
+  }
 
   app.use(errorHandler);
 

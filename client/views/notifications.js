@@ -5,6 +5,7 @@ import { go } from '../router.js';
 import { setState, getState } from '../store.js';
 import { relativeFromNow, formatDateTime } from '../utils/format.js';
 import { ICON } from '../utils/icons.js';
+import { subscribeToRealtimeEvents } from '../utils/realtime.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 
 const TYPE_LABEL = {
@@ -66,6 +67,11 @@ export async function renderNotifications({ user }) {
     ]),
   ]));
 
+  // KPIs (rellenados tras la primera carga) y Lista — declarados antes
+  // de los filtros porque setActive() recarga y necesita acceder a ellos.
+  const kpis = h('div.grid.grid-cols-2.md\\:grid-cols-4.gap-3', {});
+  const list = h('div.flex.flex-col.gap-2', {});
+
   // Filtros
   const filterWrap = h('div.flex.items-center.gap-1.bg-white.border.border-surface-border.rounded-lg.p-1.shadow-soft.w-fit', {});
   const FILTERS = [
@@ -76,31 +82,30 @@ export async function renderNotifications({ user }) {
   function setActive(k) {
     active = k;
     [...filterWrap.children].forEach((c, i) => {
-      c.classList.toggle('bg-brand', FILTERS[i].key === k);
-      c.classList.toggle('text-white', FILTERS[i].key === k);
-      c.classList.toggle('text-brand-ink', FILTERS[i].key !== k);
+      const isActive = FILTERS[i].key === k;
+      c.classList.toggle('bg-brand', isActive);
+      c.classList.toggle('text-white', isActive);
+      c.classList.toggle('text-brand-ink', !isActive);
+      c.setAttribute('aria-pressed', String(isActive));
     });
     reload();
   }
   FILTERS.forEach((f) => {
-    const b = h('button.px-3.py-1\\.5.text-sm.rounded-md.font-medium', {
+    const b = h('button.px-3.py-1\\.5.text-sm.rounded-md.font-medium.focus\\:outline-none.focus\\:ring-2.focus\\:ring-brand-ocean\\/60.transition', {
       onclick: () => setActive(f.key),
+      'aria-pressed': 'false',
     }, f.label);
     filterWrap.appendChild(b);
   });
   setActive('all');
   root.appendChild(filterWrap);
 
-  // KPIs (rellenados tras la primera carga)
-  const kpis = h('div.grid.grid-cols-2.md\\:grid-cols-4.gap-3', {});
   root.appendChild(kpis);
-
-  // Lista
-  const list = h('div.flex.flex-col.gap-2', {});
   root.appendChild(list);
 
+
   async function reload() {
-    list.innerHTML = '<div class="card text-center text-sm text-slate-500 py-12">Cargando…</div>';
+    list.innerHTML = '<div class="card flex items-center justify-center gap-2 py-10 text-sm text-slate-600" role="status" aria-live="polite"><svg class="animate-spin w-4 h-4 text-brand-ocean" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg><span>Cargando notificaciones…</span></div>';
     try {
       const { notifications } = await api.notifications.list({
         limit: 100,
@@ -108,7 +113,7 @@ export async function renderNotifications({ user }) {
       });
       draw(notifications);
     } catch (e) {
-      list.innerHTML = `<div class="card text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
+      list.innerHTML = `<div class="card p-6 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
     }
   }
 
@@ -152,8 +157,9 @@ export async function renderNotifications({ user }) {
           // Columna izquierda: tipo + estado
           h('div.flex.flex-col.items-center.gap-1.w-20.flex-none', {}, [
             pillFor(n.type),
-            h('div.text-[10px].text-slate-400', { title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
-            n.read ? null : h('span.dot.bg-accent', { title: 'No leída' }),
+            // text-slate-500 — WCAG AA: timestamp relativo es body text.
+            h('div.text-[10px].text-slate-500', { title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
+            n.read ? null : h('span.dot.bg-accent', { title: 'No leída', 'aria-label': 'No leída' }),
           ]),
           // Cuerpo
           h('div.flex-1.min-w-0', {}, [
@@ -170,8 +176,12 @@ export async function renderNotifications({ user }) {
             : null,
         ],
       );
+      // Diferenciar leídas vs no-leídas: la marca ya no es una franja lateral
+      // (eso era el tell #1 de AI-generated UI y el DESIGN.md §6 lo prohíbe).
+      // No-leídas: bg-accent/5 (tinte de acento de fondo) + título en negrita.
+      // Leídas: opacity reducida.
       if (n.read) card.classList.add('opacity-60');
-      else card.classList.add('border-l-4', 'border-l-accent');
+      else card.classList.add('bg-accent/5', 'ring-1', 'ring-accent/20');
       list.appendChild(card);
     }
   }

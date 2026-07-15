@@ -1,20 +1,20 @@
 'use strict';
 const http = require('http');
 const config = require('./config');
+const firebaseAdmin = require('./firebaseAdmin');
 const createApp = require('./app');
 const sockets = require('./sockets');
-const migrate = require('./db/migrate');
 
 async function start() {
-  // 1) Migrar BD antes de levantar
-  try {
-    await migrate();
-  } catch (err) {
-    console.error('Error en la migración:', err);
+  firebaseAdmin.init();
+  if (!firebaseAdmin.isInitialized()) {
+    const initError = firebaseAdmin.getInitializationError();
+    console.error('[tickets-gcm] No se pudo inicializar Firebase Admin. Verifique las credenciales de entorno.');
+    if (initError) console.error('[tickets-gcm] firebaseAdmin init error:', initError.stack || initError.message);
     process.exit(1);
   }
 
-  // 2) Crear app
+  // 1) Crear app
   const { app, sessionMiddleware } = createApp();
   const httpServer = http.createServer(app);
 
