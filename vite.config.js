@@ -5,7 +5,7 @@ export default defineConfig({
   root: 'client',
   publicDir: resolve(__dirname, 'public'),
   build: {
-    outDir: resolve(__dirname, 'public/dist'),
+    outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true,
     rollupOptions: {
       input: resolve(__dirname, 'client/index.html'),
