@@ -21,20 +21,22 @@ export async function renderReports({ user }) {
   ]));
 
   // Filtros
-  const filters = { status: '', priority: '', area: '', date_from: '', date_to: '', search: '' };
+  const filters = { status: '', priority: '', area: '', assigned_to: '', date_from: '', date_to: '', search: '' };
   const filtersBar = h('div.card.flex.flex-wrap.items-end.gap-3', {});
   const search = h('input.input', { type: 'search', placeholder: 'Buscar…' });
   const statusSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los estados'), ...STATUS.map((s) => h('option', { value: s }, STATUS_LABEL[s]))]);
   const prioSel = h('select.input', {}, [h('option', { value: '' }, 'Todas las prioridades'), ...PRIORITIES.map((p) => h('option', { value: p }, PRIORITY_LABEL[p]))]);
   const areaSel = h('select.input', {}, [h('option', { value: '' }, 'Todas las áreas'), ...Object.entries(AREA_LABEL).map(([k, v]) => h('option', { value: k }, v))]);
+  const assignedSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los responsables')]);
   const from = h('input.input', { type: 'date' });
   const to = h('input.input', { type: 'date' });
-  const apply = h('button.btn.btn-primary', { onclick: () => render(1) }, 'Aplicar');
+  const apply = h('button.btn.btn-primary', { onclick: () => render() }, 'Aplicar');
 
   filtersBar.appendChild(h('div.flex-1.min-w-\\[200px\\]', {}, [h('label.label', {}, 'Búsqueda'), search]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Estado'), statusSel]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Prioridad'), prioSel]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Área'), areaSel]));
+  filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Responsable'), assignedSel]));
   filtersBar.appendChild(h('div.w-40', {}, [h('label.label', {}, 'Desde'), from]));
   filtersBar.appendChild(h('div.w-40', {}, [h('label.label', {}, 'Hasta'), to]));
   filtersBar.appendChild(apply);
@@ -59,10 +61,22 @@ export async function renderReports({ user }) {
 
   const spinnerSvg = '<svg class="animate-spin w-4 h-4 text-brand-ocean" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
 
+  async function populateAssignedUsers() {
+    try {
+      const users = await api.users.list({ active: true });
+      const options = (users.users || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map((u) => h('option', { value: u.id, selected: String(filters.assigned_to) === String(u.id) ? '' : null }, u.full_name || u.username));
+      assignedSel.innerHTML = '<option value="">Todos los responsables</option>';
+      options.forEach((opt) => assignedSel.appendChild(opt));
+    } catch {
+      assignedSel.innerHTML = '<option value="">Todos los responsables</option>';
+    }
+  }
+
   async function render() {
     filters.status = statusSel.value;
     filters.priority = prioSel.value;
     filters.area = areaSel.value;
+    filters.assigned_to = assignedSel.value;
     filters.search = search.value.trim();
     filters.date_from = from.value;
     filters.date_to = to.value;
@@ -157,6 +171,7 @@ export async function renderReports({ user }) {
     }
   }
 
+  await populateAssignedUsers();
   await render();
   return root;
 }

@@ -36,23 +36,24 @@ export async function renderCalendar({ user }) {
       const totalDays = Math.max(1, Math.round((end - start) / (24 * 60 * 60 * 1000)));
       const statusLabel = STATUS_LABEL[ticket.status] || ticket.status;
       const percent = Math.min(100, Math.round((STATUS.indexOf(ticket.status) + 1) / STATUS.length * 100));
-      return h('div.flex.items-center.gap-3.py-2.border-b.border-slate-100', {}, [
-        h('div.w-52', {}, [
-          h('div.font-medium.text-sm.text-slate-800', {}, ticket.title || ticket.code),
+      const barWidth = `${Math.max(18, percent)}%`;
+      return h('div.grid.grid-cols-[minmax(200px,220px)_1fr_70px] items-center gap-3.py-2.border-b.border-slate-100', {}, [
+        h('div.min-w-0', {}, [
+          h('div.font-medium.text-sm.text-slate-800.truncate', {}, ticket.title || ticket.code),
           h('div.text-xs.text-slate-500', {}, `${ticket.code} · ${AREA_LABEL[ticket.area] || '—'}`),
         ]),
-        h('div.flex-1', {}, [
+        h('div', {}, [
           h('div.text-[11px] text-slate-500.mb-1', {}, `${statusLabel} · ${PRIORITY_LABEL[ticket.priority] || ticket.priority}`),
           h('div.relative.h-3.w-full.rounded-full.bg-slate-200.overflow-hidden', {}, [
-            h('div.h-3.rounded-full.bg-brand-ocean.transition-all', { style: { width: `${percent}%` } }),
+            h('div.h-3.rounded-full.bg-brand-ocean.transition-all', { style: { width: barWidth } }),
           ]),
         ]),
-        h('div.text-xs.text-slate-500.w-24.text-right', {}, `${totalDays} d`),
+        h('div.text-xs.text-slate-500.text-right', {}, `${totalDays} d`),
       ]);
     });
 
     const wrap = h('div.flex.flex-col.gap-1', {});
-    wrap.appendChild(h('div.grid.grid-cols-[minmax(200px,220px)_1fr_60px] text-[11px] uppercase tracking-wide text-slate-500 px-2 pb-2', {}, [
+    wrap.appendChild(h('div.grid.grid-cols-[minmax(200px,220px)_1fr_70px] text-[11px] uppercase tracking-wide text-slate-500 px-2 pb-2', {}, [
       h('span', {}, 'Ticket'),
       h('span', {}, 'Progreso'),
       h('span.text-right', {}, 'Duración'),

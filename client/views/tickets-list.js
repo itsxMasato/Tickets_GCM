@@ -36,6 +36,8 @@ export async function renderTicketsList({ query, user }) {
     search: query.search || '',
     assigned_to: query.assigned_to || '',
     area: query.area || '',
+    date_from: query.date_from || '',
+    date_to: query.date_to || '',
     page: parseInt(query.page || '1', 10) || 1,
     limit: 20,
   };
@@ -54,12 +56,15 @@ export async function renderTicketsList({ query, user }) {
     h('option', { value: '' }, 'Todas las áreas'),
     ...Object.entries(AREA_LABEL).map(([k, v]) => h('option', { value: k, selected: filters.area === k ? '' : null }, v)),
   ]);
+  const assignedSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los responsables')]);
+  const fromInput = h('input.input', { type: 'date' });
+  const toInput = h('input.input', { type: 'date' });
   const applyBtn = h('button.btn.btn-primary', { onclick: () => apply(1) }, 'Filtrar');
-  const resetBtn = h('button.btn.btn-ghost', { onclick: () => { Object.assign(filters, { status: '', priority: '', search: '', area: '', assigned_to: '', page: 1 }); render(); } }, 'Limpiar');
+  const resetBtn = h('button.btn.btn-ghost', { onclick: () => { Object.assign(filters, { status: '', priority: '', search: '', area: '', assigned_to: '', date_from: '', date_to: '', page: 1 }); searchInput.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; fromInput.value=''; toInput.value=''; render(); } }, 'Limpiar');
 
   // Enter en cualquier input/select de filtro dispara apply(1) — sin esto
   // el usuario tiene que tabular hasta el botón "Filtrar" para confirmar.
-  for (const el of [searchInput, statusSel, prioSel, areaSel]) {
+  for (const el of [searchInput, statusSel, prioSel, areaSel, assignedSel, fromInput, toInput]) {
     el.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); apply(1); }
     });
@@ -84,7 +89,21 @@ export async function renderTicketsList({ query, user }) {
     filters.status = statusSel.value;
     filters.priority = prioSel.value;
     filters.area = areaSel.value;
+    filters.assigned_to = assignedSel.value;
+    filters.date_from = fromInput.value;
+    filters.date_to = toInput.value;
     render();
+  }
+
+  async function populateAssignedUsers() {
+    try {
+      const users = await api.users.list({ active: true });
+      const options = (users.users || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map((u) => h('option', { value: u.id, selected: String(filters.assigned_to) === String(u.id) ? '' : null }, u.full_name || u.username));
+      assignedSel.innerHTML = '<option value="">Todos los responsables</option>';
+      options.forEach((opt) => assignedSel.appendChild(opt));
+    } catch {
+      assignedSel.innerHTML = '<option value="">Todos los responsables</option>';
+    }
   }
 
   async function render() {
@@ -198,6 +217,7 @@ export async function renderTicketsList({ query, user }) {
     }
   }
 
+  await populateAssignedUsers();
   await render();
 
   // ── Tiempo real: refrescar la tabla cuando algo cambia ─────────────────────
