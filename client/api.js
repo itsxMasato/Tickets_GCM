@@ -1,5 +1,17 @@
 // Wrapper fetch con manejo de errores y JSON
-const BASE = '';
+function getApiBase() {
+  const raw = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL
+    ? import.meta.env.VITE_API_BASE_URL
+    : '';
+  return raw ? raw.replace(/\/$/, '') : '';
+}
+
+const BASE = getApiBase();
+
+function buildUrl(url) {
+  if (!BASE) return url;
+  return `${BASE}${url}`;
+}
 
 async function request(method, url, options = {}) {
   const opts = {
@@ -15,7 +27,7 @@ async function request(method, url, options = {}) {
   }
   if (options.headers) Object.assign(opts.headers, options.headers);
 
-  const res = await fetch(BASE + url, opts);
+  const res = await fetch(buildUrl(url), opts);
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
