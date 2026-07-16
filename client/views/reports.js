@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { exportToExcel, fetchAllForExport } from '../utils/exports.js';
 import { statusBadge, priorityBadge } from '../components/badge.js';
 import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, formatDateTime } from '../utils/format.js';
+import { setFilterInUrl, clearFiltersInUrl } from '../utils/url-filters.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { exportButton } from '../components/export-button.js';
 import { toast } from '../utils/toast.js';
@@ -10,7 +11,7 @@ import { toast } from '../utils/toast.js';
 const STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
 
-export async function renderReports({ user }) {
+export async function renderReports({ query, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
   root.appendChild(h('div.flex.items-center.justify-between.flex-wrap.gap-3', {}, [
@@ -21,25 +22,27 @@ export async function renderReports({ user }) {
   ]));
 
   // Filtros
-  const filters = { status: '', priority: '', area: '', assigned_to: '', date_from: '', date_to: '', search: '' };
+  const filters = { status: query?.status || '', priority: query?.priority || '', area: query?.area || '', assigned_to: query?.assigned_to || '', date_from: query?.date_from || '', date_to: query?.date_to || '', search: query?.search || '' };
   const filtersBar = h('div.card.flex.flex-wrap.items-end.gap-3', {});
   const search = h('input.input', { type: 'search', placeholder: 'Buscar…' });
   const statusSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los estados'), ...STATUS.map((s) => h('option', { value: s }, STATUS_LABEL[s]))]);
   const prioSel = h('select.input', {}, [h('option', { value: '' }, 'Todas las prioridades'), ...PRIORITIES.map((p) => h('option', { value: p }, PRIORITY_LABEL[p]))]);
   const areaSel = h('select.input', {}, [h('option', { value: '' }, 'Todas las áreas'), ...Object.entries(AREA_LABEL).map(([k, v]) => h('option', { value: k }, v))]);
   const assignedSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los responsables')]);
-  const from = h('input.input', { type: 'date' });
-  const to = h('input.input', { type: 'date' });
+  const from = h('input.input', { type: 'date', value: filters.date_from });
+  const to = h('input.input', { type: 'date', value: filters.date_to });
   const apply = h('button.btn.btn-primary', { onclick: () => render() }, 'Aplicar');
+  const clearBtn = h('button.btn.btn-ghost', { onclick: () => { clearFiltersInUrl(); Object.assign(filters, { status: '', priority: '', area: '', assigned_to: '', date_from: '', date_to: '', search: '' }); search.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; from.value=''; to.value=''; render(); } }, 'Limpiar');
 
   filtersBar.appendChild(h('div.flex-1.min-w-\\[200px\\]', {}, [h('label.label', {}, 'Búsqueda'), search]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Estado'), statusSel]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Prioridad'), prioSel]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Área'), areaSel]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Responsable'), assignedSel]));
+  filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Responsable'), assignedSel]));
   filtersBar.appendChild(h('div.w-40', {}, [h('label.label', {}, 'Desde'), from]));
   filtersBar.appendChild(h('div.w-40', {}, [h('label.label', {}, 'Hasta'), to]));
-  filtersBar.appendChild(apply);
+  filtersBar.appendChild(h('div.flex.gap-2', {}, [apply, clearBtn]));
   root.appendChild(filtersBar);
 
   // Botón de export
@@ -80,6 +83,16 @@ export async function renderReports({ user }) {
     filters.search = search.value.trim();
     filters.date_from = from.value;
     filters.date_to = to.value;
+    
+    // Guardar filtros en la URL
+    setFilterInUrl('search', filters.search);
+    setFilterInUrl('status', filters.status);
+    setFilterInUrl('priority', filters.priority);
+    setFilterInUrl('area', filters.area);
+    setFilterInUrl('assigned_to', filters.assigned_to);
+    setFilterInUrl('date_from', filters.date_from);
+    setFilterInUrl('date_to', filters.date_to);
+    
     tableWrap.innerHTML = `<div class="card flex items-center justify-center gap-2 py-10 text-sm text-slate-600" role="status" aria-live="polite">${spinnerSvg}<span>Cargando reportes…</span></div>`;
     charts.innerHTML = '';
     kpis.innerHTML = '';

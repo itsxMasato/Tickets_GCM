@@ -2,6 +2,7 @@ import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { statusBadge, priorityBadge } from '../components/badge.js';
 import { relativeFromNow, STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL } from '../utils/format.js';
+import { setFilterInUrl, clearFiltersInUrl } from '../utils/url-filters.js';
 import { go } from '../router.js';
 import { isSAC, isJefe, isAdmin, canViewAllTickets, canCreateTicket } from '../utils/permissions.js';
 import { exportToExcel, fetchAllForExport } from '../utils/exports.js';
@@ -57,10 +58,10 @@ export async function renderTicketsList({ query, user }) {
     ...Object.entries(AREA_LABEL).map(([k, v]) => h('option', { value: k, selected: filters.area === k ? '' : null }, v)),
   ]);
   const assignedSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los responsables')]);
-  const fromInput = h('input.input', { type: 'date' });
-  const toInput = h('input.input', { type: 'date' });
+  const fromInput = h('input.input', { type: 'date', value: filters.date_from });
+  const toInput = h('input.input', { type: 'date', value: filters.date_to });
   const applyBtn = h('button.btn.btn-primary', { onclick: () => apply(1) }, 'Filtrar');
-  const resetBtn = h('button.btn.btn-ghost', { onclick: () => { Object.assign(filters, { status: '', priority: '', search: '', area: '', assigned_to: '', date_from: '', date_to: '', page: 1 }); searchInput.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; fromInput.value=''; toInput.value=''; render(); } }, 'Limpiar');
+  const resetBtn = h('button.btn.btn-ghost', { onclick: () => { clearFiltersInUrl(); Object.assign(filters, { status: '', priority: '', search: '', area: '', assigned_to: '', date_from: '', date_to: '', page: 1 }); searchInput.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; fromInput.value=''; toInput.value=''; render(); } }, 'Limpiar');
 
   // Enter en cualquier input/select de filtro dispara apply(1) — sin esto
   // el usuario tiene que tabular hasta el botón "Filtrar" para confirmar.
@@ -74,6 +75,9 @@ export async function renderTicketsList({ query, user }) {
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Estado'), statusSel]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Prioridad'), prioSel]));
   filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Área'), areaSel]));
+  filtersBar.appendChild(h('div.w-44', {}, [h('label.label', {}, 'Responsable'), assignedSel]));
+  filtersBar.appendChild(h('div.w-40', {}, [h('label.label', {}, 'Desde'), fromInput]));
+  filtersBar.appendChild(h('div.w-40', {}, [h('label.label', {}, 'Hasta'), toInput]));
   filtersBar.appendChild(h('div.flex.gap-2', {}, [applyBtn, resetBtn]));
   root.appendChild(filtersBar);
 
@@ -92,6 +96,17 @@ export async function renderTicketsList({ query, user }) {
     filters.assigned_to = assignedSel.value;
     filters.date_from = fromInput.value;
     filters.date_to = toInput.value;
+    
+    // Guardar filtros en la URL para que sean compartibles
+    setFilterInUrl('search', filters.search);
+    setFilterInUrl('status', filters.status);
+    setFilterInUrl('priority', filters.priority);
+    setFilterInUrl('area', filters.area);
+    setFilterInUrl('assigned_to', filters.assigned_to);
+    setFilterInUrl('date_from', filters.date_from);
+    setFilterInUrl('date_to', filters.date_to);
+    setFilterInUrl('page', filters.page);
+    
     render();
   }
 
