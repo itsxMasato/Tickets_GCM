@@ -20,6 +20,7 @@ import { renderNotifications } from './views/notifications.js';
 import { renderReports } from './views/reports.js';
 import { renderAudit } from './views/audit.js';
 import { renderRoles } from './views/roles.js';
+import { renderCalendar } from './views/calendar.js';
 
 // Registro de rutas (devuelven un { view, cleanup } o un HTMLElement)
 const handlers = {
@@ -34,6 +35,7 @@ const handlers = {
   '/reports':       ({ params, query, user }) => ({ view: renderReports({ params, query, user }) }),
   '/audit':         ({ params, query, user }) => ({ view: renderAudit({ params, query, user }) }),
   '/roles':         ({ params, query, user }) => ({ view: renderRoles({ params, query, user }) }),
+  '/calendar':      ({ params, query, user }) => ({ view: renderCalendar({ params, query, user }) }),
 };
 
 const app = document.getElementById('app');

@@ -52,6 +52,7 @@ function navFor(user) {
         items: [
           { to: '/dashboard',     label: 'Inicio',        icon: ICON.dashboard, match: (p) => p === '/dashboard' || p === '/' },
           { to: '/tickets',       label: 'Mis tickets',   icon: ICON.ticket,    match: (p) => p.startsWith('/tickets') },
+          { to: '/calendar',      label: 'Calendario',    icon: ICON.calendar,  match: (p) => p === '/calendar' },
         ],
       },
       {
@@ -71,6 +72,7 @@ function navFor(user) {
         items: [
           { to: '/dashboard',     label: 'Inicio',       icon: ICON.dashboard, match: (p) => p === '/dashboard' || p === '/' },
           { to: '/tickets',       label: 'Mi área',      icon: ICON.ticket,    match: (p) => p.startsWith('/tickets') },
+          { to: '/calendar',      label: 'Calendario',   icon: ICON.calendar,  match: (p) => p === '/calendar' },
         ],
       },
       {
@@ -91,6 +93,7 @@ function navFor(user) {
           { to: '/dashboard',     label: 'Inicio',          icon: ICON.dashboard, match: (p) => p === '/dashboard' || p === '/' },
           { to: '/tickets',       label: 'Tickets del área', icon: ICON.ticket,   match: (p) => p.startsWith('/tickets') },
           { to: '/reports',       label: 'Reportes',         icon: ICON.report,   match: (p) => p === '/reports' },
+          { to: '/calendar',      label: 'Calendario',       icon: ICON.calendar, match: (p) => p === '/calendar' },
         ],
       },
       {
@@ -110,6 +113,7 @@ function navFor(user) {
         items: [
           { to: '/dashboard',     label: 'Inicio',         icon: ICON.dashboard, match: (p) => p === '/dashboard' || p === '/' },
           { to: '/tickets',       label: 'Todos los tickets', icon: ICON.ticket, match: (p) => p.startsWith('/tickets') },
+          { to: '/calendar',      label: 'Calendario',     icon: ICON.calendar, match: (p) => p === '/calendar' },
         ],
       },
       {
