@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL } from '../utils/format.js';
 import { go } from '../router.js';
 import { setFilterInUrl, clearFiltersInUrl } from '../utils/url-filters.js';
+import { instantSearchInput } from '../components/instant-search.js';
 
 const STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 
@@ -17,7 +18,7 @@ export async function renderCalendar({ query, user }) {
   root.appendChild(header);
 
   // Filtros
-  const filters = { status: query?.status || '', priority: query?.priority || '', area: query?.area || '', assigned_to: query?.assigned_to || '', date_from: query?.date_from || '', date_to: query?.date_to || '' };
+  const filters = { status: query?.status || '', priority: query?.priority || '', area: query?.area || '', assigned_to: query?.assigned_to || '', date_from: query?.date_from || '', date_to: query?.date_to || '', search: query?.search || '' };
   const filtersBar = h('div.card.flex.flex-wrap.items-end.gap-3', {});
   const statusSel = h('select.input', {}, [
     h('option', { value: '' }, 'Todos los estados'),

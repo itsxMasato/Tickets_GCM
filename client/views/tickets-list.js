@@ -9,6 +9,7 @@ import { exportToExcel, fetchAllForExport } from '../utils/exports.js';
 import { toast } from '../utils/toast.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { exportButton } from '../components/export-button.js';
+import { filterBadge, countActiveFilters } from '../components/filter-badge.js';
 
 const STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
