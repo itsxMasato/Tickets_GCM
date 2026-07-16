@@ -10,6 +10,7 @@ import { toast } from '../utils/toast.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { exportButton } from '../components/export-button.js';
 import { filterBadge, countActiveFilters } from '../components/filter-badge.js';
+import { activeFiltersChips } from '../components/active-filters-chips.js';
 
 const STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
@@ -81,6 +82,10 @@ export async function renderTicketsList({ query, user }) {
   filtersBar.appendChild(h('div.w-40', {}, [h('label.label', {}, 'Hasta'), toInput]));
   filtersBar.appendChild(h('div.flex.gap-2', {}, [applyBtn, resetBtn]));
   root.appendChild(filtersBar);
+
+  // Mostrar filtros activos como chips
+  const filtersChipsWrap = h('div.flex.gap-2.items-center.flex-wrap', {});
+  root.appendChild(filtersChipsWrap);
 
   // Tabla + paginación
   const tableWrap = h('div.table-wrap', {});
@@ -211,6 +216,26 @@ export async function renderTicketsList({ query, user }) {
     `;
     pagWrap.querySelector('#prev')?.addEventListener('click', () => apply(page - 1));
     pagWrap.querySelector('#next')?.addEventListener('click', () => apply(page + 1));
+    
+    // Actualizar chips de filtros activos
+    filtersChipsWrap.innerHTML = '';
+    const chips = activeFiltersChips(filters, (filterKey) => {
+      // Limpiar filtro individual
+      filters[filterKey] = '';
+      const inputMap = {
+        'search': searchInput,
+        'status': statusSel,
+        'priority': prioSel,
+        'area': areaSel,
+        'assigned_to': assignedSel,
+        'date_from': fromInput,
+        'date_to': toInput,
+      };
+      if (inputMap[filterKey]) inputMap[filterKey].value = '';
+      setFilterInUrl(filterKey, '');
+      apply(1);
+    });
+    if (chips) filtersChipsWrap.appendChild(chips);
   }
 
   async function doExport() {
