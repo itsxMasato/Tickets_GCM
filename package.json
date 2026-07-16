@@ -16,8 +16,8 @@
     "build": "pnpm build:css && pnpm build:client",
     "start": "node src/server.js",
     "db:migrate": "node src/db/migrate.js",
-    "orm:smoke": "node scripts/orm-smoke.js"
-    ,"firebase-seed": "node scripts/firebase-seed.js"
+    "orm:smoke": "node scripts/orm-smoke.js",
+    "firebase-seed": "node scripts/firebase-seed.js"
   },
   "keywords": [
     "tickets",
@@ -46,6 +46,7 @@
     "uuid": "^14.0.0"
   },
   "devDependencies": {
+    "@netlify/functions": "^5.3.0",
     "concurrently": "^10.0.3",
     "nodemon": "^3.1.14",
     "tailwindcss": "^3.4.0",
