@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h } from './dom.js';
 
 const TOAST_ROOT = () => document.getElementById('toast-root');

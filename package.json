@@ -17,7 +17,9 @@
     "start": "node src/server.js",
     "db:migrate": "node src/db/migrate.js",
     "orm:smoke": "node scripts/orm-smoke.js",
-    "firebase-seed": "node scripts/firebase-seed.js"
+    "smoke:multitenant": "node scripts/smoke-multitenant.js",
+    "firebase-seed": "node scripts/firebase-seed.js",
+    "camaronera:seed": "node scripts/seed-camaronera-data.js"
   },
   "keywords": [
     "tickets",

@@ -1,4 +1,5 @@
-﻿'use strict';
+﻿/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+'use strict';
 const { getRepository } = require('../orm/repositories/repository-factory');
 const AuditLog = require('../orm/entities/audit-log.entity');
 const User = require('../orm/entities/user.entity');

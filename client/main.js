@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import './styles.css';
 import { go } from './router.js';
 import { setState, getState } from './store.js';
@@ -82,14 +83,18 @@ function mount(node) {
 async function onLogin(user) {
   setState({ user });
   go('/dashboard');
-  try {
-    // Cargar labels de roles antes del primer render del sidebar/topbar
-    // (que los muestran). Si falla, la app sigue con defaults locales.
-    await initRoleLabels();
-    await connectSocket();
-    wireRealtime();
-    await refreshBell();
-  } catch {}
+  void (async () => {
+    try {
+      await initRoleLabels();
+    } catch {}
+    try {
+      await connectSocket();
+      wireRealtime();
+    } catch {}
+    try {
+      await refreshBell();
+    } catch {}
+  })();
 }
 
 async function onLogout() {
@@ -100,8 +105,12 @@ async function onLogout() {
 
 async function refreshBell() {
   try {
-    const { count } = await api.notifications.unreadCount();
-    const { notifications } = await api.notifications.list({ limit: 15 });
+    const [unreadRes, listRes] = await Promise.allSettled([
+      api.notifications.unreadCount(),
+      api.notifications.list({ limit: 15 }),
+    ]);
+    const count = unreadRes.status === 'fulfilled' ? (unreadRes.value?.count ?? 0) : 0;
+    const notifications = listRes.status === 'fulfilled' ? (listRes.value?.notifications ?? []) : [];
     setState({ unreadCount: count, notifications });
   } catch {}
 }
@@ -259,11 +268,9 @@ function onHashChange() {
 }
 
 async function bootstrap() {
-  try {
-    await initializeFirebase();
-  } catch (error) {
+  void initializeFirebase().catch((error) => {
     console.warn('[firebase] No se pudo inicializar Firestore:', error);
-  }
+  });
 
   // Rehidratar sesión
   try {
@@ -278,12 +285,18 @@ async function bootstrap() {
   window.addEventListener('hashchange', onHashChange);
 
   if (getState().user) {
-    try {
-      await initRoleLabels();
-      await connectSocket();
-      wireRealtime();
-      await refreshBell();
-    } catch (e) { console.warn('socket:', e); }
+    void (async () => {
+      try {
+        await initRoleLabels();
+      } catch {}
+      try {
+        await connectSocket();
+        wireRealtime();
+      } catch {}
+      try {
+        await refreshBell();
+      } catch {}
+    })();
   }
 }
 

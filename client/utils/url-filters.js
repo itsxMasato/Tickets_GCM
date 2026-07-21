@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 /**
  * Utilidades para sincronizar filtros con la URL (query string).
  * Permite que los filtros sean persistentes y compartibles.

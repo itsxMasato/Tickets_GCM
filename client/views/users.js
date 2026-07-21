@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { go } from '../router.js';
@@ -183,7 +184,7 @@ function openEditModal(u, onSaved, currentUser) {
     area,
   ]);
   const passwordField = h('div', {}, [
-    h('label.label', {}, isEdit ? 'Nueva contraseña (opcional)' : 'Contraseña *'),
+    h('label.label', {}, isEdit ? 'Nueva contraseña — opcional' : 'Contraseña *'),
     password,
     h('p.text-xs.text-slate-500.mt-1', {}, isEdit
       ? 'Déjala en blanco para mantener la contraseña actual.'

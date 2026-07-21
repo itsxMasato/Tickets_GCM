@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -38,3 +39,4 @@
   .prio-alta     { @apply badge bg-amber-100 text-amber-800; }
   .prio-urgente  { @apply badge bg-red-100 text-red-800; }
 }
+

@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Componentes del módulo Login (scope aislado).
 // Solo este archivo y client/views/login.js los consumen.
 // No exportar desde aquí hacia otros módulos.

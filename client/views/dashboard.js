@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h } from '../utils/dom.js';
 import { api } from '../api.js';
 import { ticketCard } from '../components/ticket-card.js';
@@ -58,7 +59,7 @@ function buildKpis(rol, totals) {
       return [
         { label: 'Mis tickets',     value: t.total ?? 0, hint: 'Reportados por ti' },
         { label: 'Abiertos',        value: t.open ?? 0, hint: 'En curso', tone: 'ocean' },
-        { label: 'Cerrados (mes)',  value: t.closed_month ?? 0, hint: 'Resueltos este mes' },
+        { label: 'Cerrados este mes',  value: t.closed_month ?? 0, hint: 'Resueltos este mes' },
         { label: 'Tasa de cierre',  value: t.closure_rate != null ? `${t.closure_rate}%` : '—', hint: 'Sobre el total reportado' },
       ];
   }
@@ -566,7 +567,7 @@ async function sacDashboard(data) {
     h('div.card.lg\\:col-span-2', {}, [
       h('div.dash-section-head', {}, [
         h('div', {}, [
-          h('div.dash-section-title', {}, 'Tickets creados (últimos 30 días)'),
+          h('div.dash-section-title', {}, 'Tickets creados en los últimos 30 días'),
           h('div.dash-section-sub', {}, 'Volumen diario y promedio del período'),
         ]),
         h('span.dash-section-sub', {}, `${t.total ?? 0} en el mes`),

@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 ﻿'use strict';
 const firestoreData = require('../firestoreData');
 const auditService = require('./audit.service');
@@ -19,7 +20,7 @@ const TRANSITIONS = {
 
 function canView(ticket, user) {
   if (user.role === 'sac') return true;
-  if (user.role === 'jefe_inmediato') return ticket.area === user.area;
+  if (user.role === 'jefe_inmediato') return ticket.status === 'solucionado';
   if (user.role === 'admin_area') {
     if (ticket.assigned_to && ticket.assigned_to === user.id) return true;
     if (ticket.created_by && ticket.created_by === user.id) return true;

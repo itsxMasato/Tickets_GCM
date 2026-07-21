@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h } from '../utils/dom.js';
 
 // Iconos SVG por tipo de empty-state (24x24, currentColor, stroke 1.8) — sin emojis.

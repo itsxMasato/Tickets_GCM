@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Comparación de ids tolerante a Number/String.
 // Los ids que llegan del backend (ticket.assigned_to, ticket.created_by,
 // c.user_id, etc.) salen como Number porque el server normaliza con toId().

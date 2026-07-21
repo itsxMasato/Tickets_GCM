@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Plan — Ticket detail (campos completos) + Diagnóstico campanita
 
 ## Contexto

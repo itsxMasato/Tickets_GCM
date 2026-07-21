@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -107,6 +108,285 @@
   .table tbody td { @apply px-4 py-3 border-b border-surface-border/60 align-top; }
   .table tbody tr:hover { @apply bg-surface/60; }
   .table tbody tr:last-child td { @apply border-b-0; }
+
+  /* === Gantt semanal === */
+  .gantt-board-shell {
+    border: 1px solid #e2e8f0;
+    border-radius: 1.5rem;
+    overflow: hidden;
+    background: #f8fafc;
+    min-width: 0;
+  }
+  .gantt-board-header {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .gantt-board-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .gantt-board-title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .gantt-board-title h2 {
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .gantt-board-title p {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.95rem;
+  }
+  .gantt-board-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .gantt-board-range {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    color: #475569;
+    font-size: 0.95rem;
+  }
+  .gantt-board-range span {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.45rem 0.75rem;
+    border-radius: 9999px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+  }
+  .gantt-board-legend {
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 0.88rem;
+    color: #64748b;
+  }
+  .gantt-board-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+  }
+  .gantt-board-legend-bullet {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 9999px;
+  }
+  .gantt-board-grid {
+    display: grid;
+    grid-template-columns: 100px repeat(7, minmax(0, 1fr));
+    gap: 0;
+    background: white;
+    min-width: 100%;
+  }
+  .gantt-board-time-head,
+  .gantt-board-time-label {
+    padding: 1rem 1rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #334155;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    background: #f8fafc;
+    min-height: 5rem;
+    display: flex;
+    align-items: center;
+  }
+  .gantt-board-column-head {
+    padding: 1rem 1rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #334155;
+    text-align: center;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    background: #f8fafc;
+    min-height: 5rem;
+  }
+  .gantt-board-column-head:last-child {
+    border-right: 0;
+  }
+  .gantt-board-row {
+    display: contents;
+  }
+  .gantt-board-row-label {
+    padding: 1rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 96px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .gantt-board-cell {
+    padding: 0.75rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    background: #ffffff;
+    position: relative;
+  }
+  .gantt-board-cell:last-child {
+    border-right: 0;
+  }
+  .gantt-hour-cell {
+    min-height: 96px;
+  }
+  .gantt-day-stamp {
+    font-size: 0.75rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .gantt-hour-cell-label {
+    font-size: 0.7rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .gantt-task-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.85rem 0.95rem;
+    border-radius: 1rem;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    cursor: pointer;
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+  .gantt-day-stamp {
+    font-size: 0.75rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .gantt-task-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.85rem 0.95rem;
+    border-radius: 1rem;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    cursor: pointer;
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+  .gantt-task-bar:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+  }
+  .gantt-task-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .gantt-task-title {
+    font-size: 0.95rem;
+    color: #0f172a;
+    font-weight: 700;
+  }
+  .gantt-task-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .gantt-task-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem 0.7rem;
+    border-radius: 9999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .gantt-task-chip.status {
+    background: rgba(15, 56, 99, 0.08);
+    color: #0f172a;
+  }
+  .gantt-color-picker {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .gantt-color-swatch {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    cursor: pointer;
+  }
+  .gantt-task-actions {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .gantt-task-actions button {
+    border-radius: 9999px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(255,255,255,0.95);
+    color: #334155;
+    font-size: 0.72rem;
+    padding: 0.3rem 0.6rem;
+  }
+  .gantt-empty-cell {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 0.85rem;
+  }
+  .gantt-fab {
+    position: sticky;
+    bottom: 1.25rem;
+    margin-left: auto;
+    align-self: flex-end;
+    display: inline-flex;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 9999px;
+    background-color: var(--color-brand-ocean);
+    color: white;
+    border: none;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 18px 40px rgba(22, 172, 228, 0.18);
+    cursor: pointer;
+    transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+  .gantt-fab:hover {
+    transform: translateY(-2px);
+    background-color: rgb(14, 117, 175);
+  }
 
   /* === Sidebar corporativo (Navy) ===
      Comportamiento: el sidebar SIEMPRE empuja al main (push layout).
@@ -805,3 +1085,4 @@
   .dash-quick-title { @apply text-sm font-medium text-brand-ink leading-snug; }
   .dash-quick-sub   { @apply text-xs text-slate-500 mt-0.5; }
 }
+

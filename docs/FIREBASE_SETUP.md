@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 Guía rápida de configuración de Firebase Admin
 
 1) Generar un Service Account JSON desde la consola de Firebase / GCP.

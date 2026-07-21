@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 const { getRepository } = require('../orm/repositories/repository-factory');
 const Ticket = require('../orm/entities/ticket.entity');

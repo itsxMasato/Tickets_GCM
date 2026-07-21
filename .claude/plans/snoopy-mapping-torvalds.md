@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Plan: bug "No tiene permisos" al abrir ticket asignado a admin_area
 
 ## Context

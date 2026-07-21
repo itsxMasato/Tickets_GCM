@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Wrapper fetch con manejo de errores y JSON
 function getApiBase() {
   const raw = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL
@@ -91,5 +92,12 @@ export const api = {
       list: () => request('GET', '/api/role-labels'),
       update: (role, label) => request('PATCH', `/api/role-labels/${role}`, { body: { label } }),
     },
+  },
+  calendar: {
+    list:           (q = {}) => request('GET',    '/api/calendar/events?' + new URLSearchParams(q)),
+    schedulableTickets: (q = {}) => request('GET', '/api/calendar/events/schedulable-tickets?' + new URLSearchParams(q)),
+    create:         (body)   => request('POST',   '/api/calendar/events', { body }),
+    update:         (id, body) => request('PATCH', `/api/calendar/events/${id}`, { body }),
+    remove:         (id)     => request('DELETE', `/api/calendar/events/${id}`),
   },
 };

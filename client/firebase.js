@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { collection, doc, serverTimestamp, setDoc, getFirestore } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';

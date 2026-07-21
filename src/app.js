@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 const express = require('express');
 const session = require('express-session');
@@ -48,6 +49,14 @@ function createApp() {
   app.use('/api/stats', require('./routes/stats.routes'));
   app.use('/api/roles', require('./routes/roles.routes'));
   app.use('/api/role-labels', require('./routes/role-labels.routes'));
+  app.use('/api/calendar', require('./routes/calendar.routes'));
+
+  // Fase 2 — multi-tenant
+  app.use('/api/companies',       require('./routes/companies.routes'));
+  app.use('/api/company-areas',   require('./routes/company-areas.routes'));
+  const membershipsRoutes = require('./routes/memberships.routes');
+  app.use('/api/users',      membershipsRoutes.userMemberships);
+  app.use('/api/companies',  membershipsRoutes.companyMemberships);
 
   // 404 para API
   app.use('/api', (req, res) => {

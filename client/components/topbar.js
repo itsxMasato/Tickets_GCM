@@ -1,6 +1,7 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { go } from '../router.js';
-import { subscribe, getState } from '../store.js';
+import { subscribe, getState, setState } from '../store.js';
 import { ROLE_LABEL, AREA_LABEL, relativeFromNow, formatDateTime } from '../utils/format.js';
 import { ICON } from '../utils/icons.js';
 import { api } from '../api.js';
@@ -94,7 +95,7 @@ function quickActions(user) {
 function renderSearch() {
   const input = h('input.flex-1.bg-transparent.border-0.outline-none.text-sm.placeholder\\:text-slate-500', {
     type: 'search',
-    placeholder: 'Buscar tickets, usuarios… (presiona "/")',
+    placeholder: 'Buscar tickets, usuarios… presiona "/"',
     'aria-label': 'Buscar',
   });
   const wrap = h('div.topbar-search', {}, [
@@ -201,7 +202,7 @@ function renderBell() {
   // ── Trigger (botón campana) ─────────────────────────────────────────────
   const trigger = h('button.topbar-icon-btn.relative', {
     onclick: (e) => { e.stopPropagation(); toggleDropdown(); },
-    'aria-label': hasUnread ? `Notificaciones (${unreadCount} sin leer)` : 'Notificaciones',
+    'aria-label': hasUnread ? `Notificaciones — ${unreadCount} sin leer` : 'Notificaciones',
     'aria-haspopup': 'menu',
     'aria-expanded': 'false',
     title: 'Notificaciones',
@@ -239,8 +240,6 @@ function renderBell() {
     // el usuario tiene el panel abierto. Al cerrar, se aborta.
     realtimeAc = subscribeToRealtimeEvents(['notification:new'], () => {
       loadList();
-      // El badge de la campana ya se actualiza por el store; aquí sólo
-      // refrescamos el contenido del panel.
     });
   }
   function closeDropdown() {

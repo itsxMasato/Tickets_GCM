@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Component Library — GCM Tickets
 
 > Catálogo de componentes. Cada componente documenta: propósito, anatomía del DOM, props, variantes, estados, ejemplos de uso, código del codebase, accesibilidad.

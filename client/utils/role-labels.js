@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Cache en memoria de los labels editables de los roles (rol → etiqueta
 // visible). Una sola fuente de verdad: el backend (Firestore) cargado en
 // init() tras el login. Si el cache está vacío, se cae al default local

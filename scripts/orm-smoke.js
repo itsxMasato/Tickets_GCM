@@ -1,13 +1,14 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 
 /**
  * scripts/orm-smoke.js
  *
  * Verifica la conexión TypeORM contra SQL Server y reporta el conteo de filas
- * de cada una de las 8 entidades.
+ * de cada una de las 13 entidades.
  *
  * Comportamiento:
- *   - Si SQL Server está alcanzable: imprime la tabla con las 8 cuentas y
+ *   - Si SQL Server está alcanzable: imprime la tabla con las 13 cuentas y
  *     sale con exit 0.
  *   - Si NO está alcanzable: imprime un mensaje claro y sale con exit 1.
  *   - Si ORM_SYNCHRONIZE=true y el server está vacío, intenta crear las
@@ -26,14 +27,20 @@ try { require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const orm = require('../src/orm');
 
 const ENTITIES = [
-  ['users',              orm.User],
-  ['categories',         orm.Category],
-  ['tickets',            orm.Ticket],
-  ['ticket_assignments', orm.TicketAssignment],
-  ['ticket_comments',    orm.TicketComment],
-  ['attachments',        orm.Attachment],
-  ['notifications',      orm.Notification],
-  ['audit_log',          orm.AuditLog],
+  ['users',                    orm.User],
+  ['categories',               orm.Category],
+  ['tickets',                  orm.Ticket],
+  ['ticket_assignments',       orm.TicketAssignment],
+  ['ticket_comments',          orm.TicketComment],
+  ['attachments',              orm.Attachment],
+  ['notifications',            orm.Notification],
+  ['audit_log',                orm.AuditLog],
+  ['calendar_events',          orm.CalendarEvent],
+  // Multi-tenant (Fase 1)
+  ['companies',                orm.Company],
+  ['company_areas',            orm.CompanyArea],
+  ['user_company_memberships', orm.UserCompanyMembership],
+  ['role_permissions',         orm.RolePermission],
 ];
 
 async function main() {
@@ -48,7 +55,7 @@ async function main() {
   }
 
   for (const [label, Entity] of ENTITIES) {
-    const repo = ds.getRepository(Entity);
+    const repo = await orm.getRepository(Entity);
     const count = await repo.count();
     process.stdout.write(`  ${label.padEnd(20)} ${count}\n`);
   }

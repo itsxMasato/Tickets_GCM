@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { attachmentThumb } from './attachments.js';
 import { relativeFromNow, formatDateTime, ROLE_LABEL } from '../utils/format.js';

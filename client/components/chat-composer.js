@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
@@ -20,7 +21,7 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
   const textarea = h('textarea.w-full.resize-none.px-3.py-2.rounded-md.focus\\:outline-none.text-sm.bg-transparent', {
     rows: '2',
     maxlength: '4000',
-    placeholder: 'Escribe un mensaje… (Enter para enviar, Shift+Enter para nueva línea)',
+    placeholder: 'Escribe un mensaje… Presiona Enter para enviar y Shift+Enter para nueva línea',
     'aria-label': 'Mensaje',
     onkeydown: (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {

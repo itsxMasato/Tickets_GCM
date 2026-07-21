@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 const express = require('express');
 const router = express.Router();
@@ -5,8 +6,9 @@ const authService = require('../services/auth.service');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 
-// Solo SAC puede gestionar usuarios
-router.get('/', requireAuth, requireRole('sac'), async (req, res, next) => {
+// Cualquier usuario autenticado puede obtener listados de usuarios activos
+// para filtros y selección de responsables en el frontend.
+router.get('/', requireAuth, async (req, res, next) => {
   try {
     const { role, active, area } = req.query;
     const list = await authService.listUsers({

@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Ticket Detail — Overrides
 
 Reglas que sobrescriben al Master SOLO para la vista de detalle de un ticket.

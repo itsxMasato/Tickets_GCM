@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 /**
  * Estilos CSS para hacer que un elemento sea "sticky" cuando se desplaza.
  * Se aplica a la barra de filtros en vistas de lista.

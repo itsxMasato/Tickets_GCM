@@ -1,6 +1,6 @@
-/*
-! tailwindcss v3.4.0 | MIT License | https://tailwindcss.com
-*/
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+
+/* ! tailwindcss v3.4.0 | MIT License | https://tailwindcss.com */
 
 /*
 1. Prevent padding and border from affecting element width. (https://github.com/mozdevs/cssremedy/issues/4)
@@ -1053,6 +1053,115 @@ a:hover {
 
 .table tbody tr:last-child td {
   border-bottom-width: 0px;
+}
+
+/* === Gantt semanal === */
+
+.gantt-shell {
+  border: 1px solid #dce4ee;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+.gantt-header {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+  color: white;
+}
+
+.gantt-header-cell {
+  padding: 0.85rem 0.65rem;
+  border-right: 1px solid rgba(255,255,255,0.12);
+  text-align: center;
+}
+
+.gantt-header-cell:last-child {
+  border-right: 0;
+}
+
+.gantt-body-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-height: 120px;
+  border-top: 1px solid #e7edf5;
+  background: white;
+}
+
+.gantt-day-cell {
+  position: relative;
+  padding: 0.7rem 0.75rem;
+  border-right: 1px solid #e7edf5;
+  min-height: 120px;
+  background: linear-gradient(180deg, rgba(248,250,252,0.95) 0%, rgba(255,255,255,0.98) 100%);
+}
+
+.gantt-day-cell:last-child {
+  border-right: 0;
+}
+
+.gantt-day-cell.gantt-day-over,
+  .gantt-day-over {
+  background: rgba(22, 172, 228, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(22, 172, 228, 0.22);
+}
+
+.gantt-day-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  padding: 0.25rem 0.4rem;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.gantt-task-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 0.9rem;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.07);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.gantt-task-bar:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.10);
+}
+
+.gantt-fab {
+  position: sticky;
+  bottom: 1.25rem;
+  margin-left: auto;
+  align-self: flex-end;
+  display: inline-flex;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background-color: var(--color-brand-ocean);
+  color: white;
+  border: none;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 18px 40px rgba(22, 172, 228, 0.18);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.gantt-fab:hover {
+  transform: translateY(-2px);
+  background-color: rgb(14, 117, 175);
 }
 
 /* === Sidebar corporativo (Navy) ===
@@ -3117,6 +3226,10 @@ a:hover {
   margin-left: 0px;
 }
 
+.ml-1 {
+  margin-left: 0.25rem;
+}
+
 .ml-auto {
   margin-left: auto;
 }
@@ -3147,10 +3260,6 @@ a:hover {
 
 .mt-4 {
   margin-top: 1rem;
-}
-
-.ml-1 {
-  margin-left: 0.25rem;
 }
 
 .line-clamp-1 {
@@ -3255,12 +3364,20 @@ a:hover {
   height: 100%;
 }
 
+.max-h-80 {
+  max-height: 20rem;
+}
+
 .max-h-96 {
   max-height: 24rem;
 }
 
 .max-h-\[90vh\] {
   max-height: 90vh;
+}
+
+.min-h-0 {
+  min-height: 0px;
 }
 
 .min-h-\[44px\] {
@@ -3281,6 +3398,10 @@ a:hover {
 
 .w-16 {
   width: 4rem;
+}
+
+.w-2 {
+  width: 0.5rem;
 }
 
 .w-20 {
@@ -3352,14 +3473,6 @@ a:hover {
   width: 1px;
 }
 
-.w-24 {
-  width: 6rem;
-}
-
-.w-52 {
-  width: 13rem;
-}
-
 .min-w-0 {
   min-width: 0px;
 }
@@ -3406,6 +3519,10 @@ a:hover {
 
 .flex-none {
   flex: none;
+}
+
+.flex-shrink-0 {
+  flex-shrink: 0;
 }
 
 .origin-top-right {
@@ -3475,14 +3592,6 @@ a:hover {
 
 .grid-cols-\[1fr_360px\] {
   grid-template-columns: 1fr 360px;
-}
-
-.grid-cols-\[minmax\(200px\2c 220px\)_1fr_60px\] {
-  grid-template-columns: minmax(200px,220px) 1fr 60px;
-}
-
-.grid-cols-\[minmax\(200px\2c 220px\)_1fr_70px\] {
-  grid-template-columns: minmax(200px,220px) 1fr 70px;
 }
 
 .flex-row-reverse {
@@ -3679,14 +3788,43 @@ a:hover {
   border-color: rgb(252 211 77 / var(--tw-border-opacity));
 }
 
+.border-blue-200 {
+  --tw-border-opacity: 1;
+  border-color: rgb(191 219 254 / var(--tw-border-opacity));
+}
+
+.border-blue-300 {
+  --tw-border-opacity: 1;
+  border-color: rgb(147 197 253 / var(--tw-border-opacity));
+}
+
 .border-brand-ocean {
   --tw-border-opacity: 1;
   border-color: rgb(22 172 228 / var(--tw-border-opacity));
 }
 
+.border-brand-ocean\/20 {
+  border-color: rgb(22 172 228 / 0.2);
+}
+
+.border-emerald-200 {
+  --tw-border-opacity: 1;
+  border-color: rgb(167 243 208 / var(--tw-border-opacity));
+}
+
+.border-green-200 {
+  --tw-border-opacity: 1;
+  border-color: rgb(187 247 208 / var(--tw-border-opacity));
+}
+
 .border-red-200 {
   --tw-border-opacity: 1;
   border-color: rgb(254 202 202 / var(--tw-border-opacity));
+}
+
+.border-rose-200 {
+  --tw-border-opacity: 1;
+  border-color: rgb(254 205 211 / var(--tw-border-opacity));
 }
 
 .border-slate-100 {
@@ -3713,19 +3851,9 @@ a:hover {
   border-color: transparent;
 }
 
-.border-blue-200 {
+.border-violet-200 {
   --tw-border-opacity: 1;
-  border-color: rgb(191 219 254 / var(--tw-border-opacity));
-}
-
-.border-blue-300 {
-  --tw-border-opacity: 1;
-  border-color: rgb(147 197 253 / var(--tw-border-opacity));
-}
-
-.border-green-200 {
-  --tw-border-opacity: 1;
-  border-color: rgb(187 247 208 / var(--tw-border-opacity));
+  border-color: rgb(221 214 254 / var(--tw-border-opacity));
 }
 
 .border-yellow-200 {
@@ -3762,6 +3890,11 @@ a:hover {
   background-color: rgb(219 234 254 / var(--tw-bg-opacity));
 }
 
+.bg-blue-50 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(239 246 255 / var(--tw-bg-opacity));
+}
+
 .bg-blue-500 {
   --tw-bg-opacity: 1;
   background-color: rgb(59 130 246 / var(--tw-bg-opacity));
@@ -3779,6 +3912,10 @@ a:hover {
 
 .bg-brand-ocean\/10 {
   background-color: rgb(22 172 228 / 0.1);
+}
+
+.bg-brand-ocean\/15 {
+  background-color: rgb(22 172 228 / 0.15);
 }
 
 .bg-brand\/10 {
@@ -3803,6 +3940,11 @@ a:hover {
 .bg-emerald-600 {
   --tw-bg-opacity: 1;
   background-color: rgb(5 150 105 / var(--tw-bg-opacity));
+}
+
+.bg-green-50 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(240 253 244 / var(--tw-bg-opacity));
 }
 
 .bg-indigo-100 {
@@ -3894,6 +4036,11 @@ a:hover {
   background-color: transparent;
 }
 
+.bg-violet-100 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(237 233 254 / var(--tw-bg-opacity));
+}
+
 .bg-white {
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity));
@@ -3902,16 +4049,6 @@ a:hover {
 .bg-yellow-100 {
   --tw-bg-opacity: 1;
   background-color: rgb(254 249 195 / var(--tw-bg-opacity));
-}
-
-.bg-blue-50 {
-  --tw-bg-opacity: 1;
-  background-color: rgb(239 246 255 / var(--tw-bg-opacity));
-}
-
-.bg-green-50 {
-  --tw-bg-opacity: 1;
-  background-color: rgb(240 253 244 / var(--tw-bg-opacity));
 }
 
 .bg-yellow-50 {
@@ -4065,6 +4202,10 @@ a:hover {
   padding-left: 2.5rem;
 }
 
+.pr-1 {
+  padding-right: 0.25rem;
+}
+
 .pr-11 {
   padding-right: 2.75rem;
 }
@@ -4079,10 +4220,6 @@ a:hover {
 
 .pt-4 {
   padding-top: 1rem;
-}
-
-.pb-2 {
-  padding-bottom: 0.5rem;
 }
 
 .text-left {
@@ -4124,6 +4261,11 @@ a:hover {
   line-height: 1.5rem;
 }
 
+.text-lg {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+
 .text-sm {
   font-size: 0.875rem;
   line-height: 1.25rem;
@@ -4132,11 +4274,6 @@ a:hover {
 .text-xs {
   font-size: 0.75rem;
   line-height: 1rem;
-}
-
-.text-lg {
-  font-size: 1.125rem;
-  line-height: 1.75rem;
 }
 
 .font-bold {
@@ -4217,6 +4354,11 @@ a:hover {
   color: rgb(146 64 14 / var(--tw-text-opacity));
 }
 
+.text-blue-600 {
+  --tw-text-opacity: 1;
+  color: rgb(37 99 235 / var(--tw-text-opacity));
+}
+
 .text-blue-700 {
   --tw-text-opacity: 1;
   color: rgb(29 78 216 / var(--tw-text-opacity));
@@ -4265,6 +4407,11 @@ a:hover {
 .text-emerald-800 {
   --tw-text-opacity: 1;
   color: rgb(6 95 70 / var(--tw-text-opacity));
+}
+
+.text-green-800 {
+  --tw-text-opacity: 1;
+  color: rgb(22 101 52 / var(--tw-text-opacity));
 }
 
 .text-indigo-700 {
@@ -4347,6 +4494,11 @@ a:hover {
   color: rgb(15 23 42 / var(--tw-text-opacity));
 }
 
+.text-violet-700 {
+  --tw-text-opacity: 1;
+  color: rgb(109 40 217 / var(--tw-text-opacity));
+}
+
 .text-white {
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity));
@@ -4359,16 +4511,6 @@ a:hover {
 .text-yellow-700 {
   --tw-text-opacity: 1;
   color: rgb(161 98 7 / var(--tw-text-opacity));
-}
-
-.text-blue-600 {
-  --tw-text-opacity: 1;
-  color: rgb(37 99 235 / var(--tw-text-opacity));
-}
-
-.text-green-800 {
-  --tw-text-opacity: 1;
-  color: rgb(22 101 52 / var(--tw-text-opacity));
 }
 
 .text-yellow-800 {
@@ -4467,6 +4609,10 @@ a:hover {
 .ring-brand-ocean {
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(22 172 228 / var(--tw-ring-opacity));
+}
+
+.ring-brand-ocean\/20 {
+  --tw-ring-color: rgb(22 172 228 / 0.2);
 }
 
 .ring-white {
@@ -4622,3 +4768,4 @@ a:hover {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+

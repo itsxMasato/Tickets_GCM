@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { statusBadge, priorityBadge } from '../components/badge.js';
@@ -22,8 +23,10 @@ export async function renderTicketsList({ query, user }) {
   let exportBtn;
   const header = h('div.flex.items-center.justify-between.flex-wrap.gap-3', {}, [
     h('div', {}, [
-      h('h1.text-2xl.font-bold.text-slate-800', {}, 'Tickets'),
-      h('p.text-sm.text-slate-500', {}, canViewAllTickets(user) ? 'Todos los tickets del sistema.' : 'Tickets que puedes ver.'),
+      h('h1.text-2xl.font-bold.text-slate-800', {}, isJefe(user) ? 'Tickets listos para cerrar' : 'Tickets'),
+      h('p.text-sm.text-slate-500', {}, isJefe(user)
+        ? 'Mostrando los tickets en estado solucionado para revisión y cierre.'
+        : canViewAllTickets(user) ? 'Todos los tickets del sistema.' : 'Tickets que puedes ver.'),
     ]),
     h('div.flex.items-center.gap-2', {}, [
       exportBtn = exportButton({ label: 'Exportar', format: 'excel', kind: 'secondary', onclick: doExport }),
@@ -33,8 +36,9 @@ export async function renderTicketsList({ query, user }) {
   root.appendChild(header);
 
   // Filtros
+  const initialStatus = isJefe(user) && !query.status ? 'solucionado' : query.status || '';
   const filters = {
-    status: query.status || '',
+    status: initialStatus,
     priority: query.priority || '',
     search: query.search || '',
     assigned_to: query.assigned_to || '',
@@ -83,6 +87,9 @@ export async function renderTicketsList({ query, user }) {
   filtersBar.appendChild(h('div.flex.gap-2', {}, [applyBtn, resetBtn]));
   root.appendChild(filtersBar);
 
+  const quickFiltersWrap = h('div.flex.flex-wrap.gap-2', {});
+  root.appendChild(quickFiltersWrap);
+
   // Mostrar filtros activos como chips
   const filtersChipsWrap = h('div.flex.gap-2.items-center.flex-wrap', {});
   root.appendChild(filtersChipsWrap);
@@ -92,6 +99,37 @@ export async function renderTicketsList({ query, user }) {
   const pagWrap = h('div.flex.items-center.justify-between.mt-3.text-sm.text-slate-600', {});
   root.appendChild(tableWrap);
   root.appendChild(pagWrap);
+
+  function renderQuickFilters() {
+    quickFiltersWrap.innerHTML = '';
+    const options = isJefe(user)
+      ? [
+          { value: '', label: 'Todos' },
+          { value: 'solucionado', label: 'Listos para cerrar' },
+          { value: 'cerrado', label: 'Cerrados' },
+        ]
+      : [
+          { value: '', label: 'Todos' },
+          { value: 'recibido', label: 'Recibidos' },
+          { value: 'en_proceso', label: 'En proceso' },
+          { value: 'solucionado', label: 'Solucionados' },
+        ];
+
+    const buttons = options.map((option) => {
+      const active = filters.status === option.value;
+      return h('button', {
+        type: 'button',
+        class: active ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm',
+        onclick: () => {
+          filters.status = option.value;
+          statusSel.value = option.value;
+          apply(1);
+        },
+      }, option.label);
+    });
+
+    quickFiltersWrap.appendChild(h('div.flex.flex-wrap.gap-2', {}, buttons));
+  }
 
   async function apply(newPage) {
     filters.page = newPage || 1;
@@ -145,6 +183,7 @@ export async function renderTicketsList({ query, user }) {
       for (const [k, v] of Object.entries(filters)) { if (v) params.set(k, v); }
       const data = await api.tickets.list(Object.fromEntries(params));
       state.result = data;
+      renderQuickFilters();
       draw();
     } catch (e) {
       tableWrap.innerHTML = `<div class="p-8 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;

@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
@@ -177,26 +178,8 @@ export async function renderRoles({ user }) {
       h('p.text-sm.text-slate-500', {}, 'Define qué puede hacer cada rol. Los cambios se aplican en vivo.'),
     ]),
     h('div.flex.items-center.gap-2', {}, [
-      // Botones "Próximamente" — visibles pero deshabilitados. El tooltip
-      // explica qué falta en el backend. Cuando se implemente, reemplazar
-      // `disabled: 'disabled'` por la acción real.
-      h('button.btn.btn-ghost.btn-sm.cursor-not-allowed.opacity-60', {
-        type: 'button',
-        disabled: 'disabled',
-        title: 'Próximamente — requiere migración del backend (POST /api/roles)',
-        'aria-label': 'Crear nuevo rol (próximamente)',
-      }, [
-        svg(h, ICON.plus, 'w-4 h-4'),
-        h('span', {}, 'Nuevo rol'),
-      ]),
-      h('button.btn.btn-ghost.btn-sm.cursor-not-allowed.opacity-60', {
-        type: 'button',
-        disabled: 'disabled',
-        title: 'Próximamente — requiere migración del backend (POST /api/permissions)',
-        'aria-label': 'Crear nuevo permiso (próximamente)',
-      }, [
-        svg(h, ICON.plus, 'w-4 h-4'),
-        h('span', {}, 'Nuevo permiso'),
+      h('div.text-right', {}, [
+        h('p.text-xs.text-slate-500', {}, 'Creación de roles y permisos deshabilitada: requiere migración del backend.'),
       ]),
       h('button.btn.btn-ghost', {
         onclick: refresh,
@@ -320,23 +303,30 @@ export async function renderRoles({ user }) {
   // Suscripción al cache de usuarios: actualiza los badges de las tabs
   // y el header de la card. No re-renderizamos todo para no perder foco.
   const refreshCountBadges = () => {
+    const usersLoaded = usersCache.isLoaded();
     for (const role of ROLE_ORDER) {
       const tab = tabsBar.querySelector(`[data-tab-role="${role}"] [data-role-count]`);
       if (tab) {
-        const c = usersCache.countByRole(role);
-        tab.textContent = String(c);
+        const count = usersLoaded ? usersCache.countByRole(role) : null;
+        tab.textContent = usersLoaded ? String(count) : '…';
+        tab.title = usersLoaded
+          ? `${count} ${count === 1 ? 'usuario' : 'usuarios'} con este rol`
+          : 'Cargando usuarios…';
       }
       const cardBadge = roleCard.querySelector(`[data-role-count="${role}"]`);
       if (cardBadge) {
-        const c = usersCache.countByRole(role);
+        const count = usersLoaded ? usersCache.countByRole(role) : null;
         cardBadge.textContent = '';
-        cardBadge.append(c + ' ');
-        cardBadge.append(c === 1 ? 'usuario' : 'usuarios');
+        cardBadge.append(usersLoaded ? String(count) : '…');
+        cardBadge.append(' ');
+        cardBadge.append(usersLoaded ? (count === 1 ? 'usuario' : 'usuarios') : 'usuarios');
       }
     }
     renderPending();
   };
   const unsubscribeUsersCache = usersCache.subscribe(() => {
+    renderTabs();
+    renderRoleCard();
     refreshCountBadges();
   });
 
@@ -360,9 +350,10 @@ export async function renderRoles({ user }) {
   // ── Render: tabs ────────────────────────────────────────────────────────
   function renderTabs() {
     tabsBar.innerHTML = '';
+    const usersLoaded = usersCache.isLoaded();
     for (const role of ROLE_ORDER) {
       const isActive = role === activeRole;
-      const count = usersCache.countByRole(role);
+      const count = usersLoaded ? usersCache.countByRole(role) : null;
       const tab = h('button', {
         type: 'button',
         role: 'tab',
@@ -382,7 +373,9 @@ export async function renderRoles({ user }) {
         },
       }, [
         h('span', {}, getRoleLabel(role)),
-        h('span.badge.bg-surface-alt.text-brand-ink.text-\\[11px\\]', { 'data-role-count': '', title: `${count} ${count === 1 ? 'usuario' : 'usuarios'} con este rol` }, String(count)),
+        h('span.badge.bg-surface-alt.text-brand-ink.text-\\[11px\\]', { 'data-role-count': '', title: usersLoaded
+            ? `${count} ${count === 1 ? 'usuario' : 'usuarios'} con este rol`
+            : 'Cargando usuarios…' }, usersLoaded ? String(count) : '…'),
       ]);
       tabsBar.appendChild(tab);
     }
@@ -398,7 +391,8 @@ export async function renderRoles({ user }) {
     const role = activeRole;
     const perms = pending[role] || {};
     const currentPerms = current[role] || {};
-    const count = usersWithRole(role).length;
+    const usersLoaded = usersCache.isLoaded();
+    const count = usersLoaded ? usersWithRole(role).length : null;
     const enabledCount = PERMISSION_KEYS.filter((p) => perms[p]).length;
 
     const card = h('div.card.p-0.overflow-hidden', {}, [
@@ -409,9 +403,11 @@ export async function renderRoles({ user }) {
             h('div.flex.items-center.gap-2.flex-wrap', {}, [
               renderLabelBlock(role),
               h('span.badge.bg-surface-alt.text-brand-ink', { 'data-role-count': role }, [
-                String(count),
+                usersLoaded ? String(count) : '…',
                 ' ',
-                count === 1 ? 'usuario' : 'usuarios',
+                usersLoaded
+                  ? count === 1 ? 'usuario' : 'usuarios'
+                  : 'usuarios',
               ]),
               h('span.badge.bg-brand-ocean\\/10.text-brand-ocean', {}, [
                 `${enabledCount}/${PERMISSION_KEYS.length} permisos`,
@@ -424,7 +420,7 @@ export async function renderRoles({ user }) {
           h('button.btn.btn-ghost.btn-sm', {
             type: 'button',
             onclick: () => disableRole(role),
-            title: 'Apagar todos los permisos de este rol (cambia sin guardar)',
+            title: 'Apagar todos los permisos de este rol — cambio sin guardar',
           }, [
             svg(h, ICON.alert, 'w-4 h-4'),
             h('span', {}, 'Apagar todo'),
@@ -628,7 +624,7 @@ export async function renderRoles({ user }) {
         h('button.btn-icon-sm.text-slate-400.hover\\:text-accent.hover\\:bg-accent\\/10', {
           type: 'button',
           'aria-label': `Eliminar permiso ${label}`,
-          title: 'Eliminar este permiso (próximamente)',
+          title: 'Eliminar este permiso — próximamente',
           disabled: 'disabled',
           onclick: (e) => { e.preventDefault(); },
         }, [svg(h, ICON.trash, 'w-4 h-4')]),
@@ -647,7 +643,7 @@ export async function renderRoles({ user }) {
       'aria-checked': String(isOn),
       'aria-label': `${PERMISSION_LABELS[perm]} para ${getRoleLabel(role)}`,
       title: changed
-        ? `${PERMISSION_LABELS[perm]}: ${wasOn ? 'sí' : 'no'} → ${isOn ? 'sí' : 'no'} (cambio sin guardar)`
+        ? `${PERMISSION_LABELS[perm]}: ${wasOn ? 'sí' : 'no'} → ${isOn ? 'sí' : 'no'} — cambio sin guardar`
         : `${PERMISSION_LABELS[perm]}: ${isOn ? 'sí' : 'no'}`,
       class: [bgClass, changed ? 'ring-2 ring-amber-400 ring-offset-1' : ''],
       onclick: () => togglePerm(role, perm),
@@ -985,7 +981,7 @@ function openReassignWizard({ type, target }) {
     // Selector de destino
     if (affected.length > 0) {
       step1.appendChild(h('div.mt-4', {}, [
-        h('label.label', { for: 'gcm-reassign-target' }, isRole ? 'Reasignar usuarios a' : 'Mantener permiso activo (reemplazo)'),
+        h('label.label', { for: 'gcm-reassign-target' }, isRole ? 'Reasignar usuarios a' : 'Mantener permiso activo — reemplazo'),
         h('select.input.mt-2', {
           id: 'gcm-reassign-target',
           onchange: (e) => { chosen = e.target.value; updateContinueEnabled(); },

@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # GCM Tickets — Design System (Master)
 
 > Source of truth para todo el UI. Cuando un archivo de `pages/` exista, sus reglas sobrescriben las de aquí.

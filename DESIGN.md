@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 ---
 name: GCM Tickets
 description: Internal ticket management system for GCM (shrimp industry operations). Navy primary, ocean blue detail, shrimp-red accent. Operacional premium feel.

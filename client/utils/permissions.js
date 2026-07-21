@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Permisos del frontend — espejo simple de la lógica del backend
 // user: { id, role, area }
 
@@ -17,7 +18,8 @@ export function canCreateTicket(user) {
 
 export function canSeeTicket(user, ticket) {
   if (!user || !ticket) return false;
-  if (isSAC(user) || isJefe(user)) return true;
+  if (isSAC(user)) return true;
+  if (isJefe(user)) return ticket.status === 'solucionado';
   if (isAdmin(user)) return sameId(ticket.assigned_to, user.id) || sameId(ticket.created_by, user.id);
   if (isSupervisor(user)) return sameId(ticket.created_by, user.id);
   return false;

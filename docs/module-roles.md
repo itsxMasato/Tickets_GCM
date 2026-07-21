@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Módulo `/roles` — Roles y permisos
 
 > Vista administrativa (solo SAC) para editar los permisos de cada rol. Los cambios aplican en vivo a toda la sesión GCM.

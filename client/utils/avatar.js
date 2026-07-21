@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Utilidades compartidas para avatares de usuario.
 // El topbar y el sidebar del shell usan la misma paleta determinística
 // (mismo seed → mismo color) para que un usuario sea identificable

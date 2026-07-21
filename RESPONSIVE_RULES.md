@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Responsive Rules — GCM Tickets
 
 > Cómo se adapta el producto entre mobile, tablet y desktop. Breakpoints, transformaciones, qué cambia y qué no. Inspirado en la disciplina mobile-first de Linear y la consistencia cross-device de Stripe.

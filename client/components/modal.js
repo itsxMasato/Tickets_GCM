@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h } from '../utils/dom.js';
 
 // Selector de elementos focusables dentro del modal (excluye disabled y tabindex=-1).

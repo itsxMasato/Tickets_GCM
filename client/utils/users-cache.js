@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Cache de usuarios activos para vistas que sólo necesitan contar
 // (KPI strip de /roles) o derivar info de rol (panel de diff de /roles).
 // Se llena en load() (vía api.users.list) y se mantiene sincronizado

@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Login — Diseño (módulo aislado)
 
 > Registro del estado construido. Refleja `client/views/login.js` + `client/components/login.js` + `client/styles.css` + `client/utils/icons.js`. Si cambia uno de esos archivos, actualizar aquí.

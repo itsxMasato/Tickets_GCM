@@ -1,7 +1,8 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 
 /**
- * Reexporta las 8 EntitySchema como clases para que el resto de la capa ORM
+ * Reexporta las EntitySchema como clases para que el resto de la capa ORM
  * las importe con destructuring.
  *
  * TypeORM 1.0 acepta tanto `new EntitySchema({...})` directamente como el
@@ -11,12 +12,18 @@
  */
 
 module.exports = {
-  User:              require('./user.entity'),
-  Category:          require('./category.entity'),
-  Ticket:            require('./ticket.entity'),
-  TicketAssignment:  require('./ticket-assignment.entity'),
-  TicketComment:     require('./ticket-comment.entity'),
-  Attachment:        require('./attachment.entity'),
-  Notification:      require('./notification.entity'),
-  AuditLog:          require('./audit-log.entity'),
+  User:                    require('./user.entity'),
+  Category:                require('./category.entity'),
+  Ticket:                  require('./ticket.entity'),
+  TicketAssignment:        require('./ticket-assignment.entity'),
+  TicketComment:           require('./ticket-comment.entity'),
+  Attachment:              require('./attachment.entity'),
+  Notification:            require('./notification.entity'),
+  AuditLog:                require('./audit-log.entity'),
+  CalendarEvent:           require('./calendar-event.entity'),
+  // Multi-tenant (Fase 1)
+  Company:                 require('./company.entity'),
+  CompanyArea:             require('./company-area.entity'),
+  UserCompanyMembership:   require('./user-company-membership.entity'),
+  RolePermission:          require('./role-permission.entity'),
 };

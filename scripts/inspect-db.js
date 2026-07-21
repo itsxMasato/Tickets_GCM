@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 const Database = require('better-sqlite3');
 const config = require('../src/config');
 
