@@ -1096,6 +1096,15 @@ async function getStatsForUser(userId, user) {
 
 module.exports = {
   toId,
+  queryCollection,
+  countCollection,
+  countGroupByValues,
+  countByDay,
+  findOneByFields,
+  getDoc,
+  createDoc,
+  updateDoc,
+  cacheById,
   getUserByIdentifier,
   listUsers,
   getUserById,
