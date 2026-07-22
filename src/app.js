@@ -5,19 +5,33 @@ const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
 
 // Store de sesión persistente. En producción (Render) no podemos usar
 // MemoryStore porque se pierde al reiniciar el servicio — todos los
-// usuarios quedarían deslogueados. Usamos SQLite local (data/sessions.db)
-// para que las sesiones sobrevivan redeploys. En dev local también lo
-// activamos para no divergir del comportamiento de producción.
+// usuarios quedarían deslogueados. Usamos SQLite para que las sesiones
+// sobrevivan redeploys.
+//
+// Importante: el directorio debe existir antes de instanciar SQLiteStore,
+// sino falla con SQLITE_CANTOPEN. En Render el filesystem es efímero y
+// `data/` no se commitea (está en .gitignore), así que lo creamos al
+// arranque. En dev local ya existe.
+const sessionDir = config.env === 'production'
+  ? '/tmp/sessions'  // Render: /tmp siempre existe y es escribible
+  : path.resolve(__dirname, '..', 'data');
+try {
+  fs.mkdirSync(sessionDir, { recursive: true });
+} catch (e) {
+  console.error('[session] No se pudo crear directorio de sesiones:', sessionDir, e.message);
+}
+
 const SQLiteStore = require('connect-sqlite3')(session);
 const sessionStore = new SQLiteStore({
   db: 'sessions.db',
-  dir: path.resolve(__dirname, '..', 'data'),
+  dir: sessionDir,
   table: 'sessions',
 });
 
