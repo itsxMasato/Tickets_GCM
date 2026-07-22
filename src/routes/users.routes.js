@@ -11,9 +11,14 @@ const requireRole = require('../middleware/requireRole');
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const { role, active, area } = req.query;
+    // Acepta varios formatos de query string: el cliente manda `active: 1`
+    // (URLSearchParams lo serializa como "active=1"), pero también es válido
+    // "active=true". Cualquier otro valor truthy se trata como true. Esto
+    // era el bug que rompía el módulo /roles: el filtro nunca aplicaba y
+    // siempre mostraba 0 usuarios por rol.
     const list = await authService.listUsers({
       role,
-      active: active === undefined ? undefined : active === 'true',
+      active: active === undefined ? undefined : /^(1|true)$/i.test(String(active)),
       area,
     });
     res.json({ users: list });

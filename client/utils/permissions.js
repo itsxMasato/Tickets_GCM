@@ -82,3 +82,10 @@ export function canManageUsers(user)    { return isSAC(user); }
 export function canManageCategories(user) { return isSAC(user); }
 export function canViewReports(user)    { return isSAC(user) || isJefe(user); }
 export function canViewAllTickets(user) { return isSAC(user) || isJefe(user); }
+
+// Multi-tenant (Fase 3 visible). El flag `isPlatformAdmin` lo setea el
+// backend en `req.user` para sesiones con `users.is_platform_admin = 1`
+// (hoy solo Miguel Flores). La guarda es defensiva: el backend vuelve a
+// validar con `requirePlatformAdmin` en cada router de /api/companies/*.
+export function isPlatformAdmin(user) { return user?.isPlatformAdmin === true; }
+export function canManageCompanies(user) { return isPlatformAdmin(user); }

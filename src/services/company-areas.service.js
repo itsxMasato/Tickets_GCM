@@ -14,6 +14,21 @@ const {
 const { slugify } = require('../utils/slugify');
 const auditService = require('./audit.service');
 
+// Emite un evento de área a platform admin (room 'sac') y a la sala
+// `company:{id}` para miembros futuros. Mismo patrón que companies.service.
+// `event`: p.ej. 'area:create' | 'area:update' | 'area:delete'
+function emitArea(event, area, companyId) {
+  try {
+    const { emit } = require('../sockets');
+    emit(event, { area }, {
+      role: 'sac',
+      extraRooms: companyId ? [`company:${companyId}`] : [],
+    });
+  } catch (e) {
+    /* socket no inicializado aún */
+  }
+}
+
 /**
  * company-areas.service — CRUD de áreas operativas por empresa.
  *
@@ -114,6 +129,7 @@ async function create(companyId, input, requester) {
     description: `Área creada: ${created.label} (${created.key})`,
     new_value: created,
   });
+  emitArea('area:create', created, company.id);
   return created;
 }
 
@@ -150,6 +166,7 @@ async function update(areaId, input, requester) {
     old_value: serialize(before),
     new_value: after,
   });
+  emitArea('area:update', after, before.company_id);
   return after;
 }
 
@@ -212,6 +229,7 @@ async function softDelete(areaId, requester) {
     old_value: serialize(before),
     new_value: after,
   });
+  emitArea('area:delete', after, before.company_id);
   return after;
 }
 

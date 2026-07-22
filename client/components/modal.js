@@ -76,17 +76,28 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
     }
   };
 
+  // Fullscreen en mobile: en viewports < 640px el modal ocupa toda la
+  // pantalla. La CSS ya define .gcm-modal-fullscreen con position:fixed,
+  // inset:0, height:100dvh y border-radius:0 — sólo necesitamos aplicar
+  // la clase. Se evalúa al abrir (no al resize) porque abrir/cerrar es
+  // un evento discreto; si el usuario rota el dispositivo, el modal ya
+  // está anclado a sus dimensiones y no queremos repaint a mitad de uso.
+  const isMobileViewport = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(max-width: 639.95px)').matches;
+  const fullscreenClass = isMobileViewport ? '.gcm-modal-fullscreen' : '';
+
   const modal = h('div.fixed.inset-0.z-40.flex.items-center.justify-center.p-4', {
     onclick: (e) => { if (e.target === modal) { cleanup(); onClose?.(); } },
   }, [
     h('div.absolute.inset-0.bg-slate-900\\/50'),
-    modalContent = h(`div.relative.bg-white.rounded-lg.shadow-xl.w-full.${widths[size] || widths.md}.max-h-[90vh].flex.flex-col.focus\\:outline-none`, {
+    modalContent = h(`div.relative.bg-white.rounded-lg.shadow-xl.w-full.${widths[size] || widths.md}.max-h-[90vh].flex.flex-col.focus\\:outline-none${fullscreenClass}`, {
       role: 'dialog',
       'aria-modal': 'true',
       'aria-labelledby': 'gcm-modal-title',
       tabindex: '-1',
     }, [
-      h('div.flex.items-center.justify-between.px-5.py-3.border-b.border-slate-200', {}, [
+      h('div.gcm-modal-header.flex.items-center.justify-between.px-5.py-3.border-b.border-slate-200', {}, [
         (() => {
           const t = h('h3#gcm-modal-title.text-base.font-semibold.text-slate-800');
           // textContent seguro (NUNCA html: title — previene XSS)
@@ -99,8 +110,8 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
           type: 'button',
         }, '×'),
       ]),
-      h('div.p-5.overflow-y-auto', {}, body || ''),
-      actions ? h('div.flex.justify-end.gap-2.px-5.py-3.border-t.border-slate-200.bg-slate-50.rounded-b-lg', {}, actions(cleanup)) : null,
+      h('div.gcm-modal-body.p-5.overflow-y-auto', {}, body || ''),
+      actions ? h('div.gcm-modal-footer.flex.justify-end.gap-2.px-5.py-3.border-t.border-slate-200.bg-slate-50.rounded-b-lg', {}, actions(cleanup)) : null,
     ]),
   ]);
 

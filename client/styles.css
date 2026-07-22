@@ -389,18 +389,20 @@
   }
 
   /* === Sidebar corporativo (Navy) ===
-     Comportamiento: el sidebar SIEMPRE empuja al main (push layout).
-     - Desktop: vive como columna flex pegajosa, ancho w-64 (256px). Puede
-       colapsarse a mini-rail w-16 (gcm-sidebar-collapsed) con un click en
-       el toggle del topbar; la preferencia persiste en localStorage.
-     - Mobile: vive como columna flex; cuando está cerrado, se desliza fuera
-       de pantalla con translateX(-100%) y el main ocupa el 100%. Cuando
-       está abierto, empuja al main (que se reduce). En el primer load
-       siempre está ABIERTO (gcm-sidebar-open), por requisito explícito del
-       producto.
-     La decisión de push (no overlay) garantiza que ningún contenido queda
-     "tapado" por el sidebar: el main siempre se reacomoda, nunca se
-     superpone. */
+     Comportamiento:
+     - Desktop: push layout. El sidebar vive como columna flex pegajosa, ancho
+       w-64 (256px). Puede colapsarse a mini-rail w-16 (gcm-sidebar-collapsed)
+       con un click en el toggle del topbar; la preferencia persiste en
+       localStorage.
+     - Mobile: overlay. El sidebar está fijo fuera de pantalla
+       (translateX(-100%)); abrir = desliza sobre el main con un scrim
+       semitransparente (gcm-sidebar-scrim) que captura el click y cierra.
+       Arranca CERRADO (sin gcm-sidebar-open al boot) — el único punto de
+       entrada es el toggle hamburguesa del topbar.
+     La distinción push-vs-overlay es intencional: en desktop la columna es
+     fija y parte del flujo (empujar se siente natural), en mobile un push
+     comprime el main a menos de la mitad del viewport y se confunde con un
+     layout bug. El scrim deja claro que es un drawer modal. */
   .sidebar {
     @apply w-64 bg-brand text-white flex flex-col shadow-sidebar transition-[width] duration-200 ease-out flex-none;
   }
@@ -428,8 +430,9 @@
     body.gcm-sidebar-collapsed .sidebar-link .sidebar-active-dot { display: none; }
   }
 
-  /* Contenedor del sidebar: en desktop sticky/columna, en mobile desliza con
-     translateX (push) — el main siempre se reacomoda. */
+  /* Contenedor del sidebar: en desktop sticky/columna, en mobile overlay fijo
+     que se desliza con translateX. La clase gcm-sidebar-open controla visibilidad
+     en mobile. El width animado sólo aplica en desktop (mini-rail collapse). */
   .gcm-sidebar {
     @apply md:flex md:flex-none md:sticky md:top-0 md:h-screen overflow-hidden;
     transition: transform 220ms ease-out, width 220ms ease-out;
@@ -444,11 +447,42 @@
       height: 100dvh;
       transform: translateX(-100%);
       will-change: transform;
+      /* Safe-area iOS: evita que el brand se meta debajo del notch/dynamic island. */
+      padding-top: env(safe-area-inset-top);
     }
     body.gcm-sidebar-open .gcm-sidebar { transform: translateX(0); }
   }
   @media (prefers-reduced-motion: reduce) {
     .sidebar, .gcm-sidebar { animation: none; transition: none; }
+  }
+
+  /* === Scrim del sidebar mobile ===
+     Cubre todo el viewport con un velo semitransparente cuando el drawer
+     está abierto. Captura clicks para cerrar. Debajo del sidebar (z-30 vs
+     z-40) y debajo del topbar (el topbar tiene z-50 en su propia regla).
+     Pointer-events condicional: invisible también en mobile cuando el sidebar
+     está cerrado, para no interceptar taps del main. */
+  .gcm-sidebar-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background-color: rgb(15 23 42 / 0.5); /* slate-900/50 */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease-out;
+  }
+  .gcm-sidebar-scrim.gcm-scrim-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  /* Sólo mobile: en desktop el scrim nunca debe existir (el sidebar es una
+     columna del flujo, no un modal). display:none fuera del media garantiza
+     que no ocupe layout aunque quede en el DOM por error. */
+  @media (min-width: 768px) {
+    .gcm-sidebar-scrim { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gcm-sidebar-scrim { transition: none; }
   }
 
   .sidebar-link {
@@ -519,6 +553,14 @@
   }
   .chat-event::before, .chat-event::after {
     content: ''; @apply flex-1 border-t border-surface-border;
+  }
+  /* Contención del scroll-interno del chat. Sin overscroll-behavior:contain
+     en iOS, el scroll del chat se propaga al body y rebota contra el
+     header. La clase .chat-scroll-internal la aplica ticket-detail.js
+     sobre el contenedor que envuelve la lista de mensajes. */
+  .chat-scroll-internal {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   /* === Avatar / misc === */
@@ -1084,5 +1126,88 @@
   .dash-quick-body { @apply flex-1 min-w-0; }
   .dash-quick-title { @apply text-sm font-medium text-brand-ink leading-snug; }
   .dash-quick-sub   { @apply text-xs text-slate-500 mt-0.5; }
+
+  /* === Responsive utilities (mobile-first) ===
+     Conjunto de reglas que sólo aplican en viewports < 768px. Activan:
+     hit-areas de 44px (WCAG 2.5.5), safe-area iOS, modal fullscreen,
+     visibilidad de la card-list móvil, y hint de scroll en el gantt. */
+
+  /* 1. Hit-area 44px. .btn-sm (28px en desktop) salta a 44px en mobile —
+     un solo cambio en CSS, sin tocar 50 call-sites. */
+  @media (max-width: 767.95px) {
+    .btn { min-height: 44px; }
+    .btn-sm { min-height: 44px; }
+    .btn-icon, .topbar-icon-btn { min-width: 44px; min-height: 44px; }
+  }
+
+  /* 2. Safe-area iOS. Notifica al shell de la app, al topbar y al login
+     para que el contenido respete el notch / dynamic island / home bar.
+     Usa @supports para que no afecte a navegadores sin env(). */
+  @supports (padding: max(0px)) {
+    .gcm-shell { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+    .topbar { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1.5rem, env(safe-area-inset-right)); }
+    .login-aside-inner { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); padding-bottom: max(28px, env(safe-area-inset-bottom)); }
+  }
+
+  /* 3. Modal fullscreen en mobile. Se activa cuando .gcm-modal-fullscreen
+     está presente (lo aplica modal.js en < 640px). El body del modal
+     (.gcm-modal-body) ocupa la altura restante descontando header + footer.
+     - El contenedor usa 100dvh (no 100vh) para que el scroll-interno se
+       ajuste correctamente cuando aparece/oculta la barra del browser.
+     - El footer reserva safe-area-inset-bottom para que el botón "Guardar"
+       no quede tapado por la home-bar de iOS.
+     - El body tiene -webkit-overflow-scrolling: touch para scroll con
+       inercia en iOS, y overscroll-behavior:contain para que el scroll
+       no propague al body del shell. */
+  @media (max-width: 639.95px) {
+    .gcm-modal-fullscreen {
+      position: fixed !important;
+      inset: 0 !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      border-radius: 0 !important;
+    }
+    .gcm-modal-fullscreen .gcm-modal-body {
+      height: calc(100dvh - 7rem);
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .gcm-modal-fullscreen .gcm-modal-footer {
+      /* Padding inferior del footer = max(base 12px, safe-area). Garantiza
+         que el botón primario no quede debajo de la home-bar de iPhone. */
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+  }
+
+  /* 4. Data-list visibility: en mobile la .gcm-data-list-mobile (cards)
+     se muestra y la .gcm-data-list-desktop (tabla) se oculta. La
+     inversa ocurre en >= 768px. Lo aplica el componente data-list.js. */
+  .gcm-data-list-mobile { display: block; }
+  .gcm-data-list-desktop { display: none; }
+  @media (min-width: 768px) {
+    .gcm-data-list-mobile { display: none; }
+    .gcm-data-list-desktop { display: block; }
+  }
+
+  /* 5. Gantt: hint visual de scroll horizontal en mobile. El wrapper ya
+     es position:relative; el ::after con position:absolute se ancla al
+     borde derecho y se queda visible durante el scroll horizontal.
+     pointer-events:none para no interceptar taps sobre el gantt. */
+  .gantt-board-grid-wrapper { position: relative; }
+  @media (max-width: 767.95px) {
+    .gantt-board-grid-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 32px;
+      background: linear-gradient(90deg, rgba(247, 249, 252, 0), rgba(247, 249, 252, 0.95) 80%);
+      pointer-events: none;
+      z-index: 1;
+    }
+  }
 }
 

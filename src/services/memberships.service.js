@@ -14,6 +14,26 @@ const {
 } = require('../utils/validators');
 const auditService = require('./audit.service');
 
+// Emite un evento de membresía. Llega a:
+//   - room 'sac' (platform admin, donde está Miguel hoy).
+//   - room `company:{company_id}` para miembros futuros de esa empresa.
+//   - room `user:{user_id}` para notificar al propio usuario (vía socket
+//     de su sesión, con el `user.id` que asigna sockets/index.js).
+function emitMembership(event, membership, companyId, userId) {
+  try {
+    const { emit } = require('../sockets');
+    emit(event, { membership }, {
+      role: 'sac',
+      extraRooms: [
+        ...(companyId ? [`company:${companyId}`] : []),
+        ...(userId ? [`user:${userId}`] : []),
+      ],
+    });
+  } catch (e) {
+    /* socket no inicializado aún */
+  }
+}
+
 /**
  * memberships.service — CRUD de membresías usuario ↔ empresa.
  *
@@ -191,6 +211,7 @@ async function create(userId, input, requester) {
     description: `Membresía creada: ${user.full_name} en ${company.name} (${role})`,
     new_value: out,
   });
+  emitMembership('membership:create', out, company.id, user.id);
   return out;
 }
 
@@ -255,6 +276,7 @@ async function update(membershipId, input, requester) {
     old_value: serialize(before),
     new_value: out,
   });
+  emitMembership('membership:update', out, before.company_id, before.user_id);
   return out;
 }
 
@@ -287,6 +309,7 @@ async function softDelete(membershipId, requester) {
     old_value: serialize(before),
     new_value: after,
   });
+  emitMembership('membership:delete', after, before.company_id, before.user_id);
   return after;
 }
 

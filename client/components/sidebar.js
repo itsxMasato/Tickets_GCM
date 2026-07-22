@@ -3,7 +3,7 @@ import { h } from '../utils/dom.js';
 import { go } from '../router.js';
 import {
   isSAC, isJefe, isAdmin, isSupervisor,
-  canManageUsers, canManageCategories,
+  canManageUsers, canManageCategories, canManageCompanies,
 } from '../utils/permissions.js';
 import { ICON } from '../utils/icons.js';
 
@@ -123,6 +123,7 @@ function navFor(user) {
           { to: '/users',         label: 'Usuarios',       icon: ICON.users,  match: (p) => p === '/users',      visible: canManageUsers },
           { to: '/roles',         label: 'Roles',          icon: ICON.shield, match: (p) => p === '/roles',      visible: canManageUsers },
           { to: '/categories',    label: 'Categorías',     icon: ICON.tag,    match: (p) => p === '/categories', visible: canManageCategories },
+          { to: '/companies',     label: 'Empresas',       icon: ICON.building, match: (p) => p === '/companies' || p.startsWith('/companies/'), visible: canManageCompanies },
           { to: '/reports',       label: 'Reportes',       icon: ICON.report, match: (p) => p === '/reports' },
           { to: '/audit',         label: 'Auditoría',      icon: ICON.shield, match: (p) => p === '/audit' },
         ],

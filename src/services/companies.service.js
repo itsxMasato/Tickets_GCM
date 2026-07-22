@@ -13,6 +13,25 @@ const {
 const { slugify } = require('../utils/slugify');
 const auditService = require('./audit.service');
 
+// Emite un evento de empresa a platform admin (room 'sac', donde está Miguel
+// hoy) y a la sala `company:{id}` para miembros futuros. Safe si el socket
+// aún no inicializó (arranque en frío, tests). Mismo patrón que
+// auth.service.js → emitUser().
+//
+// `event`: p.ej. 'company:create' | 'company:update' | 'company:delete'
+// `company`: row ya serializado. `companyId`: id numérico para rooms.
+function emitCompany(event, company, companyId) {
+  try {
+    const { emit } = require('../sockets');
+    emit(event, { company }, {
+      role: 'sac',
+      extraRooms: companyId ? [`company:${companyId}`] : [],
+    });
+  } catch (e) {
+    /* socket no inicializado aún */
+  }
+}
+
 /**
  * companies.service — CRUD de empresas (multi-tenant core).
  *
@@ -158,6 +177,7 @@ async function create(input, requester) {
     description: `Empresa creada: ${created.name}`,
     new_value: { name: created.name, slug: created.slug, color: created.color, is_default: created.is_default },
   });
+  emitCompany('company:create', created, created.id);
   return created;
 }
 
@@ -213,6 +233,7 @@ async function update(id, input, requester) {
     old_value: serialize(before),
     new_value: result,
   });
+  emitCompany('company:update', result, result.id);
   return result;
 }
 
@@ -249,6 +270,7 @@ async function softDelete(id, requester) {
     old_value: serialize(before),
     new_value: serialize(after),
   });
+  emitCompany('company:delete', serialize(after), companyId);
   return serialize(after);
 }
 

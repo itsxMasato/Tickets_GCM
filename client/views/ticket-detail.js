@@ -46,7 +46,9 @@ export async function renderTicketDetail({ params, user }) {
   currentSocketCleanup = () => { offs.forEach((f) => f()); };
 
   const header = h('div.flex.flex-col.gap-4', {}, [
-    h('div.flex.items-start.justify-between.gap-3.flex-wrap', {}, [
+    // Header del ticket: en mobile (default flex-col) el título va arriba
+    // y los botones abajo; en >=768px vuelve a fila horizontal.
+    h('div.flex.flex-col.gap-3.md\\:flex-row.md\\:items-start.md\\:justify-between.md\\:gap-3', {}, [
       h('div.min-w-0.flex-1', {}, [
         h('div.flex.items-center.gap-2.text-sm.text-slate-500', {}, [
           backButton({ href: '/tickets', label: 'Volver a tickets' }),
@@ -128,7 +130,11 @@ export async function renderTicketDetail({ params, user }) {
 
   const chat = h('div.card', {});
   chat.appendChild(h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Historial · chat del ticket'));
-  const chatBox = h('div.max-h-\\[60vh\\].overflow-y-auto.rounded-md.bg-slate-50.p-2', {});
+  // chat-scroll-internal: overscroll-behavior:contain evita que el scroll
+  // del chat se propague al body en iOS (rebote contra el header). El
+  // max-h se mantiene en 60vh para que el header del ticket siga visible
+  // en desktop; en mobile, el shell del modal/lista provee su propio scroll.
+  const chatBox = h('div.chat-scroll-internal.max-h-\\[60vh\\].overflow-y-auto.rounded-md.bg-slate-50.p-2', {});
   chat.appendChild(chatBox);
   chatBox.appendChild(renderChat({ ticket, user }));
 

@@ -100,11 +100,18 @@ export async function renderCalendar({ query, user }) {
   ]);
   root.appendChild(header);
 
+  // Layout: en >=768px sidebar (320px) + gantt; en mobile se apila (sidebar
+  // debajo). El grid de 1 columna ya hace el apilamiento; lo que ajustamos
+  // es el ancho del sidebar (sin max-w en mobile) y el comportamiento del
+  // card de tickets (sin sticky en mobile — no hay nada al lado).
   const layout = h('div', { className: 'grid grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)] gap-5' });
-  const sidebar = h('div', { className: 'min-w-0 max-w-[320px] flex flex-col gap-4' });
+  const sidebar = h('div', { className: 'min-w-0 md:max-w-[320px] flex flex-col gap-4' });
   const calendarSection = h('div', { className: 'min-w-0 flex flex-col gap-4' });
 
-  const ticketCard = h('div', { className: 'card sticky top-6 flex min-h-0 flex-col gap-3 max-h-[calc(100vh-7rem)] overflow-hidden' });
+  // En mobile el card de tickets NO debe ser sticky: ocupa el ancho
+  // completo y la grid de gantt va debajo. En desktop vuelve a sticky
+  // para acompañar el scroll del gantt.
+  const ticketCard = h('div', { className: 'card md:sticky md:top-6 flex min-h-0 flex-col gap-3 md:max-h-[calc(100vh-7rem)] overflow-hidden' });
   ticketCard.appendChild(h('div.flex.items-center.justify-between.flex-shrink-0', {}, [
     h('h2.text-sm.font-semibold.text-brand-ink', {}, 'Tickets para agendar'),
     h('span.text-xs.text-slate-500', {}, 'Arrastra al día'),
@@ -150,8 +157,12 @@ export async function renderCalendar({ query, user }) {
 
   const boardShell = h('div.gantt-board-shell', {});
   boardShell.appendChild(weekInfo);
-  const boardGridWrapper = h('div.overflow-x-auto', {});
-  const boardGrid = h('div.gantt-board-grid', {});
+  // gantt-board-grid-wrapper activa el hint de scroll (gradiente) en CSS
+  // para <768px. min-w-[640px] fuerza a la grid interna a mantener sus
+  // proporciones (7 columnas × 100px mínimo) y al wrapper a scrollear
+  // horizontalmente — sin esto, en 320px las celdas se aplastan.
+  const boardGridWrapper = h('div.gantt-board-grid-wrapper.overflow-x-auto', {});
+  const boardGrid = h('div.gantt-board-grid', { style: { minWidth: '640px' } });
   boardGridWrapper.appendChild(boardGrid);
   boardShell.appendChild(boardGridWrapper);
   calendarCard.appendChild(boardShell);

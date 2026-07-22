@@ -291,7 +291,7 @@ Cada fase termina con un commit autocontenido y un smoke test. Si una fase falla
 | 6 | Reescritura de services: tickets, attachments, notifications, audit, calendar con company_id | 🔜 | 2 |
 | 7 | Permisos por empresa: role_permissions, requirePermission, aplicación en rutas | 🔜 | 1 |
 | 8 | Stats multi-tenant: dashboard scoped + endpoints cross-tenant para platform admin | 🔜 | 1 |
-| 9 | Vistas admin con scope: users, categories, audit, reports, dashboard, company-switcher | 🔜 | 1 |
+| 9 | Vistas admin con scope: users, categories, audit, reports, dashboard, company-switcher | ✅ (view /companies + docs/module-companies.md cerrados 2026-07-21; resto 🔜) | 1 |
 | 10 | Migración a prod: seed-multitenant.js, validación, cutover, **decisión DDL BIT vs INT** | 🔜 | 1 |
 | 11 | Limpieza: borrar firestoreData.js (si aplica), actualizar docs, docs/MULTITENANT.md | 🔜 | 0.5 |
 
@@ -402,6 +402,8 @@ src/app.js                                                  🔜 Fase 2
 
 ```
 client/components/company-switcher.js                       🔜 Fase 9
+client/views/companies.js                              ✅ Fase 9
+docs/module-companies.md                               ✅ Fase 9
 ```
 
 ### Frontend — modificar
@@ -450,6 +452,8 @@ PRODUCT.md                         — actualizar register=multi-tenant
 ## 13. Cierre
 
 Cuando las 11 fases estén verdes, el sistema pasa de "una empresa con un SAC" a "un grupo empresarial con N empresas, cada una con su propio SAC, y un Miguel Flores que ve y administra todas". El precio: ~10 sesiones de trabajo. El beneficio: la plataforma escala a "miles de tickets por día" sin reescritura, y Miguel puede vender el sistema a otras empresas del grupo sin tocar código de permisos.
+
+**Documentación detallada de la vista de empresas**: `docs/module-companies.md` (creada al cerrar Fase 9 — explica el view `/companies`, sus 3 modales, contratos HTTP y eventos realtime).
 
 **Recordatorio final:** si los tokens se acaban, este documento + la memoria de [[session-2026-07-21-multitenant-fase-0-1]] + el plan original multi-tenant son la fuente de verdad. Volver a leerlos antes de continuar cualquier fase pendiente.
 
