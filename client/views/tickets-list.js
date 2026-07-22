@@ -216,7 +216,7 @@ export async function renderTicketsList({ query, user }) {
 
   // data-list llama onMatchMediaChange después de un repaint; re-enganchamos
   // las filas para que el handler de teclado siga funcionando en desktop.
-  function onMediaChange(isMobile) {
+  function onMatchMediaChange(isMobile) {
     if (!isMobile) wireTableRows();
   }
 
