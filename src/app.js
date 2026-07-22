@@ -3,13 +3,34 @@
 const express = require('express');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
+const cors = require('cors');
 const path = require('path');
 
 const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
 
+// Origen permitido para CORS. En producción el frontend vive en Netlify
+// (https://ticketsgcm.netlify.app) y el backend en Render; la cookie de
+// sesión cruza dominios, así que necesitamos CORS con credentials: true y
+// sameSite: 'none' en la cookie (ver sessionMiddleware abajo).
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || (
+  config.env === 'production'
+    ? 'https://ticketsgcm.netlify.app'
+    : 'http://localhost:5173'
+);
+
 function createApp() {
   const app = express();
+
+  // CORS debe ir ANTES de sessionMiddleware para que las respuestas a
+  // preflight OPTIONS (POST con credentials) incluyan los headers correctos.
+  app.use(cors({
+    origin: ALLOWED_ORIGIN,
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    maxAge: 86400, // cache preflight 24h
+  }));
 
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
@@ -20,7 +41,11 @@ function createApp() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: 'lax',
+      // 'none' permite que la cookie viaje cross-site (Netlify → Render).
+      // Requiere secure: true — los browsers rechazan 'none' sin HTTPS.
+      // En dev local (config.env !== 'production') mantenemos 'lax' porque
+      // secure: true sobre HTTP hace que el browser descarte la cookie.
+      sameSite: config.env === 'production' ? 'none' : 'lax',
       secure: config.env === 'production',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 días
     },

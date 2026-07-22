@@ -1,0 +1,31 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Sube este repo a render.com/new y detecta este archivo automáticamente.
+# Variables de entorno:
+#   - SESSION_SECRET: auto-generado por Render (generateValue: true).
+#   - FIREBASE_SERVICE_ACCOUNT: pegar JSON del service account minificado
+#     en el dashboard de Render (Environment → Add Secret File o env var).
+#     El JSON no debe tener saltos de línea.
+services:
+  - type: web
+    name: tickets-gcm-api
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: pnpm install --frozen-lockfile
+    startCommand: node src/server.js
+    healthCheckPath: /api/auth/me
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: FIREBASE_PROJECT_ID
+        value: ticketsgcm
+      - key: ALLOWED_ORIGIN
+        value: https://ticketsgcm.netlify.app
+      # FIREBASE_SERVICE_ACCOUNT se setea manualmente en el dashboard
+      # (Sync: false evita que Render intente leerlo del blueprint).
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false

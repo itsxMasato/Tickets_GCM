@@ -47,6 +47,9 @@ export const api = {
     login:  (body)    => request('POST', '/api/auth/login',  { body }),
     logout: ()        => request('POST', '/api/auth/logout', {}),
     me:     ()        => request('GET',  '/api/auth/me'),
+    // Canje de ID token de Firebase Auth por sesión local (cookie connect.sid).
+    // Usado en producción cuando el frontend está en Netlify y el backend en Render.
+    firebase: (body)  => request('POST', '/api/auth/firebase', { body }),
   },
   users: {
     list:    (q = {})     => request('GET',    '/api/users?' + new URLSearchParams(q)),

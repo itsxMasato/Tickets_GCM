@@ -2,6 +2,7 @@
 import { h } from '../utils/dom.js';
 import { api } from '../api.js';
 import { svg } from '../utils/icons.js';
+import { signInWithFirebaseEmail } from '../firebase.js';
 import {
   BrandLockup,
   LoginField,
@@ -241,15 +242,33 @@ export async function renderLogin({ params, query, onLogin }) {
 
     setBusy(true);
     try {
-      const { user: u } = await api.auth.login({ username: user, password: pass });
+      // Flujo Firebase Auth + canje por sesión local.
+      // 1) Autenticar contra Firebase Auth (cliente).
+      // 2) Canjear el ID token por una cookie de sesión en el backend.
+      // El endpoint /api/auth/firebase vive en src/routes/auth.routes.js y
+      // mapea el email verificado contra el usuario local en Firestore.
+      const { idToken } = await signInWithFirebaseEmail(user, pass);
+      const { user: u } = await api.auth.firebase({ idToken });
       if (nextUrl) {
         try { sessionStorage.setItem('gcm:postLoginNext', nextUrl); } catch {}
       }
       onLogin?.(u);
     } catch (err) {
       state.attempts += 1;
-      showError(describeError(err));
-      if (err.status === 401) {
+      // Mapear errores específicos de Firebase Auth a mensajes legibles.
+      const code = err.code || '';
+      let mapped = err;
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+        mapped = Object.assign(new Error('invalid_credentials'), { status: 401 });
+      } else if (code === 'auth/too-many-requests') {
+        mapped = Object.assign(new Error('rate_limited'), { status: 429 });
+      } else if (code === 'auth/network-request-failed') {
+        mapped = Object.assign(new Error('network_error'), {});
+      } else if (!err.status && code.startsWith('auth/')) {
+        mapped = Object.assign(new Error('invalid_credentials'), { status: 401 });
+      }
+      showError(describeError(mapped));
+      if (mapped.status === 401) {
         passInput.focus();
         try { passInput.select(); } catch {}
       }
