@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 ﻿'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -7,7 +8,9 @@ const { notFoundError, forbiddenError } = require('../utils/validators');
 
 function canViewTicket(ticket, user) {
   if (!user) return false;
-  if (user.role === 'admin_area' || user.role === 'sac') return true;
+  if (user.role === 'sac') return true;
+  if (user.role === 'jefe_inmediato') return ticket.status === 'solucionado';
+  if (user.role === 'admin_area') return true;
   if (ticket.assigned_to && ticket.assigned_to === user.id) return true;
   if (ticket.created_by && ticket.created_by === user.id) return true;
   return false;

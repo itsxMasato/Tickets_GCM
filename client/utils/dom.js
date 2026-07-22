@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Utilidades para crear nodos DOM con hiperscript ligero y escapar HTML
 export function escapeHtml(value) {
   if (value === null || value === undefined) return '';

@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Permisos del frontend — espejo simple de la lógica del backend
 // user: { id, role, area }
 
@@ -17,7 +18,8 @@ export function canCreateTicket(user) {
 
 export function canSeeTicket(user, ticket) {
   if (!user || !ticket) return false;
-  if (isSAC(user) || isJefe(user)) return true;
+  if (isSAC(user)) return true;
+  if (isJefe(user)) return ticket.status === 'solucionado';
   if (isAdmin(user)) return sameId(ticket.assigned_to, user.id) || sameId(ticket.created_by, user.id);
   if (isSupervisor(user)) return sameId(ticket.created_by, user.id);
   return false;
@@ -80,3 +82,10 @@ export function canManageUsers(user)    { return isSAC(user); }
 export function canManageCategories(user) { return isSAC(user); }
 export function canViewReports(user)    { return isSAC(user) || isJefe(user); }
 export function canViewAllTickets(user) { return isSAC(user) || isJefe(user); }
+
+// Multi-tenant (Fase 3 visible). El flag `isPlatformAdmin` lo setea el
+// backend en `req.user` para sesiones con `users.is_platform_admin = 1`
+// (hoy solo Miguel Flores). La guarda es defensiva: el backend vuelve a
+// validar con `requirePlatformAdmin` en cada router de /api/companies/*.
+export function isPlatformAdmin(user) { return user?.isPlatformAdmin === true; }
+export function canManageCompanies(user) { return isPlatformAdmin(user); }

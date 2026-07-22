@@ -1,3 +1,4 @@
+﻿/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { go } from '../router.js';
@@ -13,22 +14,17 @@ import { exportTicketToPDF } from '../utils/exports.js';
 import { on as onSocket } from '../socket.js';
 import { backButton } from '../components/back-button.js';
 import { exportButton } from '../components/export-button.js';
-import { ICON } from '../utils/icons.js';
+import { ICON, svg } from '../utils/icons.js';
 import { attachmentThumb } from '../components/attachments.js';
 
 // Almacena el cleanup de listeners del ticket actual para limpiar cuando se desmonta
 let currentSocketCleanup = null;
-
-function svg(name, cls = 'w-4 h-4') {
-  return h(`svg.${cls}`, { fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON[name]}" />` });
-}
 
 export async function renderTicketDetail({ params, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
   const id = parseInt(params.id, 10);
   if (!id) { go('/tickets'); return root; }
 
-  // Cargar
   let ticket;
   try {
     const data = await api.tickets.get(id);
@@ -38,10 +34,8 @@ export async function renderTicketDetail({ params, user }) {
     return root;
   }
 
-  // Limpieza de socket previa (cuando se recarga el ticket dentro de la misma vista)
   if (currentSocketCleanup) { try { currentSocketCleanup(); } catch {} }
 
-  // Suscribirse a eventos de este ticket (per-ticket listeners)
   const offs = [];
   offs.push(onSocket('ticket:commented', async (p) => { if (p.ticketId === id) await reload(); }));
   offs.push(onSocket('attachment:added', async (p) => { if (p.ticketId === id) await reload(); }));
@@ -49,12 +43,12 @@ export async function renderTicketDetail({ params, user }) {
   offs.push(onSocket('ticket:assigned', async (p) => { if (p.ticketId === id) await reload(); }));
   offs.push(onSocket('ticket:updated', async (p) => { if (p.ticketId === id) await reload(); }));
 
-  // Guardar cleanup para futuras recarga (por-reload) y para desmontaje (por-mount)
   currentSocketCleanup = () => { offs.forEach((f) => f()); };
 
-  // Header
   const header = h('div.flex.flex-col.gap-4', {}, [
-    h('div.flex.items-start.justify-between.gap-3.flex-wrap', {}, [
+    // Header del ticket: en mobile (default flex-col) el título va arriba
+    // y los botones abajo; en >=768px vuelve a fila horizontal.
+    h('div.flex.flex-col.gap-3.md\\:flex-row.md\\:items-start.md\\:justify-between.md\\:gap-3', {}, [
       h('div.min-w-0.flex-1', {}, [
         h('div.flex.items-center.gap-2.text-sm.text-slate-500', {}, [
           backButton({ href: '/tickets', label: 'Volver a tickets' }),
@@ -71,7 +65,7 @@ export async function renderTicketDetail({ params, user }) {
           onclick: () => exportTicketToPDF(ticket),
         }),
         h('button.btn.btn-ghost', { onclick: reload, 'aria-label': 'Recargar', title: 'Recargar' }, [
-          svg('refresh'),
+          svg(h, ICON.refresh),
         ]),
       ]),
     ]),
@@ -115,7 +109,7 @@ export async function renderTicketDetail({ params, user }) {
             h('div.text-sm.font-semibold.text-slate-900', {}, PRIORITY_LABEL[ticket.priority] || ticket.priority),
           ]),
         ]),
-        h('div.mt-4.grid.grid-cols-1.gap-3 text-sm', {}, [
+        h('div.mt-4.grid.grid-cols-1.gap-3.text-sm', {}, [
           h('div', {}, [h('div.text-xs.text-slate-500', {}, 'Creado'), h('div.text-sm.font-semibold.text-slate-900', {}, `${formatDateTime(ticket.created_at)}`)]),
           h('div', {}, [h('div.text-xs.text-slate-500', {}, 'Actualizado'), h('div.text-sm.font-semibold.text-slate-900', {}, relativeFromNow(ticket.updated_at))]),
         ]),
@@ -124,32 +118,26 @@ export async function renderTicketDetail({ params, user }) {
   ]);
   root.appendChild(header);
 
-  // Layout 2 columnas
   const layout = h('div.grid.grid-cols-1.lg\\:grid-cols-3.gap-4', {});
-  // Columna central (chat)
   const center = h('div.lg\\:col-span-2.flex.flex-col.gap-3', {});
-  // Columna derecha (sidebar info + acciones)
   const right = h('div.flex.flex-col.gap-3', {});
 
-  // Descripción completa del reporte — destacada arriba del chat para que
-  // el asignado vea de un vistazo la información que se llenó al crear
-  // (la `description` NO se muestra en el chat como mensaje normal porque
-  // queda enterrada bajo adjuntos y comentarios posteriores).
   const descCard = h('div.card', {}, [
     h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Descripción del reporte'),
     h('p.text-sm.text-slate-800.whitespace-pre-wrap.leading-relaxed', {}, ticket.description || '—'),
   ]);
   center.appendChild(descCard);
 
-  // Chat
   const chat = h('div.card', {});
   chat.appendChild(h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Historial · chat del ticket'));
-  const chatBox = h('div.max-h-\\[60vh\\].overflow-y-auto.rounded-md.bg-slate-50.p-2', {});
+  // chat-scroll-internal: overscroll-behavior:contain evita que el scroll
+  // del chat se propague al body en iOS (rebote contra el header). El
+  // max-h se mantiene en 60vh para que el header del ticket siga visible
+  // en desktop; en mobile, el shell del modal/lista provee su propio scroll.
+  const chatBox = h('div.chat-scroll-internal.max-h-\\[60vh\\].overflow-y-auto.rounded-md.bg-slate-50.p-2', {});
   chat.appendChild(chatBox);
-  // Descripción como primer mensaje del chat
   chatBox.appendChild(renderChat({ ticket, user }));
 
-  // Composer
   if (canComment(user, ticket) || canUpload(user, ticket)) {
     chat.appendChild(chatComposer({
       ticketId: ticket.id,
@@ -163,7 +151,6 @@ export async function renderTicketDetail({ params, user }) {
   }
   center.appendChild(chat);
 
-  // Sidebar
   right.appendChild(renderSidebarInfo(ticket, user));
   right.appendChild(renderActions(ticket, user, reload));
 
@@ -175,10 +162,6 @@ export async function renderTicketDetail({ params, user }) {
     try {
       const data = await api.tickets.get(id);
       Object.assign(ticket, data.ticket);
-      // Re-renderiza la página (esto disparará el cleanup anterior automáticamente).
-      // Antes: parent.innerHTML='' directo dejaba los listeners de socket del
-      // root anterior enganchados (no ejecutaba _gcmCleanup). Ahora invocamos
-      // el cleanup explícitamente antes de sustituir.
       if (typeof root._gcmCleanup === 'function') {
         try { root._gcmCleanup(); } catch {}
       }
@@ -193,7 +176,6 @@ export async function renderTicketDetail({ params, user }) {
     }
   }
 
-  // Asignar cleanup al elemento root para ejecutar cuando se navegue fuera de ticket-detail
   root._gcmCleanup = () => {
     if (currentSocketCleanup) {
       try { currentSocketCleanup(); } catch {}
@@ -212,7 +194,7 @@ function renderSidebarInfo(ticket) {
   const info = h('div.card', {}, [
     h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Información'),
     row('Código', ticket.code, true),
-    row('Creado por', `${ticket.created_by_name || '—'}${ticket.created_by_role ? ` (${getRoleLabel(ticket.created_by_role)})` : ''}`),
+    row('Creado por', `${ticket.created_by_name || '—'}${ticket.created_by_role ? ` — ${getRoleLabel(ticket.created_by_role)}` : ''}`),
     row('Asignado a', ticket.assigned_to_name || '—'),
     row('Categoría', ticket.category_name || '—'),
     row('Área', AREA_LABEL[ticket.area] || '—'),
@@ -220,8 +202,6 @@ function renderSidebarInfo(ticket) {
     row('Actualizado', relativeFromNow(ticket.updated_at)),
     row('Cerrado', ticket.closed_at ? formatDateTime(ticket.closed_at) : '—'),
   ]);
-  // Adjuntos subidos al crear o durante el ciclo de vida del ticket.
-  // `ticket.attachments` ya viene populado desde firestoreData.getTicketDetail.
   if (ticket.attachments?.length > 0) {
     info.appendChild(h('h4.text-xs.font-semibold.text-slate-700.mt-3.mb-2.uppercase.tracking-wider', {}, 'Adjuntos'));
     const list = h('ul.flex.flex-col.gap-1\\.5', {});
@@ -238,29 +218,31 @@ function renderActions(ticket, user, onChange) {
   actions.appendChild(h('h3.text-sm.font-semibold.text-slate-700', {}, 'Acciones'));
   const wrap = h('div.flex.flex-col.gap-2', {});
 
-  // Asignar / reasignar
   if (canAssign(user)) {
     wrap.appendChild(h('button.btn.btn-secondary.btn-sm.justify-start.gap-2', { onclick: () => openAssignModal(ticket, onChange) }, [
-      svg('user', 'w-4 h-4'),
+      svg(h, ICON.user, 'w-4 h-4'),
       'Asignar / Reasignar',
     ]));
   }
 
-  // Cambiar estado
+  wrap.appendChild(h('button.btn.btn-secondary.btn-sm.justify-start.gap-2', { onclick: () => addToMyCalendar(ticket, onChange) }, [
+    svg(h, ICON.calendar, 'w-4 h-4'),
+    'Agregar a mi calendario',
+  ]));
+
   const nexts = nextStates(user, ticket);
   for (const s of nexts) {
     const label = STATUS_LABEL[s] || s;
     const cls = s === 'cerrado' ? 'btn-accent btn-sm justify-start gap-2' : s === 'reabierto' ? 'btn-secondary btn-sm justify-start gap-2' : 'btn-primary btn-sm justify-start gap-2';
     wrap.appendChild(h('button.btn', { class: cls, onclick: () => changeStatus(ticket, s, onChange) }, [
-      svg('arrow', 'w-4 h-4'),
+      svg(h, ICON.arrow, 'w-4 h-4'),
       `Marcar como ${label}`,
     ]));
   }
 
-  // Editar metadatos (SAC o supervisor del ticket)
   if (canEditMeta(user, ticket)) {
     wrap.appendChild(h('button.btn.btn-ghost.btn-sm.justify-start.gap-2', { onclick: () => openEditModal(ticket, onChange) }, [
-      svg('edit', 'w-4 h-4'),
+      svg(h, ICON.edit, 'w-4 h-4'),
       'Editar detalles',
     ]));
   }
@@ -272,14 +254,35 @@ function renderActions(ticket, user, onChange) {
   return actions;
 }
 
+async function addToMyCalendar(ticket, onChange) {
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  start.setHours(10, 0, 0, 0);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  try {
+    await api.calendar.create({
+      title: `${ticket.code || 'Ticket'} · ${ticket.title}`,
+      notes: ticket.description || null,
+      start_at: start.toISOString(),
+      end_at: end.toISOString(),
+      ticket_id: ticket.id,
+      color: 'ocean',
+    });
+    toast('Evento agregado a tu calendario.', 'success');
+    onChange?.();
+  } catch (e) {
+    toast(e.message || 'No se pudo agregar el ticket al calendario.', 'error');
+  }
+}
+
 async function openAssignModal(ticket, onChange) {
   let users = [];
   try { users = (await api.users.list({ active: true })).users.filter((u) => u.role === 'admin_area' || u.role === 'jefe_inmediato'); } catch {}
   const sel = h('select.input', {}, [
     h('option', { value: '' }, '— Selecciona un encargado —'),
-    ...users.map((u) => h('option', { value: String(u.id) }, `${u.full_name} (${getRoleLabel(u.role)}${u.area ? ` · ${AREA_LABEL[u.area] || u.area}` : ''})`)),
+    ...users.map((u) => h('option', { value: String(u.id) }, `${u.full_name} — ${getRoleLabel(u.role)}${u.area ? ` · ${AREA_LABEL[u.area] || u.area}` : ''}`)),
   ]);
-  const notes = h('textarea.input', { rows: '3', placeholder: 'Notas para el encargado (opcional)' });
+  const notes = h('textarea.input', { rows: '3', placeholder: 'Notas para el encargado — opcional' });
   const error = h('div.hidden.text-sm.text-red-600', {});
   const body = h('div.flex.flex-col.gap-3', {}, [
     h('div', {}, [h('label.label', {}, 'Asignar a'), sel]),
@@ -322,11 +325,10 @@ async function changeStatus(ticket, next, onChange) {
     });
     return;
   }
-  // Estado intermedio: pedimos comentario opcional
-  const comment = h('textarea.input', { rows: '3', placeholder: 'Comentario (opcional)' });
+  const comment = h('textarea.input', { rows: '3', placeholder: 'Comentario — opcional' });
   const body = h('div.flex.flex-col.gap-3', {}, [
     h('p.text-sm.text-slate-600', { html: `Vas a cambiar el estado a <b>${escapeHtml(label)}</b>.` }),
-    h('div', {}, [h('label.label', {}, 'Comentario (opcional)'), comment]),
+    h('div', {}, [h('label.label', {}, 'Comentario — opcional'), comment]),
   ]);
   const actions = (close) => [
     h('button.btn.btn-ghost', { onclick: close }, 'Cancelar'),

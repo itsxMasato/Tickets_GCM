@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
@@ -176,8 +177,7 @@ export async function renderNotifications({ user }) {
             : null,
         ],
       );
-      // Diferenciar leídas vs no-leídas: la marca ya no es una franja lateral
-      // (eso era el tell #1 de AI-generated UI y el DESIGN.md §6 lo prohíbe).
+      // Diferenciar leídas vs no-leídas: la marca ya no es una franja lateral.
       // No-leídas: bg-accent/5 (tinte de acento de fondo) + título en negrita.
       // Leídas: opacity reducida.
       if (n.read) card.classList.add('opacity-60');

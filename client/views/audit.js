@@ -1,7 +1,10 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { formatDateTime } from '../utils/format.js';
 import { emptyState } from '../components/empty-state.js';
+import { setFilterInUrl, clearFiltersInUrl } from '../utils/url-filters.js';
+import { activeFiltersChips } from '../components/active-filters-chips.js';
 
 const spinnerHtml = '<svg class="animate-spin w-5 h-5 text-brand-navy" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
 
@@ -39,7 +42,7 @@ function badgeColor(actionType) {
   return colors[actionType] || 'bg-slate-100 text-slate-700';
 }
 
-export async function renderAudit({ user }) {
+export async function renderAudit({ query, user }) {
   const root = h('div.space-y-6', {});
 
   // ── Header ────────────────────────────────────────────────────────────
@@ -51,21 +54,33 @@ export async function renderAudit({ user }) {
   // ── Filtros ───────────────────────────────────────────────────────────
   const filterCard = h('div.card.bg-white.rounded-xl.border.border-surface-border.p-5', {});
 
+  // Filtros con valores iniciales de URL
+  const filters = {
+    search: query?.search || '',
+    user_id: query?.user_id || '',
+    action_type: query?.action_type || '',
+    date_from: query?.date_from || '',
+    date_to: query?.date_to || '',
+  };
+
   const search = h('input.input', {
     type: 'search',
     placeholder: 'Buscar por código o descripción…',
+    value: filters.search,
   });
 
   const userSelect = h('select.input', {}, [
     h('option', { value: '' }, '— Todos los usuarios —'),
   ]);
+  userSelect.value = filters.user_id;
 
   const actionSelect = h('select.input', {}, [
     h('option', { value: '' }, '— Todos los tipos —'),
   ]);
+  actionSelect.value = filters.action_type;
 
-  const dateFrom = h('input.input', { type: 'date' });
-  const dateTo = h('input.input', { type: 'date' });
+  const dateFrom = h('input.input', { type: 'date', value: filters.date_from });
+  const dateTo = h('input.input', { type: 'date', value: filters.date_to });
   const applyBtn = h('button.btn.btn-primary', {}, 'Aplicar');
   const clearBtn = h('button.btn.btn-secondary', {}, 'Limpiar');
 
@@ -79,6 +94,10 @@ export async function renderAudit({ user }) {
 
   filterCard.appendChild(h('div.flex.gap-2.mt-4.flex-wrap', {}, [applyBtn, clearBtn]));
   root.appendChild(filterCard);
+
+  // Mostrar filtros activos como chips
+  const filtersChipsWrap = h('div.flex.gap-2.items-center.flex-wrap', {});
+  root.appendChild(filtersChipsWrap);
 
   // ── KPI Cards ─────────────────────────────────────────────────────────
   const kpiContainer = h('div.grid.grid-cols-1.md:grid-cols-3.gap-4', {});
@@ -134,11 +153,13 @@ export async function renderAudit({ user }) {
             h('tr.hover:bg-slate-50.transition-colors.duration-150', {}, [
               h('td.px-5.py-3.text-slate-600.text-xs.font-mono', {}, formatDateTime(record.created_at)),
               h('td.px-5.py-3.text-slate-800.font-medium.text-sm', {}, record.user_name || '—'),
-              h(`td.px-5.py-3 span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.${badgeColor(record.action_type)}`, {},
-                formatActionType(record.action_type)
-              ),
+              h('td.px-5.py-3', {}, [
+                h(`span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.${badgeColor(record.action_type)}`, {},
+                  formatActionType(record.action_type)
+                )
+              ]),
               h('td.px-5.py-3.text-brand-navy.font-mono.text-xs.font-medium', {}, record.target_code ? `#${record.target_code}` : '—'),
-              h('td.px-5.py-3.text-slate-700.text-xs.max-w-sm.truncate', { title: record.description },
+              h('td.px-5.py-3.text-slate-700.text-xs.max-w-sm', { title: record.description, style: 'max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' },
                 record.description || '—'
               ),
             ])
@@ -160,12 +181,26 @@ export async function renderAudit({ user }) {
     kpiContainer.innerHTML = '';
 
     try {
+      // Actualizar objeto de filtros
+      filters.search = search.value.trim();
+      filters.user_id = userSelect.value;
+      filters.action_type = actionSelect.value;
+      filters.date_from = dateFrom.value;
+      filters.date_to = dateTo.value;
+
+      // Guardar filtros en URL
+      setFilterInUrl('search', filters.search);
+      setFilterInUrl('user_id', filters.user_id);
+      setFilterInUrl('action_type', filters.action_type);
+      setFilterInUrl('date_from', filters.date_from);
+      setFilterInUrl('date_to', filters.date_to);
+
       const params = {
-        search: search.value.trim(),
-        user_id: userSelect.value,
-        action_type: actionSelect.value,
-        date_from: dateFrom.value,
-        date_to: dateTo.value,
+        search: filters.search,
+        user_id: filters.user_id,
+        action_type: filters.action_type,
+        date_from: filters.date_from,
+        date_to: filters.date_to,
         page: 1,
         limit: 100,
       };
@@ -181,9 +216,26 @@ export async function renderAudit({ user }) {
       });
 
       renderTable(result.data || []);
+
+      // Actualizar chips de filtros activos
+      filtersChipsWrap.innerHTML = '';
+      const chips = activeFiltersChips(filters, (filterKey) => {
+        filters[filterKey] = '';
+        const inputMap = {
+          'search': search,
+          'user_id': userSelect,
+          'action_type': actionSelect,
+          'date_from': dateFrom,
+          'date_to': dateTo,
+        };
+        if (inputMap[filterKey]) inputMap[filterKey].value = '';
+        setFilterInUrl(filterKey, '');
+        loadAudit();
+      });
+      if (chips) filtersChipsWrap.appendChild(chips);
     } catch (err) {
       tableContainer.innerHTML = `
-        <div class="card bg-red-50.border.border-red-200.rounded-xl.p-5.text-red-800">
+        <div class="card bg-red-50 border border-red-200 rounded-xl p-5 text-red-800">
           <h3 class="font-semibold text-sm mb-2">Error al cargar auditoría</h3>
           <p class="text-xs">${escapeHtml(err.message || 'No se pudo cargar el registro. Intenta de nuevo.')}</p>
         </div>
@@ -192,40 +244,67 @@ export async function renderAudit({ user }) {
   }
 
   function clearFilters() {
+    clearFiltersInUrl();
     search.value = '';
     userSelect.value = '';
     actionSelect.value = '';
     dateFrom.value = '';
     dateTo.value = '';
+    Object.assign(filters, { search: '', user_id: '', action_type: '', date_from: '', date_to: '' });
+    filtersChipsWrap.innerHTML = '';
     loadAudit();
   }
 
   // Inicializar filtros
   async function initializeFilters() {
     try {
-      const [users, actions] = await Promise.all([
-        api.audit.activeUsers(),
-        api.audit.actionTypes(),
-      ]);
-
-      if (users && users.length > 0) {
-        users.forEach(u => {
-          userSelect.appendChild(h('option', { value: u.id }, u.full_name));
-        });
+      // Cargar usuarios: primero intenta audit.activeUsers(), luego api.users.list()
+      let users = [];
+      try {
+        const activeUsersResult = await api.audit.activeUsers();
+        users = activeUsersResult || [];
+      } catch (e) {
+        // Fallback: cargar desde api.users.list()
+        const usersResult = await api.users.list({ active: true });
+        users = usersResult?.users || [];
       }
 
+      // Cargar tipos de acción
+      let actions = [];
+      try {
+        actions = await api.audit.actionTypes() || [];
+      } catch (e) {
+        // Fallback: usar tipos conocidos
+        actions = ['ticket_created', 'ticket_assigned', 'ticket_status_changed', 'comment_added', 'attachment_added', 'user_created', 'user_modified', 'user_deleted', 'category_created', 'category_modified', 'category_deleted'];
+      }
+
+      // Poblar select de usuarios
+      if (users && users.length > 0) {
+        users
+          .sort((a, b) => (a.full_name || a.name || '').localeCompare(b.full_name || b.name || ''))
+          .forEach(u => {
+            userSelect.appendChild(h('option', { value: u.id }, u.full_name || u.name || u.username));
+          });
+      }
+
+      // Poblar select de tipos de acción
       if (actions && actions.length > 0) {
         actions.forEach(a => {
           actionSelect.appendChild(h('option', { value: a }, formatActionType(a)));
         });
       }
 
+      // Restaurar valores de URL si existen
+      if (filters.user_id) userSelect.value = filters.user_id;
+      if (filters.action_type) actionSelect.value = filters.action_type;
+
       await loadAudit();
     } catch (err) {
+      console.error('Error inicializando filtros de auditoría:', err);
       tableContainer.innerHTML = `
-        <div class="card bg-red-50.border.border-red-200.rounded-xl.p-5.text-red-800">
+        <div class="card bg-red-50 border border-red-200 rounded-xl p-5 text-red-800">
           <h3 class="font-semibold text-sm mb-2">Error al cargar datos</h3>
-          <p class="text-xs">No se pudieron cargar los usuarios y tipos de acción.</p>
+          <p class="text-xs">${escapeHtml(err.message || 'No se pudieron cargar los usuarios y tipos de acción.')}</p>
         </div>
       `;
     }
@@ -235,11 +314,15 @@ export async function renderAudit({ user }) {
   applyBtn.addEventListener('click', loadAudit);
   clearBtn.addEventListener('click', clearFilters);
   search.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') loadAudit();
+    if (e.key === 'Enter') e.preventDefault(), loadAudit();
   });
+  userSelect.addEventListener('change', loadAudit);
+  actionSelect.addEventListener('change', loadAudit);
+  dateFrom.addEventListener('change', loadAudit);
+  dateTo.addEventListener('change', loadAudit);
 
   initializeFilters();
 
-  return root;
+  return { view: root };
 }
 

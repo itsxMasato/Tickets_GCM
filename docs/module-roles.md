@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Módulo `/roles` — Roles y permisos
 
 > Vista administrativa (solo SAC) para editar los permisos de cada rol. Los cambios aplican en vivo a toda la sesión GCM.
@@ -7,7 +9,7 @@
 - **Quién entra aquí:** usuarios con `role: 'sac'`. El guard de frontend en `client/main.js` lo aplica como `SAC_ONLY`; el backend lo refuerza con `requireRole('sac')` en `src/routes/roles.routes.js`.
 - **Qué se hace aquí:** activar o desactivar 6 capacidades operativas (PERMISSION_KEYS) por cada uno de los 4 roles del sistema (`sac`, `jefe_inmediato`, `admin_area`, `supervisor_campo`).
 - **Por qué existe:** porque el sistema funciona como sala de control distribuida (NORTH_STAR) y el SAC debe poder ajustar autoridad sin redeploy. La autoridad por rol se documenta en `client/utils/format.js → ROLE_LABEL` y se usa en sidebar y tickets.
-- **Qué NO hace:** no crea ni elimina roles (la colección de roles es fija), no toca usuarios individuales (eso es `/users`), no audita operaciones de tickets (eso es `/audit`).
+- **Qué NO hace:** no crea nuevos roles (los 4 son fijos y se enumeran en `validators.ROLES`), no toca usuarios individuales (eso es `/users`), no audita operaciones de tickets (eso es `/audit`). Sí puede **eliminar** roles y permisos existentes (ver §5) — la creación queda fuera por contrato, la eliminación sí está cubierta.
 
 ## 2. Modelo de datos
 
@@ -123,9 +125,18 @@ GET    /api/roles/:role         → 200 { role, permissions }
 PATCH  /api/roles/:role         → 200 { role, permissions }
        body: { perms: { manageUsers, manageCategories, viewReports,
                         viewAllTickets, createTicket, assign } }   // los 6, siempre
+DELETE /api/roles/:role         → 204
+       body: { reassignTo: 'admin_area' }   // requerido si el rol tiene usuarios
+DELETE /api/roles/permissions/:key → 204
+       body: { replacement: 'createTicket' } // requerido si el permiso está activo en algún rol
 ```
 
-El body es siempre completo (los 6 permisos), no un diff. Esto es deliberado: un PATCH parcial podría borrar permisos no enviados en un cliente buggy. La normalización backend garantiza booleanos.
+El body del PATCH es siempre completo (los 6 permisos), no un diff. Esto es deliberado: un PATCH parcial podría borrar permisos no enviados en un cliente buggy. La normalización backend garantiza booleanos.
+
+**Reglas de los DELETE** (centralizadas en `src/services/roles.service.js → deleteRole / deletePermission`):
+- `DELETE /api/roles/:role`: `role === 'sac'` → 403 `ROLE_PROTECTED` (inamovible). Si hay usuarios con ese rol y no llega `reassignTo` (o es inválido) → 409 `REASSIGN_REQUIRED`. Reasigna usuarios con `firestoreData.updateUser` en paralelo, luego borra `role_permissions/<role>`. Audit: `role_deleted`.
+- `DELETE /api/roles/permissions/:key`: si el permiso está en `DEFAULTS[role] === true` y el rol nunca se customizó → 409 `PERMISSION_IN_USE_BY_DEFAULT`. Si está activo en algún rol y no llega `replacement` → 409 `REPLACEMENT_REQUIRED`. Si el permiso es crítico (`manageUsers`, `assign`, `createTicket`), `replacement` debe estar activo en **todos** los roles donde estaba el permiso original → 409 `CRITICAL_PERMISSION_REQUIRES_FULL_COVERAGE` si falta alguno. Aplica el cambio con `batch.set(ref, { [key]: false, [replacement]: true }, { merge: true })`. Audit: `permission_deleted`.
+- Ambos emiten realtime: `role:deleted` y `permission:deleted` a `{ role: 'sac', broadcast: true }`.
 
 ### Back → Front (realtime)
 
@@ -159,6 +170,7 @@ Socket event `role:permissions_updated`:
 - **Mini-barra en KPIs en vez de número absoluto de permisos.** 6 puntitos brand-ocean/slate-200 comunican densidad de un vistazo; el texto `n/6 permisos` da el valor exacto.
 - **Críticos en Rojo Camarón.** `manageUsers`, `assign`, `createTicket` son los permisos que, al desactivarse, rompen una capacidad operativa real (no se pueden crear ni asignar tickets, ni gestionar el equipo). La etiqueta `Crítico` aparece junto al nombre del permiso y el dot es Rojo Camarón en el panel de pendientes, para que el SAC no se los pierda en un diff grande.
 - **Realtime silencioso cuando no hay diff.** Adoptar cambios en silencio + toast de 3s es mejor que interrumpir; el toast deja rastro.
+- **Eliminación de roles/permisos con wizard de 2 pasos.** Paso 1 muestra los afectados (usuarios con el rol / roles con el permiso) en una tabla compacta y obliga a elegir un destino. Paso 2 muestra el resumen y pide confirmación. El backend es la autoridad: devuelve 4xx con mensaje y el wizard lo refleja como toast de error (sin perder el modal). El botón de confirmación se deshabilita durante la llamada y se rehabilita si falla — no se cierra el wizard en error. Si el rol no tiene usuarios, paso 1 se salta (no hay reasignación que hacer).
 
 ## 7. Responsive & mobile
 
@@ -191,6 +203,7 @@ Socket event `role:permissions_updated`:
 
 - **Defaults sólo en backend.** Si el cliente lee antes de que el backend responda (no aplica aquí porque `loadAll` espera), no hay riesgo. Pero si en el futuro se hace un render optimista, hay que mover `DEFAULTS` a `client/utils/format.js` o similar.
 - **Footer usa `loadedAt` como proxy** de "última modificación" porque Firestore no expone `updatedAt` al cliente. El backend sí lo registra en audit; futuro: leer el último `audit.role_permissions_updated` para mostrar fecha real.
+- **Crear un rol o un permiso nuevos sigue fuera de alcance.** Los 4 roles y los 6 permisos son fijos; el wizard de 2 pasos cubre la eliminación pero no la creación. Si se quisiera añadir un rol, hay que tocar `validators.ROLES` (backend), `ROLE_LABEL`/`ROLE_ORDER`/`ROLE_DESCRIPTIONS` (cliente) y `DEFAULTS` (backend). La creación queda como evolución explícita, no como feature oculta.
 - **Sin re-intento en error parcial.** Si 2 de 4 PATCH fallan, mostramos el error y preservamos el diff. No hay auto-retry; el usuario decide cuándo reintentar.
 - **No hay vista de "historial de cambios por rol".** El audit registra todo (`/audit`), pero `/roles` no enlaza. Mejora futura: link "Ver historial" en cada card.
 - **Descripciones son autoritativas del front.** `PERMISSION_DESCRIPTIONS` y `ROLE_DESCRIPTIONS` viven en el cliente. Si el backend agrega un permiso o renombra un rol, hay que mantenerlas en sync. Mejora futura: que el backend devuelva `description` por permiso/rol y el cliente las use si están.

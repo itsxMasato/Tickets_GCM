@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Información Técnica del Sistema — Tickets GCM
 
 > Documento consolidado de arquitectura, stack y requisitos de conexión a la base de datos.

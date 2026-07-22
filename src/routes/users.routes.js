@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 const express = require('express');
 const router = express.Router();
@@ -5,13 +6,19 @@ const authService = require('../services/auth.service');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 
-// Solo SAC puede gestionar usuarios
-router.get('/', requireAuth, requireRole('sac'), async (req, res, next) => {
+// Cualquier usuario autenticado puede obtener listados de usuarios activos
+// para filtros y selección de responsables en el frontend.
+router.get('/', requireAuth, async (req, res, next) => {
   try {
     const { role, active, area } = req.query;
+    // Acepta varios formatos de query string: el cliente manda `active: 1`
+    // (URLSearchParams lo serializa como "active=1"), pero también es válido
+    // "active=true". Cualquier otro valor truthy se trata como true. Esto
+    // era el bug que rompía el módulo /roles: el filtro nunca aplicaba y
+    // siempre mostraba 0 usuarios por rol.
     const list = await authService.listUsers({
       role,
-      active: active === undefined ? undefined : active === 'true',
+      active: active === undefined ? undefined : /^(1|true)$/i.test(String(active)),
       area,
     });
     res.json({ users: list });

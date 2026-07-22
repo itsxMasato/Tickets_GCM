@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h } from '../utils/dom.js';
 import { renderSidebar } from './sidebar.js';
 import { renderTopbar } from './topbar.js';
@@ -29,29 +30,64 @@ function applyCollapsed(collapsed) {
 
 function applyMobileOpen(open) {
   document.body.classList.toggle('gcm-sidebar-open', !!open);
+  syncScrim();
 }
 
 function closeMobileSidebar() {
   applyMobileOpen(false);
 }
 
+// Crea/elimina el scrim del sidebar mobile. Se llama en cada cambio de estado
+// (boot, toggle, resize, click en link). En desktop el scrim no debe existir:
+// la regla CSS lo oculta con display:none, pero igual lo removemos del DOM
+// para no acumular nodos si el usuario rota el viewport.
+function syncScrim() {
+  if (typeof document === 'undefined') return;
+  const existing = document.getElementById('gcm-sidebar-scrim');
+  const mobile = isMobileViewport();
+  const open = document.body.classList.contains('gcm-sidebar-open');
+  if (mobile && open) {
+    if (existing) return;
+    const scrim = document.createElement('div');
+    scrim.id = 'gcm-sidebar-scrim';
+    scrim.className = 'gcm-sidebar-scrim';
+    scrim.setAttribute('aria-hidden', 'true');
+    scrim.addEventListener('click', closeMobileSidebar);
+    document.body.appendChild(scrim);
+    // Forzar reflow antes de la clase para que la transición de opacity corra.
+    requestAnimationFrame(() => scrim.classList.add('gcm-scrim-visible'));
+    return;
+  }
+  if (!existing) return;
+  existing.classList.remove('gcm-scrim-visible');
+  // Esperar la transición antes de remover (160ms coincide con el CSS).
+  setTimeout(() => {
+    // Re-verificar: puede que el usuario haya reabierto el sidebar durante
+    // la transición. En ese caso, conservamos el nodo.
+    if (existing.parentNode && !document.body.classList.contains('gcm-sidebar-open')) {
+      existing.remove();
+    }
+  }, 200);
+}
+
 export function renderLayout({ content, user, onLogout }) {
-  // Estado inicial: desktop abierto (empujando); mobile ABIERTO por defecto
-  // también — el usuario pidió explícitamente que el sidebar sea visible al
-  // cargar la app. El colapso (mini-rail) sólo aplica en desktop cuando el
-  // usuario lo haya preferido (persiste en localStorage).
+  // Estado inicial:
+  // - Desktop: columna fija; abierto por defecto, respeta preferencia de
+  //   colapso persistida en localStorage.
+  // - Mobile: CERRADO. El toggle hamburguesa del topbar es el único punto
+  //   de entrada. Patrón clásico de drawer modal con scrim.
   const isMobile = isMobileViewport();
   if (!isMobile) {
     applyCollapsed(readCollapsedPref());
   } else {
-    // En mobile forzamos abierto al cargar y limpiamos el estado colapsado
+    // En mobile forzamos cerrado al cargar y limpiamos el estado colapsado
     // para que un resize a desktop no herede el colapso accidental.
     applyCollapsed(false);
-    applyMobileOpen(true);
+    applyMobileOpen(false);
   }
 
-  // Sidebar: en mobile empuja al main (transform translateX), en desktop
-  // vive como columna flex fija. La función onClose la pasa el sidebar para
+  // Sidebar: en mobile es un drawer overlay con scrim; en desktop vive como
+  // columna flex fija del flujo. La función onClose la pasa el sidebar para
   // que un click en link cierre el drawer antes de navegar.
   const sidebar = renderSidebar({
     user,
@@ -69,7 +105,8 @@ export function renderLayout({ content, user, onLogout }) {
   ]);
 
   // ── Comportamiento del toggle ────────────────────────────────────────────
-  // Mobile: togglea estado abierto/cerrado (push — el main se reacomoda).
+  // Mobile: togglea estado abierto/cerrado del drawer overlay. Al abrir se
+  //          crea el scrim; al cerrar se desvanece y se remueve.
   // Desktop: alterna estado colapsado (mini-rail 64px). El main se REACOMODA
   //          porque la columna del sidebar cambia de ancho; el contenido se
   //          "empuja" naturalmente. Persiste en localStorage.
@@ -84,7 +121,8 @@ export function renderLayout({ content, user, onLogout }) {
     }
   };
 
-  // Esc cierra el sidebar mobile (push). No cerrar si hay un modal abierto.
+  // Esc cierra el sidebar mobile (drawer overlay). No cerrar si hay un modal
+  // abierto encima (otro [role="dialog"] ya en pantalla).
   const onKeydown = (e) => {
     if (e.key !== 'Escape') return;
     if (!isMobileViewport()) return;
@@ -94,15 +132,14 @@ export function renderLayout({ content, user, onLogout }) {
     closeMobileSidebar();
   };
 
-  // Resize: si cruzamos a desktop, descartamos el "open" mobile y aplicamos
-  // la preferencia persistida. Si cruzamos a mobile, dejamos el sidebar como
-  // esté (no forzamos — respetamos al usuario).
+  // Resize: si cruzamos a desktop, descartamos el "open" mobile (y con él el
+  // scrim) y aplicamos la preferencia de colapso persistida. Si cruzamos a
+  // mobile, no forzamos estado — el sidebar queda cerrado y el usuario debe
+  // usar el toggle hamburguesa para abrirlo.
   const onResize = () => {
     const mobile = isMobileViewport();
     if (!mobile) {
-      // Cruzamos a desktop: limpiamos el estado mobile y aplicamos el colapsado
-      // persistido. Por defecto = abierto.
-      applyMobileOpen(false);
+      applyMobileOpen(false); // también limpia el scrim via syncScrim()
       applyCollapsed(readCollapsedPref());
     }
   };

@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Sistema de Tickets GCM
 
 Sistema interno de tickets con flujo por áreas: **supervisor de campo → SAC → administrador de área → jefe inmediato**. Diseñado como "sala de control" para operación seria, con cuatro roles estrictamente delimitados y un historial tipo chat como sistema de registro.

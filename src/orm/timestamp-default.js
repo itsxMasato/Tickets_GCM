@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 
 const isSqliteFallback = process.env.DISABLE_MSSQL === 'true';

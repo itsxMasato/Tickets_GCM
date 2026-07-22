@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Pequeño helper para suscribirse al evento global 'gcm:realtime'
 // Devuelve un AbortController para simplificar el cleanup en vistas.
 export function subscribeToRealtime(handler) {

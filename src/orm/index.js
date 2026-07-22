@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 
 require('reflect-metadata');
@@ -41,14 +42,20 @@ module.exports = {
   getRepositorySync: factory.getRepositorySync,
 
   // Entidades
-  User:              Entities.User,
-  Category:          Entities.Category,
-  Ticket:            Entities.Ticket,
-  TicketAssignment:  Entities.TicketAssignment,
-  TicketComment:     Entities.TicketComment,
-  Attachment:        Entities.Attachment,
-  Notification:      Entities.Notification,
-  AuditLog:          Entities.AuditLog,
+  User:                    Entities.User,
+  Category:                Entities.Category,
+  Ticket:                  Entities.Ticket,
+  TicketAssignment:        Entities.TicketAssignment,
+  TicketComment:           Entities.TicketComment,
+  Attachment:              Entities.Attachment,
+  Notification:            Entities.Notification,
+  AuditLog:                Entities.AuditLog,
+  CalendarEvent:           Entities.CalendarEvent,
+  // Multi-tenant (Fase 1)
+  Company:                 Entities.Company,
+  CompanyArea:             Entities.CompanyArea,
+  UserCompanyMembership:   Entities.UserCompanyMembership,
+  RolePermission:          Entities.RolePermission,
 
   // Enums
   RoleEnum, ROLE_VALUES,

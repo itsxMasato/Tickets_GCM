@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import './styles.css';
 import { go } from './router.js';
 import { setState, getState } from './store.js';
@@ -20,6 +21,8 @@ import { renderNotifications } from './views/notifications.js';
 import { renderReports } from './views/reports.js';
 import { renderAudit } from './views/audit.js';
 import { renderRoles } from './views/roles.js';
+import { renderCalendar } from './views/calendar.js';
+import { renderCompanies } from './views/companies.js';
 
 // Registro de rutas (devuelven un { view, cleanup } o un HTMLElement)
 const handlers = {
@@ -34,6 +37,8 @@ const handlers = {
   '/reports':       ({ params, query, user }) => ({ view: renderReports({ params, query, user }) }),
   '/audit':         ({ params, query, user }) => ({ view: renderAudit({ params, query, user }) }),
   '/roles':         ({ params, query, user }) => ({ view: renderRoles({ params, query, user }) }),
+  '/calendar':      ({ params, query, user }) => ({ view: renderCalendar({ params, query, user }) }),
+  '/companies':     ({ params, query, user }) => ({ view: renderCompanies({ params, query, user }) }),
 };
 
 const app = document.getElementById('app');
@@ -80,14 +85,18 @@ function mount(node) {
 async function onLogin(user) {
   setState({ user });
   go('/dashboard');
-  try {
-    // Cargar labels de roles antes del primer render del sidebar/topbar
-    // (que los muestran). Si falla, la app sigue con defaults locales.
-    await initRoleLabels();
-    await connectSocket();
-    wireRealtime();
-    await refreshBell();
-  } catch {}
+  void (async () => {
+    try {
+      await initRoleLabels();
+    } catch {}
+    try {
+      await connectSocket();
+      wireRealtime();
+    } catch {}
+    try {
+      await refreshBell();
+    } catch {}
+  })();
 }
 
 async function onLogout() {
@@ -98,8 +107,12 @@ async function onLogout() {
 
 async function refreshBell() {
   try {
-    const { count } = await api.notifications.unreadCount();
-    const { notifications } = await api.notifications.list({ limit: 15 });
+    const [unreadRes, listRes] = await Promise.allSettled([
+      api.notifications.unreadCount(),
+      api.notifications.list({ limit: 15 }),
+    ]);
+    const count = unreadRes.status === 'fulfilled' ? (unreadRes.value?.count ?? 0) : 0;
+    const notifications = listRes.status === 'fulfilled' ? (listRes.value?.notifications ?? []) : [];
     setState({ unreadCount: count, notifications });
   } catch {}
 }
@@ -157,6 +170,18 @@ function wireRealtime() {
   });
   forward('category:created');
   forward('category:updated');
+  // Multi-tenant: refresca la vista /companies cuando otro platform admin
+  // (o una sesión del propio Miguel en otra pestaña) crea/edita empresas,
+  // áreas o membresías. Los emits viven en los 3 services correspondientes.
+  forward('company:created');
+  forward('company:updated');
+  forward('company:deleted');
+  forward('area:created');
+  forward('area:updated');
+  forward('area:deleted');
+  forward('membership:created');
+  forward('membership:updated');
+  forward('membership:deleted');
 
   // Reconexión: cuando el socket vuelve, sincroniza contador
   onSocket('connect', async () => { try { await refreshBell(); } catch {} });
@@ -226,6 +251,17 @@ async function dispatch(rawPath, query) {
     showAppWhenReady();
     return;
   }
+  // Guard separado para rutas de plataforma. Hoy solo /companies (gestión
+  // multi-tenant de Fase 3); si en el futuro /audit u otras se restringen
+  // a platform admin, se mueven a este set. Backend lo vuelve a validar
+  // con requirePlatformAdmin, así que esto es solo UX (evita el 403 visible).
+  const PLATFORM_ADMIN_ONLY = new Set(['/companies']);
+  if (PLATFORM_ADMIN_ONLY.has(rawPath) && getState().user?.isPlatformAdmin !== true) {
+    toast('No tienes permiso para acceder a esa sección.', 'error');
+    go('/dashboard');
+    showAppWhenReady();
+    return;
+  }
   // matchear
   for (const [pattern, fn] of Object.entries(handlers)) {
     if (pattern === '/login') continue;
@@ -257,11 +293,9 @@ function onHashChange() {
 }
 
 async function bootstrap() {
-  try {
-    await initializeFirebase();
-  } catch (error) {
+  void initializeFirebase().catch((error) => {
     console.warn('[firebase] No se pudo inicializar Firestore:', error);
-  }
+  });
 
   // Rehidratar sesión
   try {
@@ -276,12 +310,18 @@ async function bootstrap() {
   window.addEventListener('hashchange', onHashChange);
 
   if (getState().user) {
-    try {
-      await initRoleLabels();
-      await connectSocket();
-      wireRealtime();
-      await refreshBell();
-    } catch (e) { console.warn('socket:', e); }
+    void (async () => {
+      try {
+        await initRoleLabels();
+      } catch {}
+      try {
+        await connectSocket();
+        wireRealtime();
+      } catch {}
+      try {
+        await refreshBell();
+      } catch {}
+    })();
   }
 }
 

@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Auditor responsive/mobile de client/views/roles.js
 const fs = require('fs');
 const path = require('path');

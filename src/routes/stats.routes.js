@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 const express = require('express');
 const router = express.Router();
@@ -6,25 +7,25 @@ const auditService = require('../services/audit.service');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 
-// Dashboard global (solo SAC) — sigue con statsService sync (no migrado).
-router.get('/dashboard', requireAuth, requireRole('sac'), (req, res, next) => {
+// Dashboard global (solo SAC)
+router.get('/dashboard', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
-    res.json(statsService.dashboard());
+    res.json(await statsService.dashboard());
   } catch (err) { next(err); }
 });
 
-// Stats del usuario autenticado — sigue con statsService sync (no migrado).
-router.get('/me', requireAuth, (req, res, next) => {
+// Stats del usuario autenticado
+router.get('/me', requireAuth, async (req, res, next) => {
   try {
     const role = req.user.role;
     if (role === 'admin_area') {
-      return res.json(statsService.forUser(req.user.id, req.user));
+      return res.json(await statsService.forUser(req.user.id, req.user));
     }
     if (role === 'supervisor_campo') {
-      return res.json(statsService.forSupervisor(req.user.id));
+      return res.json(await statsService.forSupervisor(req.user.id));
     }
     if (role === 'jefe_inmediato') {
-      return res.json(statsService.forJefe(req.user.area));
+      return res.json(await statsService.forJefe(req.user.area));
     }
     return res.json({});
   } catch (err) { next(err); }

@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # Design System — GCM Tickets
 
 > Sistema visual del producto. Tokens, primitivas y reglas. Inspirado en la sobriedad operativa de Emil Kowalski (motion + craft), la jerarquía funcional de Linear y la verdad compositiva de Stripe.

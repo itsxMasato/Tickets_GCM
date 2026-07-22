@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 

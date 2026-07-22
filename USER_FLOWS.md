@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # User Flows — GCM Tickets
 
 > Los flujos de trabajo del producto. Cada flujo documenta: actores, trigger, pasos, estados intermedios, resultado, errores recuperables, y los eventos realtime que se disparan.

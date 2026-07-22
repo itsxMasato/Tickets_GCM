@@ -1,7 +1,9 @@
+﻿/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h } from '../utils/dom.js';
 import { statusBadge, priorityBadge } from './badge.js';
 import { relativeFromNow, PRIORITY_LABEL } from '../utils/format.js';
 import { go } from '../router.js';
+import { ICON, svg } from '../utils/icons.js';
 
 export function ticketCard(t) {
   return h('button.w-full.text-left.bg-white.border.border-surface-border.rounded-lg.p-3.hover\\:border-brand-ocean.hover\\:shadow-card.focus\\:outline-none.focus\\:ring-2.focus\\:ring-brand-ocean\\/30.transition', {
@@ -18,7 +20,7 @@ export function ticketCard(t) {
       h('span.text-slate-500', {}, `· ${relativeFromNow(t.created_at)}`),
     ]),
     t.assigned_to_name ? h('div.text-xs.text-slate-500.mt-1.5.flex.items-center.gap-1', {}, [
-      h('svg.w-3.h-3.text-slate-400.flex-none', { fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: '<path stroke-linecap="round" stroke-linejoin="round" d="M16 11a4 4 0 10-8 0 4 4 0 008 0zM4 21a8 8 0 0116 0"/>' }),
+      svg(h, ICON.user, 'w-3 h-3 text-slate-400 flex-none'),
       h('span.truncate', {}, `Asignado a: ${t.assigned_to_name}`),
     ]) : null,
   ]);

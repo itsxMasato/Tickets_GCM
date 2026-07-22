@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ['./client/**/*.{html,js}'],

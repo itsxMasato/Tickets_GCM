@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { go } from '../router.js';
@@ -7,11 +8,21 @@ import { AREA_LABEL } from '../utils/format.js';
 import { getRoleLabel } from '../utils/role-labels.js';
 import { ROLES, AREAS } from '../utils/permissions.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
+import { mountDataList } from '../components/data-list.js';
+
+const TABLE_COLUMNS = [
+  { key: 'username',   label: 'Usuario' },
+  { key: 'full_name',  label: 'Nombre' },
+  { key: 'role',       label: 'Rol' },
+  { key: 'area',       label: 'Área' },
+  { key: 'active',     label: 'Estado' },
+  { key: 'actions',    label: '' },
+];
 
 export async function renderUsers({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
-  root.appendChild(h('div.flex.items-center.justify-between', {}, [
+  root.appendChild(h('div.flex.items-center.justify-between.flex-wrap.gap-3', {}, [
     h('div', {}, [
       h('h1.text-2xl.font-bold.text-slate-800', {}, 'Usuarios'),
       h('p.text-sm.text-slate-500', {}, 'Crea, edita y activa cuentas del sistema.'),
@@ -21,66 +32,135 @@ export async function renderUsers({ user }) {
     ]),
   ]));
 
-  const tableWrap = h('div.table-wrap', {});
-  root.appendChild(tableWrap);
+  // data-list: tabla en >=768px, card-list en mobile. El wrapper es un div
+  // neutro; el componente decide qué inyectar según matchMedia.
+  const listWrap = h('div', {});
+  root.appendChild(listWrap);
 
-  async function reload() {
-    tableWrap.innerHTML = '<div class="card flex items-center justify-center gap-2 py-10 text-sm text-slate-600" role="status" aria-live="polite"><svg class="animate-spin w-4 h-4 text-brand-ocean" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg><span>Cargando usuarios…</span></div>';
+  let dataList = null;
+  let currentUsers = [];
+
+  function ensureDataList() {
+    if (dataList) return;
+    dataList = mountDataList({
+      wrapper: listWrap,
+      columns: TABLE_COLUMNS,
+      renderRow: tableRow,
+      renderMobileCard,
+      emptyState: emptyState({ ...EMPTY_STATES.users, className: 'py-10' }),
+      onMatchMediaChange(isMobile) { if (!isMobile) wireTableRows(); },
+    });
+  }
+
+  // Re-engancha los listeners de las filas desktop tras cada repaint.
+  // Sólo aplica en >=768px; el data-list reemplaza el HTML al cruzar el
+  // breakpoint, así que los handlers deben re-vincularse.
+  function wireTableRows() {
+    const rows = listWrap.querySelectorAll('tr[data-id]');
+    rows.forEach((tr) => {
+      const id = tr.dataset.id;
+      tr.addEventListener('click', () => onEdit(+id));
+      tr.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(+id); }
+      });
+      const editBtn = tr.querySelector('[data-edit]');
+      if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); onEdit(+id); });
+      const toggleBtn = tr.querySelector('[data-toggle]');
+      if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); onToggle(+id); });
+    });
+  }
+
+  async function onEdit(id) {
     try {
-      const { users } = await api.users.list();
-      draw(users);
+      const res = await api.users.get(id);
+      openEditModal(res.user, reload, user);
     } catch (e) {
-      tableWrap.innerHTML = `<div class="card p-8 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
+      toast(e.message, 'error');
     }
   }
 
-  function draw(users) {
-    if (!users.length) {
-      tableWrap.innerHTML = '';
-      tableWrap.appendChild(emptyState(EMPTY_STATES.users));
-      return;
-    }
+  function onToggle(id) {
+    const u = currentUsers.find((x) => x.id === id);
+    if (!u) return;
+    confirmModal({
+      title: u.active ? 'Desactivar usuario' : 'Activar usuario',
+      message: `¿${u.active ? 'Desactivar' : 'Activar'} a <b>${escapeHtml(u.full_name)}</b>?`,
+      confirmText: u.active ? 'Desactivar' : 'Activar',
+      onConfirm: async () => {
+        try { await api.users.update(id, { active: !u.active }); toast('Usuario actualizado', 'success'); reload(); } catch (e) { toast(e.message, 'error'); }
+      },
+    });
+  }
 
-    const rows = users.map((u) => `
-      <tr>
+  // Card mobile por usuario. Toda la card es un <button> principal que
+  // abre el detalle; los botones de acción van como <button> hijos con
+  // stopPropagation para no disparar el click del card.
+  function renderMobileCard(u) {
+    const card = h('button.card.text-left.flex.flex-col.gap-2.p-3.hover\\:border-brand-ocean.hover\\:shadow-card.focus\\:outline-none.focus\\:ring-2.focus\\:ring-brand-ocean\\/60.transition', {
+      onclick: () => onEdit(u.id),
+      'aria-label': `Editar ${escapeHtml(u.full_name || u.username)}`,
+    }, [
+      h('div.flex.items-center.justify-between.gap-2', {}, [
+        h('div.min-w-0', {}, [
+          h('div.font-medium.text-brand-ink.truncate', {}, escapeHtml(u.full_name || '—')),
+          h('div.text-xs.font-mono.text-slate-500', {}, escapeHtml(u.username || '')),
+        ]),
+        u.active
+          ? h('span.badge.bg-emerald-100.text-emerald-800', {}, 'Activo')
+          : h('span.badge.bg-slate-200.text-slate-700', {}, 'Inactivo'),
+      ]),
+      h('div.flex.flex-wrap.items-center.gap-2.text-xs.text-slate-500', {}, [
+        h('span.badge.bg-brand\\/10.text-brand', {}, escapeHtml(getRoleLabel(u.role))),
+        h('span', {}, '·'),
+        h('span', {}, escapeHtml(AREA_LABEL[u.area] || u.area || 'Sin área')),
+      ]),
+      // Acciones: stopPropagation para que no se abra el modal de edición.
+      h('div.flex.items-center.gap-2.mt-1', {}, [
+        h('button.btn.btn-secondary.btn-sm.flex-1', {
+          type: 'button',
+          onclick: (e) => { e.stopPropagation(); onEdit(u.id); },
+        }, 'Editar'),
+        h('button.btn.btn-ghost.btn-sm.flex-1', {
+          type: 'button',
+          class: u.active ? 'text-accent hover:bg-accent/10' : '',
+          onclick: (e) => { e.stopPropagation(); onToggle(u.id); },
+        }, u.active ? 'Desactivar' : 'Activar'),
+      ]),
+    ]);
+    return card;
+  }
+
+  function tableRow(u) {
+    return `
+      <tr class="cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:ring-inset" data-id="${escapeHtml(String(u.id))}" tabindex="0" role="link" aria-label="Editar ${escapeHtml(u.full_name || u.username)}">
         <td class="font-mono text-xs text-slate-500">${escapeHtml(u.username)}</td>
         <td>${escapeHtml(u.full_name)}</td>
         <td><span class="badge bg-brand/10 text-brand">${escapeHtml(getRoleLabel(u.role))}</span></td>
         <td>${escapeHtml(AREA_LABEL[u.area] || u.area || '—')}</td>
         <td>${u.active ? '<span class="badge bg-emerald-100 text-emerald-800">Activo</span>' : '<span class="badge bg-slate-200 text-slate-700">Inactivo</span>'}</td>
         <td class="text-right">
-          <button class="btn btn-ghost btn-sm" data-edit="${u.id}">Editar</button>
-          <button class="btn btn-ghost btn-sm text-accent hover:bg-accent/10" data-toggle="${u.id}">${u.active ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn btn-ghost btn-sm" data-edit>Editar</button>
+          <button class="btn btn-ghost btn-sm ${u.active ? 'text-accent hover:bg-accent/10' : ''}" data-toggle>${u.active ? 'Desactivar' : 'Activar'}</button>
         </td>
       </tr>
-    `).join('');
-    tableWrap.innerHTML = `
-      <table class="table">
-        <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Área</th><th>Estado</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
     `;
-      tableWrap.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', async () => {
-        const id = parseInt(b.dataset.edit, 10);
-        try {
-          const res = await api.users.get(id);
-          openEditModal(res.user, reload, user);
-        } catch (e) {
-          toast(e.message, 'error');
-        }
-      }));
-    tableWrap.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', async () => {
-      const id = parseInt(b.dataset.toggle, 10);
-      const u = users.find((x) => x.id === id);
-      confirmModal({
-        title: u.active ? 'Desactivar usuario' : 'Activar usuario',
-        message: `¿${u.active ? 'Desactivar' : 'Activar'} a <b>${escapeHtml(u.full_name)}</b>?`,
-        confirmText: u.active ? 'Desactivar' : 'Activar',
-        onConfirm: async () => {
-          try { await api.users.update(id, { active: !u.active }); toast('Usuario actualizado', 'success'); reload(); } catch (e) { toast(e.message, 'error'); }
-        },
-      });
-    }));
+  }
+
+  async function reload() {
+    ensureDataList();
+    dataList.update({ loading: true, items: [] });
+    try {
+      const { users } = await api.users.list();
+      currentUsers = users || [];
+      dataList.update({ loading: false, items: currentUsers });
+      // Doble rAF: primero el repaint del data-list, luego enganchamos.
+      if (typeof window !== 'undefined' && window.matchMedia && !window.matchMedia('(max-width: 767.95px)').matches) {
+        requestAnimationFrame(() => requestAnimationFrame(wireTableRows));
+      }
+    } catch (e) {
+      dataList.update({ loading: false, items: [] });
+      listWrap.innerHTML = `<div class="card p-8 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
+    }
   }
 
   await reload();
@@ -183,7 +263,7 @@ function openEditModal(u, onSaved, currentUser) {
     area,
   ]);
   const passwordField = h('div', {}, [
-    h('label.label', {}, isEdit ? 'Nueva contraseña (opcional)' : 'Contraseña *'),
+    h('label.label', {}, isEdit ? 'Nueva contraseña — opcional' : 'Contraseña *'),
     password,
     h('p.text-xs.text-slate-500.mt-1', {}, isEdit
       ? 'Déjala en blanco para mantener la contraseña actual.'

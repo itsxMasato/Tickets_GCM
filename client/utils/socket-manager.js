@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { connectSocket, on as onSocket, whenReady } from '../socket.js';
 
 // Subscribe a single event and return an unsubscribe function.

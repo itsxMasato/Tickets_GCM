@@ -158,10 +158,128 @@ function normalizeAttachment(row) {
   };
 }
 
-async function getCollection(collectionName) {
+/**
+ * Consulta Firestore con filtros, proyecciones y paginación limitada.
+ * Permite consultas escalables sin cargar toda la colección en memoria.
+ * Documentado por Miguel Flores.
+ */
+function compareFieldValues(a, b, direction = 'asc') {
+  if (a === b) return 0;
+  if (a === undefined || a === null) return 1;
+  if (b === undefined || b === null) return -1;
+  if (a > b) return direction === 'asc' ? 1 : -1;
+  if (a < b) return direction === 'asc' ? -1 : 1;
+  return 0;
+}
+
+function normalizeQueryRows(rows, orderBy, direction) {
+  if (!orderBy) return rows;
+  return rows.sort((a, b) => compareFieldValues(a[orderBy], b[orderBy], direction));
+}
+
+async function queryCollection(collectionName, whereClauses = [], options = {}) {
   const db = firestore.getFirestore();
-  const snapshot = await db.collection(collectionName).get();
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  let q = db.collection(collectionName);
+  for (const [field, op, value] of whereClauses) {
+    if (value === undefined || value === null) continue;
+    q = q.where(field, op, value);
+  }
+  if (Array.isArray(options.select) && options.select.length > 0) {
+    q = q.select(...options.select);
+  }
+  if (options.orderBy) {
+    q = q.orderBy(options.orderBy, options.direction || 'asc');
+  }
+  if (options.limit) {
+    q = q.limit(options.limit);
+  }
+
+  try {
+    const snapshot = await q.get();
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  } catch (err) {
+    const code = String(err.code || '').toLowerCase();
+    const isIndexError = code === 'failed-precondition' || (err.message || '').toLowerCase().includes('requires an index');
+    if (!isIndexError) throw err;
+
+    // Fallback para consultas que requieren un índice compuesto y que ya
+    // no están disponibles en el proyecto Firestore actual.
+    let fallbackQuery = db.collection(collectionName);
+    for (const [field, op, value] of whereClauses) {
+      if (value === undefined || value === null) continue;
+      fallbackQuery = fallbackQuery.where(field, op, value);
+    }
+    if (Array.isArray(options.select) && options.select.length > 0) {
+      fallbackQuery = fallbackQuery.select(...options.select);
+    }
+    const snapshot = await fallbackQuery.get();
+    let rows = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    if (options.orderBy) {
+      rows = normalizeQueryRows(rows, options.orderBy, options.direction || 'asc');
+    }
+    if (options.limit) {
+      rows = rows.slice(0, options.limit);
+    }
+    return rows;
+  }
+}
+
+/**
+ * Cuenta documentos en Firestore con filtros indexados.
+ * Usa count() cuando está disponible para minimizar el consumo.
+ * Documentado por Miguel Flores.
+ */
+async function countCollection(collectionName, whereClauses = []) {
+  const db = firestore.getFirestore();
+  let q = db.collection(collectionName);
+  for (const [field, op, value] of whereClauses) {
+    if (value === undefined || value === null) continue;
+    q = q.where(field, op, value);
+  }
+  if (typeof q.count === 'function') {
+    try {
+      const snapshot = await q.count().get();
+      return snapshot.data().count || 0;
+    } catch (err) {
+      const code = String(err.code || '').toLowerCase();
+      const isIndexError = code === 'failed-precondition' || (err.message || '').toLowerCase().includes('requires an index');
+      if (!isIndexError) throw err;
+    }
+  }
+  const snapshot = await q.get();
+  return snapshot.size;
+}
+
+/**
+ * Agrega recuentos por valor conocido sin necesidad de agrupar en el servidor.
+ * Ideal para métricas de estado, prioridad y área con millones de tickets.
+ * Documentado por Miguel Flores.
+ */
+async function countGroupByValues(collectionName, whereClauses = [], field, values = []) {
+  const counts = await Promise.all(values.map((value) => countCollection(collectionName, [...whereClauses, [field, '==', value]])));
+  return counts.map((c, index) => ({ [field]: values[index], c }));
+}
+
+/**
+ * Cuenta documentos por día usando rangos de fecha y filtros Firestore.
+ * Diseñado para calcular series temporales sin escanear la colección completa.
+ * Documentado por Miguel Flores.
+ */
+async function countByDay(collectionName, field, dates = []) {
+  const results = await Promise.all(dates.map(async (start) => {
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    const isoStart = start;
+    const isoEnd = end.toISOString().slice(0, 10);
+    const c = await countCollection(collectionName, [[field, '>=', isoStart], [field, '<', isoEnd]]);
+    return { day: start, c };
+  }));
+  return results;
+}
+
+async function findOneByFields(collectionName, clauses = []) {
+  const rows = await queryCollection(collectionName, clauses, { limit: 1 });
+  return rows[0] || null;
 }
 
 async function getDoc(collectionName, id) {
@@ -189,16 +307,6 @@ async function updateDoc(collectionName, id, patch) {
   return { id: snap.id, ...snap.data() };
 }
 
-async function findOne(collectionName, predicate) {
-  const items = await getCollection(collectionName);
-  return items.find(predicate) || null;
-}
-
-async function filterAll(collectionName, predicate) {
-  const items = await getCollection(collectionName);
-  return items.filter(predicate);
-}
-
 async function cacheById(collectionName, ids) {
   const result = {};
   if (!ids || !ids.length) return result;
@@ -215,24 +323,26 @@ async function getUserByIdentifier(identifier) {
   const normalized = normalizeString(identifier).toLowerCase();
   if (!normalized) return null;
 
-  let user = await findOne('users', (item) => item.username_lower === normalized || item.email_lower === normalized);
+  let user = await findOneByFields('users', [['username_lower', '==', normalized]]);
+  if (user) return user;
+
+  user = await findOneByFields('users', [['email_lower', '==', normalized]]);
   if (user) return user;
 
   if (normalized.includes('@')) {
     const local = normalized.split('@')[0];
-    user = await findOne('users', (item) => item.username_lower === local);
+    user = await findOneByFields('users', [['username_lower', '==', local]]);
   }
   return user;
 }
 
 async function listUsers({ role, active, area } = {}) {
-  const users = await getCollection('users');
-  return users.filter((user) => {
-    if (role && user.role !== role) return false;
-    if (active !== undefined && Boolean(user.active) !== Boolean(active)) return false;
-    if (area && user.area !== area) return false;
-    return true;
-  }).map(normalizeUser);
+  const clauses = [];
+  if (role) clauses.push(['role', '==', role]);
+  if (active !== undefined) clauses.push(['active', '==', active ? 1 : 0]);
+  if (area) clauses.push(['area', '==', area]);
+  const rows = await queryCollection('users', clauses);
+  return rows.map(normalizeUser);
 }
 
 async function getUserById(id) {
@@ -246,7 +356,10 @@ async function createUser({ username, password_hash, full_name, role, area, emai
   const normalizedEmail = normalizeString(email);
   const lowerEmail = normalizedEmail ? normalizedEmail.toLowerCase() : null;
 
-  const existing = await findOne('users', (item) => item.username_lower === lowerUsername || (lowerEmail && item.email_lower === lowerEmail));
+  let existing = await findOneByFields('users', [['username_lower', '==', lowerUsername]]);
+  if (!existing && lowerEmail) {
+    existing = await findOneByFields('users', [['email_lower', '==', lowerEmail]]);
+  }
   if (existing) {
     const error = new Error('El nombre de usuario ya existe.');
     error.code = 'CONFLICT';
@@ -299,8 +412,10 @@ async function updateUser(id, patch) {
 }
 
 async function listCategories(activeOnly = true) {
-  const rows = await getCollection('categories');
-  return rows.filter((row) => (activeOnly ? row.active : true)).map(normalizeCategory);
+  const clauses = [];
+  if (activeOnly) clauses.push(['active', '==', 1]);
+  const rows = await queryCollection('categories', clauses);
+  return rows.map(normalizeCategory);
 }
 
 async function getCategoryById(id) {
@@ -316,7 +431,7 @@ async function createCategory(name) {
     err.code = 'VALIDATION_ERROR';
     throw err;
   }
-  const existing = await findOne('categories', (item) => item.name_lower === lowerName);
+  const existing = await findOneByFields('categories', [['name_lower', '==', lowerName]]);
   if (existing) {
     const err = new Error('Ya existe una categoría con ese nombre.');
     err.code = 'VALIDATION_ERROR';
@@ -347,8 +462,8 @@ async function updateCategory(id, { name, active } = {}) {
       err.code = 'VALIDATION_ERROR';
       throw err;
     }
-    const exists = await findOne('categories', (item) => item.name_lower === normalizedName.toLowerCase() && item.id !== String(id));
-    if (exists) {
+    const exists = await findOneByFields('categories', [['name_lower', '==', normalizedName.toLowerCase()]]);
+    if (exists && String(exists.id) !== String(id)) {
       const err = new Error('Ya existe una categoría con ese nombre.');
       err.code = 'VALIDATION_ERROR';
       throw err;
@@ -377,36 +492,43 @@ async function createNotification({ user_id, type, ticket_id, title, body }) {
 }
 
 async function getUnreadCount(userId) {
-  const rows = await getCollection('notifications');
-  return rows.filter((row) => toId(row.user_id) === toId(userId) && !row.read).length;
+  return countCollection('notifications', [['user_id', '==', toId(userId)], ['read', '==', 0]]);
 }
 
 async function listNotificationsForUser(userId, { limit = 30, onlyUnread = false } = {}) {
-  const rows = await getCollection('notifications');
-  const filtered = rows.filter((row) => toId(row.user_id) === toId(userId) && (!onlyUnread || !row.read));
-  const sorted = filtered.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-  return sorted.slice(0, limit).map(normalizeNotification);
+  const clauses = [['user_id', '==', toId(userId)]];
+  if (onlyUnread) clauses.push(['read', '==', 0]);
+  const rows = await queryCollection('notifications', clauses, { orderBy: 'created_at', direction: 'desc', limit });
+  return rows.map(normalizeNotification);
 }
 
 async function markNotificationsRead(userId, { all = false, ids = [] } = {}) {
-  const rows = await getCollection('notifications');
-  const toUpdate = rows.filter((row) => {
-    if (toId(row.user_id) !== toId(userId)) return false;
-    if (all) return !row.read;
-    return ids.includes(toId(row.id));
-  });
   const db = firestore.getFirestore();
   const batch = db.batch();
-  for (const row of toUpdate) {
+  let rows = [];
+
+  if (all) {
+    rows = await queryCollection('notifications', [['user_id', '==', toId(userId)], ['read', '==', 0]]);
+  } else if (ids.length) {
+    const refs = ids.map((id) => db.collection('notifications').doc(String(id)));
+    const snaps = await db.getAll(...refs);
+    rows = snaps.filter((snap) => snap.exists).map((snap) => ({ id: snap.id, ...snap.data() }));
+  }
+
+  for (const row of rows) {
+    if (toId(row.user_id) !== toId(userId)) continue;
     batch.update(db.collection('notifications').doc(String(row.id)), { read: 1 });
   }
+  if (batch._ops && batch._ops.length === 0) {
+    return { updated: 0 };
+  }
   await batch.commit();
-  return { updated: toUpdate.length };
+  return { updated: rows.length };
 }
 
 async function logAudit(audit) {
   const now = firestore.nowSql();
-  await createDoc('audit_log', {
+  const doc = await createDoc('audit_log', {
     user_id: toId(audit.user_id),
     action_type: audit.action_type,
     target_type: audit.target_type,
@@ -418,29 +540,49 @@ async function logAudit(audit) {
     ip_address: audit.ip_address || null,
     created_at: now,
   });
+
+  const db = firestore.getFirestore();
+  const batch = db.batch();
+  if (audit.action_type) {
+    const actionTypeRef = db.collection('audit_action_types').doc(String(audit.action_type));
+    batch.set(actionTypeRef, { action_type: audit.action_type }, { merge: true });
+  }
+  if (audit.user_id) {
+    const userRef = db.collection('audit_active_users').doc(String(audit.user_id));
+    batch.set(userRef, {
+      user_id: toId(audit.user_id),
+      username: audit.user_name || null,
+      full_name: audit.user_name || null,
+    }, { merge: true });
+  }
+  if (batch._ops && batch._ops.length > 0) {
+    await batch.commit();
+  }
+  return doc;
 }
 
 async function listAudit({ page = 1, limit = 50, user_id = null, action_type = null, date_from = null, date_to = null, search = null } = {}) {
-  const rows = await getCollection('audit_log');
-  const filtered = rows.filter((row) => {
-    if (user_id && toId(row.user_id) !== toId(user_id)) return false;
-    if (action_type && row.action_type !== action_type) return false;
-    if (date_from && (!row.created_at || row.created_at < date_from)) return false;
-    if (date_to && (!row.created_at || row.created_at > date_to)) return false;
-    if (search) {
-      const needle = search.toLowerCase();
-      return (row.description || '').toLowerCase().includes(needle)
-        || (row.target_code || '').toLowerCase().includes(needle);
-    }
-    return true;
-  });
-  const userCache = {};
-  const userIds = Array.from(new Set(filtered.map((r) => String(r.user_id)).filter(Boolean)));
+  const clauses = [];
+  if (user_id) clauses.push(['user_id', '==', toId(user_id)]);
+  if (action_type) clauses.push(['action_type', '==', action_type]);
+  if (date_from) clauses.push(['created_at', '>=', date_from]);
+  if (date_to) clauses.push(['created_at', '<=', date_to]);
+
+  const fetchLimit = search ? Math.max(page * limit * 5, 500) : page * limit;
+  let rows = await queryCollection('audit_log', clauses, { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
+  if (search) {
+    const needle = search.toLowerCase();
+    rows = rows.filter((row) => (row.description || '').toLowerCase().includes(needle)
+      || (row.target_code || '').toLowerCase().includes(needle));
+  }
+
+  const total = search ? rows.length : await countCollection('audit_log', clauses);
+  const pageSlice = rows.slice((page - 1) * limit, page * limit);
+
+  const userIds = Array.from(new Set(pageSlice.map((r) => String(r.user_id)).filter(Boolean)));
   const users = await cacheById('users', userIds);
-  const data = filtered
-    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
-    .slice((page - 1) * limit, page * limit)
-    .map((row) => normalizeAudit({ ...row, user_name: users[String(row.user_id)]?.full_name || null }));
+  const data = pageSlice.map((row) => normalizeAudit({ ...row, user_name: users[String(row.user_id)]?.full_name || null }));
+
   const actionCounts = data.reduce((acc, r) => {
     acc[r.action_type] = (acc[r.action_type] || 0) + 1;
     return acc;
@@ -449,7 +591,7 @@ async function listAudit({ page = 1, limit = 50, user_id = null, action_type = n
   const activeUserCount = new Set(data.map((r) => r.user_id).filter(Boolean)).size;
   return {
     data,
-    total: filtered.length,
+    total,
     page,
     limit,
     mostFrequentAction,
@@ -458,13 +600,21 @@ async function listAudit({ page = 1, limit = 50, user_id = null, action_type = n
 }
 
 async function getActionTypes() {
-  const rows = await getCollection('audit_log');
-  return Array.from(new Set(rows.map((row) => row.action_type || ''))).filter(Boolean).sort();
+  const rows = await queryCollection('audit_action_types', [], { orderBy: 'action_type', direction: 'asc' });
+  if (rows.length > 0) {
+    return rows.map((row) => row.action_type).filter(Boolean);
+  }
+  const auditRows = await queryCollection('audit_log', [], { select: ['action_type'] });
+  return Array.from(new Set(auditRows.map((row) => row.action_type || ''))).filter(Boolean).sort();
 }
 
 async function getActiveAuditUsers() {
-  const rows = await getCollection('audit_log');
-  const userIds = Array.from(new Set(rows.map((r) => String(r.user_id)).filter(Boolean)));
+  const rows = await queryCollection('audit_active_users', [], { orderBy: 'full_name', direction: 'asc' });
+  if (rows.length > 0) {
+    return rows.map((user) => ({ id: toId(user.user_id), username: user.username, full_name: user.full_name }));
+  }
+  const auditRows = await queryCollection('audit_log', [], { select: ['user_id'] });
+  const userIds = Array.from(new Set(auditRows.map((r) => String(r.user_id)).filter(Boolean)));
   const users = await cacheById('users', userIds);
   return Object.values(users)
     .map((user) => ({ id: toId(user.id), username: user.username, full_name: user.full_name }))
@@ -526,29 +676,61 @@ async function createTicket({ title, description, category_id, priority }, user)
 }
 
 async function listTickets(filters, user, page = 1, limit = 25) {
-  const all = await getCollection('tickets');
-  const filtered = all.filter((ticket) => {
-    if (user.role === 'supervisor_campo' && toId(ticket.created_by) !== toId(user.id)) return false;
-    if (user.role === 'admin_area' && toId(ticket.assigned_to) !== toId(user.id) && toId(ticket.created_by) !== toId(user.id)) return false;
-    if (filters.status && ticket.status !== filters.status) return false;
-    if (filters.priority && ticket.priority !== filters.priority) return false;
-    if (filters.category_id && toId(ticket.category_id) !== toId(filters.category_id)) return false;
-    if (filters.assigned_to && toId(ticket.assigned_to) !== toId(filters.assigned_to)) return false;
-    if (filters.area && ticket.area !== filters.area) return false;
-    if (filters.date_from && ticket.created_at < filters.date_from) return false;
-    if (filters.date_to && ticket.created_at > filters.date_to) return false;
-    if (filters.search) {
-      const text = filters.search.toLowerCase();
-      return String(ticket.title).toLowerCase().includes(text)
-        || String(ticket.code).toLowerCase().includes(text)
-        || String(ticket.description).toLowerCase().includes(text);
+  const clauses = [];
+  if (filters.status) clauses.push(['status', '==', filters.status]);
+  if (filters.priority) clauses.push(['priority', '==', filters.priority]);
+  if (filters.category_id) clauses.push(['category_id', '==', toId(filters.category_id)]);
+  if (filters.assigned_to) clauses.push(['assigned_to', '==', toId(filters.assigned_to)]);
+  if (filters.area) clauses.push(['area', '==', filters.area]);
+  if (filters.date_from) clauses.push(['created_at', '>=', filters.date_from]);
+  if (filters.date_to) clauses.push(['created_at', '<=', filters.date_to]);
+  const search = filters.search ? String(filters.search).toLowerCase() : null;
+  const fetchLimit = search ? Math.max(page * limit * 5, 500) : page * limit;
+
+  let rows = [];
+  if (user.role === 'supervisor_campo') {
+    rows = await queryCollection('tickets', [['created_by', '==', toId(user.id)], ...clauses], { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
+  } else if (user.role === 'admin_area') {
+    const createdRows = await queryCollection('tickets', [['created_by', '==', toId(user.id)], ...clauses], { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
+    const assignedRows = await queryCollection('tickets', [['assigned_to', '==', toId(user.id)], ...clauses], { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
+    const map = new Map();
+    for (const ticket of [...createdRows, ...assignedRows]) {
+      map.set(String(ticket.id), ticket);
     }
-    return true;
-  });
-  const sorted = filtered.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-  const pageSlice = sorted.slice((page - 1) * limit, page * limit);
+    rows = Array.from(map.values()).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  } else if (user.role === 'jefe_inmediato') {
+    rows = await queryCollection('tickets', [...clauses], { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
+  } else {
+    rows = await queryCollection('tickets', clauses, { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
+  }
+
+  if (user.role === 'jefe_inmediato') {
+    rows = rows.filter((ticket) => ticket.status === 'solucionado');
+  }
+
+  if (search) {
+    rows = rows.filter((ticket) => {
+      const text = String(ticket.title).toLowerCase();
+      return text.includes(search)
+        || String(ticket.code || '').toLowerCase().includes(search)
+        || String(ticket.description || '').toLowerCase().includes(search);
+    });
+  }
+
+  const total = search || user.role === 'jefe_inmediato'
+    ? rows.length
+    : user.role === 'admin_area'
+      ? await countCollection('tickets', [['created_by', '==', toId(user.id)], ...clauses])
+        + await countCollection('tickets', [['assigned_to', '==', toId(user.id)], ...clauses])
+        - await countCollection('tickets', [['created_by', '==', toId(user.id)], ['assigned_to', '==', toId(user.id)], ...clauses])
+      : await countCollection('tickets', [
+        ...(user.role === 'supervisor_campo' ? [['created_by', '==', toId(user.id)]] : []),
+        ...clauses,
+      ]);
+
+  const pageSlice = rows.slice((page - 1) * limit, page * limit);
   const decorated = await Promise.all(pageSlice.map(decorateTicket));
-  return { total: filtered.length, page, limit, tickets: decorated };
+  return { total, page, limit, tickets: decorated };
 }
 
 async function getTicketDetail(id, user) {
@@ -556,13 +738,13 @@ async function getTicketDetail(id, user) {
   if (!ticket) return null;
   const decorated = await decorateTicket(ticket);
   const [assignments, comments, attachments] = await Promise.all([
-    getCollection('ticket_assignments'),
-    getCollection('ticket_comments'),
-    getCollection('attachments'),
+    queryCollection('ticket_assignments', [['ticket_id', '==', toId(id)]]),
+    queryCollection('ticket_comments', [['ticket_id', '==', toId(id)]]),
+    queryCollection('attachments', [['ticket_id', '==', toId(id)]]),
   ]);
-  const relatedAssignments = assignments.filter((a) => toId(a.ticket_id) === toId(id));
-  const relatedComments = comments.filter((c) => toId(c.ticket_id) === toId(id));
-  const relatedAttachments = attachments.filter((a) => toId(a.ticket_id) === toId(id));
+  const relatedAssignments = assignments;
+  const relatedComments = comments;
+  const relatedAttachments = attachments;
   const userIds = Array.from(new Set([
     ...relatedAssignments.map((a) => a.from_user_id),
     ...relatedAssignments.map((a) => a.to_user_id),
@@ -597,11 +779,17 @@ async function getTicketDetail(id, user) {
 
 async function generateUniqueCode() {
   const prefix = require('./utils/time').ticketCodeFor();
-  const tickets = await getCollection('tickets');
-  const matches = tickets.filter((ticket) => String(ticket.code || '').startsWith(prefix));
+  const db = firestore.getFirestore();
+  const end = `${prefix}\uf8ff`;
+  const snapshot = await db.collection('tickets')
+    .where('code', '>=', prefix)
+    .where('code', '<=', end)
+    .select(['code'])
+    .get();
   let seq = 1;
-  for (const ticket of matches) {
-    const parts = String(ticket.code).split('-');
+  for (const doc of snapshot.docs) {
+    const code = doc.data().code;
+    const parts = String(code).split('-');
     const n = parseInt(parts[parts.length - 1], 10);
     if (!Number.isNaN(n) && n >= seq) seq = n + 1;
   }
@@ -703,18 +891,15 @@ async function getCategoryActiveOrNull(id) {
 }
 
 async function listTicketAssignments(ticketId) {
-  const rows = await getCollection('ticket_assignments');
-  return rows.filter((row) => toId(row.ticket_id) === toId(ticketId));
+  return queryCollection('ticket_assignments', [['ticket_id', '==', toId(ticketId)]]);
 }
 
 async function listTicketComments(ticketId) {
-  const rows = await getCollection('ticket_comments');
-  return rows.filter((row) => toId(row.ticket_id) === toId(ticketId));
+  return queryCollection('ticket_comments', [['ticket_id', '==', toId(ticketId)]]);
 }
 
 async function listTicketAttachments(ticketId) {
-  const rows = await getCollection('attachments');
-  return rows.filter((row) => toId(row.ticket_id) === toId(ticketId));
+  return queryCollection('attachments', [['ticket_id', '==', toId(ticketId)]]);
 }
 
 async function assignTicket(id, to_user_id, user, notes) {
@@ -796,76 +981,90 @@ async function changeTicketStatus(id, next, comment, user) {
   return getTicketDetail(id, user);
 }
 
+/**
+ * Genera métricas del sistema para dashboard global.
+ * Optimiza consultas para 1,000,000+ tickets usando conteos indexados.
+ * Documentado por Miguel Flores.
+ */
 async function getStats() {
-  const tickets = await getCollection('tickets');
-  const users = await getCollection('users');
-  const categories = await getCollection('categories');
-  const byStatus = Object.entries(tickets.reduce((acc, ticket) => {
-    acc[ticket.status] = (acc[ticket.status] || 0) + 1;
-    return acc;
-  }, {})).map(([status, c]) => ({ status, c }));
-  const byPriority = Object.entries(tickets.reduce((acc, ticket) => {
-    acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
-    return acc;
-  }, {})).map(([priority, c]) => ({ priority, c }));
-  const byArea = Object.entries(tickets.reduce((acc, ticket) => {
-    const area = ticket.area || 'sin_area';
-    acc[area] = (acc[area] || 0) + 1;
-    return acc;
-  }, {})).map(([area, c]) => ({ area, c }));
-  const closedRows = tickets.filter((t) => t.closed_at);
-  const avgHours = closedRows.length
-    ? closedRows.reduce((acc, t) => {
+  const statusValues = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
+  const priorityValues = ['baja', 'media', 'alta'];
+  const areaValues = ['operaciones', 'logistica', 'mantenimiento', 'sistemas', 'otro'];
+
+  const now = new Date();
+  const dates = [];
+  for (let i = 29; i >= 0; i -= 1) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+
+  const [total, open, closed, resolved, reopened, byStatus, byPriority, byArea, last30Days, categories, closedSample] = await Promise.all([
+    countCollection('tickets'),
+    countCollection('tickets', [['status', '!=', 'cerrado']]),
+    countCollection('tickets', [['status', '==', 'cerrado']]),
+    countCollection('tickets', [['status', '==', 'solucionado']]),
+    countCollection('tickets', [['status', '==', 'reabierto']]),
+    countGroupByValues('tickets', [], 'status', statusValues),
+    countGroupByValues('tickets', [], 'priority', priorityValues),
+    countGroupByValues('tickets', [], 'area', areaValues),
+    countByDay('tickets', 'created_at', dates),
+    queryCollection('categories', [], { select: ['id', 'name'] }),
+    queryCollection('tickets', [['status', '==', 'cerrado']], { orderBy: 'created_at', direction: 'desc', limit: 5000, select: ['created_at', 'closed_at'] }),
+  ]);
+
+  const totals = { total, open, closed, resolved, reopened };
+  const avgHours = closedSample.length
+    ? closedSample.reduce((acc, t) => {
       const created = new Date(String(t.created_at).replace(' ', 'T'));
-      const closed = new Date(String(t.closed_at).replace(' ', 'T'));
-      return acc + ((closed - created) / 36e5);
-    }, 0) / closedRows.length
+      const closedAt = new Date(String(t.closed_at).replace(' ', 'T'));
+      return acc + ((closedAt - created) / 36e5);
+    }, 0) / closedSample.length
     : 0;
-  const last30 = Object.entries(tickets.reduce((acc, ticket) => {
-    if (!ticket.created_at) return acc;
-    const date = String(ticket.created_at).slice(0, 10);
-    const now = new Date();
-    const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-    const ticketDate = new Date(date);
-    if (ticketDate >= cutoff) {
-      acc[date] = (acc[date] || 0) + 1;
-    }
-    return acc;
-  }, {})).map(([day, c]) => ({ day, c })).sort((a, b) => a.day.localeCompare(b.day));
-  const topCategories = Object.entries(tickets.reduce((acc, ticket) => {
-    const categoryId = String(ticket.category_id || '');
-    acc[categoryId] = (acc[categoryId] || 0) + 1;
-    return acc;
-  }, {})).map(([categoryId, c]) => ({ categoryId, c }));
-  const categoryMap = categories.reduce((acc, cat) => { acc[String(cat.id)] = cat.name; return acc; }, {});
-  const topCategoryRows = topCategories
-    .map((item) => ({ id: item.categoryId || null, name: categoryMap[item.categoryId] || null, c: item.c }))
-    .filter((item) => item.id)
-    .sort((a, b) => b.c - a.c)
-    .slice(0, 5);
-  const totals = {
-    total: tickets.length,
-    open: tickets.filter((t) => t.status !== 'cerrado').length,
-    closed: tickets.filter((t) => t.status === 'cerrado').length,
-    resolved: tickets.filter((t) => t.status === 'solucionado').length,
-    reopened: tickets.filter((t) => t.status === 'reabierto').length,
+
+  const categoryCounts = await Promise.all(categories.map(async (cat) => ({
+    id: toId(cat.id),
+    name: cat.name,
+    c: await countCollection('tickets', [['category_id', '==', toId(cat.id)]]),
+  })));
+  const topCategories = categoryCounts.filter((item) => item.id != null).sort((a, b) => b.c - a.c).slice(0, 5);
+
+  return {
+    totals,
+    avg_resolution_hours: avgHours,
+    by_status: byStatus,
+    by_priority: byPriority,
+    by_area: byArea,
+    last_30_days: last30Days,
+    top_categories: topCategories,
   };
-  return { totals, avg_resolution_hours: avgHours, by_status: byStatus, by_priority: byPriority, by_area: byArea, last_30_days: last30, top_categories: topCategoryRows };
 }
 
+/**
+ * Genera métricas para el usuario autenticado según su rol.
+ * Usa consultas específicas por usuario y área, evitando escaneos de tickets.
+ * Documentado por Miguel Flores.
+ */
 async function getStatsForUser(userId, user) {
-  const tickets = await getCollection('tickets');
+  const uid = toId(userId);
   if (user.role === 'admin_area') {
-    const filtered = tickets.filter((ticket) => toId(ticket.assigned_to) === toId(userId) || toId(ticket.created_by) === toId(userId));
+    const [created, assigned] = await Promise.all([
+      queryCollection('tickets', [['created_by', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'priority', 'created_at', 'closed_at'] }),
+      queryCollection('tickets', [['assigned_to', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'priority', 'created_at', 'closed_at'] }),
+    ]);
+    const map = new Map();
+    for (const ticket of [...created, ...assigned]) {
+      map.set(String(ticket.id), ticket);
+    }
+    const merged = Array.from(map.values());
     const totals = {
-      total: filtered.length,
-      en_proceso: filtered.filter((t) => t.status === 'en_proceso').length,
-      solucionado: filtered.filter((t) => t.status === 'solucionado').length,
-      asignado: filtered.filter((t) => t.status === 'asignado').length,
-      cerrado: filtered.filter((t) => t.status === 'cerrado').length,
-      reabierto: filtered.filter((t) => t.status === 'reabierto').length,
+      total: merged.length,
+      en_proceso: merged.filter((t) => t.status === 'en_proceso').length,
+      solucionado: merged.filter((t) => t.status === 'solucionado').length,
+      asignado: merged.filter((t) => t.status === 'asignado').length,
+      cerrado: merged.filter((t) => t.status === 'cerrado').length,
+      reabierto: merged.filter((t) => t.status === 'reabierto').length,
     };
-    const closed = filtered.filter((t) => t.closed_at);
+    const closed = merged.filter((t) => t.closed_at);
     const avgHours = closed.length
       ? closed.reduce((acc, t) => {
         const created = new Date(String(t.created_at).replace(' ', 'T'));
@@ -873,22 +1072,22 @@ async function getStatsForUser(userId, user) {
         return acc + ((closed - created) / 36e5);
       }, 0) / closed.length
       : 0;
-    const byPriority = Object.entries(filtered.reduce((acc, ticket) => { acc[ticket.priority] = (acc[ticket.priority] || 0) + 1; return acc; }, {})).map(([priority, c]) => ({ priority, c }));
+    const byPriority = Object.entries(merged.reduce((acc, ticket) => { acc[ticket.priority] = (acc[ticket.priority] || 0) + 1; return acc; }, {})).map(([priority, c]) => ({ priority, c }));
     return { totals, avg_resolution_hours: avgHours, by_priority: byPriority };
   }
   if (user.role === 'supervisor_campo') {
-    const filtered = tickets.filter((ticket) => toId(ticket.created_by) === toId(userId));
-    const totals = { total: filtered.length, open: filtered.filter((t) => t.status !== 'cerrado').length, closed: filtered.filter((t) => t.status === 'cerrado').length };
+    const tickets = await queryCollection('tickets', [['created_by', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status'] });
+    const totals = { total: tickets.length, open: tickets.filter((t) => t.status !== 'cerrado').length, closed: tickets.filter((t) => t.status === 'cerrado').length };
     return { totals };
   }
   if (user.role === 'jefe_inmediato') {
-    const filtered = tickets.filter((ticket) => ticket.area === user.area);
-    const totals = { total: filtered.length, open: filtered.filter((t) => t.status !== 'cerrado').length, closed: filtered.filter((t) => t.status === 'cerrado').length, solved: filtered.filter((t) => t.status === 'solucionado').length, reopened: filtered.filter((t) => t.status === 'reabierto').length };
-    const byAssignee = Object.entries(filtered.reduce((acc, ticket) => {
+    const tickets = await queryCollection('tickets', [['area', '==', user.area]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'assigned_to'] });
+    const totals = { total: tickets.length, open: tickets.filter((t) => t.status !== 'cerrado').length, closed: tickets.filter((t) => t.status === 'cerrado').length, solved: tickets.filter((t) => t.status === 'solucionado').length, reopened: tickets.filter((t) => t.status === 'reabierto').length };
+    const byAssignee = Object.entries(tickets.reduce((acc, ticket) => {
       const assignee = String(ticket.assigned_to || '');
       if (assignee) acc[assignee] = (acc[assignee] || 0) + 1;
       return acc;
-    }, {})).map(([uid, c]) => ({ id: toId(uid), c })).sort((a, b) => b.c - a.c);
+    }, {})).map(([uidStr, c]) => ({ id: toId(uidStr), c })).sort((a, b) => b.c - a.c);
     const userMap = (await cacheById('users', byAssignee.map((item) => item.id).filter(Boolean).map(String))) || {};
     return { totals, by_assignee: byAssignee.map((item) => ({ ...item, full_name: userMap[String(item.id)]?.full_name || null })) };
   }
@@ -897,6 +1096,15 @@ async function getStatsForUser(userId, user) {
 
 module.exports = {
   toId,
+  queryCollection,
+  countCollection,
+  countGroupByValues,
+  countByDay,
+  findOneByFields,
+  getDoc,
+  createDoc,
+  updateDoc,
+  cacheById,
   getUserByIdentifier,
   listUsers,
   getUserById,

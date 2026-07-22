@@ -117,3 +117,23 @@ CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action_type);
 CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+
+-- ── Calendar (Gantt) ────────────────────────────────────────────────────────
+-- Bloques de tiempo personales que cada usuario programa en su Gantt.
+-- Opcionalmente vinculados a un ticket (cuando arrastra un ticket al grid).
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ticket_id       INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
+  title           TEXT NOT NULL,
+  notes           TEXT,
+  start_at        TEXT NOT NULL,
+  end_at          TEXT NOT NULL,
+  color           TEXT,                                 -- 'ocean' | 'brand' | 'deep' | 'accent'
+  type            TEXT NOT NULL DEFAULT 'personal'
+                  CHECK (type IN ('personal','ticket_linked')),
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_user_range ON calendar_events(user_id, start_at, end_at);
+CREATE INDEX IF NOT EXISTS idx_calendar_ticket    ON calendar_events(ticket_id);

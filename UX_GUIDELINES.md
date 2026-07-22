@@ -1,3 +1,5 @@
+<!-- Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. -->
+
 # UX Guidelines — GCM Tickets
 
 > Cómo se comporta el producto con el usuario. Voz, microcopy, motion, estados, accesibilidad, error/empty/loading. Inspirado en la disciplina de Emil Kowalski (motion + craft), la honestidad compositiva de Linear y la transparencia de Stripe.
@@ -181,7 +183,7 @@ Motion está reservada a **transiciones de estado**. Animaciones decorativas est
 - **≤ 200ms.** Si necesitás más, el problema no es de motion, es de diseño.
 - **Sin bounce, sin spring.** Esto no es un consumer app. Easing lineal o `ease-out`.
 - **`prefers-reduced-motion: reduce` honrado globalmente.** Implementado en `client/styles.css` (línea 310-317): todas las animaciones colapsan a 0.01ms. Los `transition-*` también.
-- **No animar al cargar vista.** El contenido aparece, no se "revela". Las animaciones de reveal son un tell de AI-generated UI.
+- **No animar al cargar vista.** El contenido aparece, no se "revela". Las animaciones de reveal son un tell; evítalas.
 - **No animar al cambiar de tab/route.** El nuevo contenido reemplaza al viejo sin fade.
 
 ### 4.3 Anti-patterns de motion

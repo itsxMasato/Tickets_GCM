@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 
 /**
@@ -57,6 +58,18 @@ const NotificationTypeEnum = Object.freeze({
 });
 const NOTIFICATION_TYPE_VALUES = Object.freeze(Object.values(NotificationTypeEnum));
 
+// 'personal' = bloque libre (sin ticket), 'ticket_linked' = bloque asociado a un ticket.
+const CalendarEventTypeEnum = Object.freeze({
+  PERSONAL:     'personal',
+  TICKET_LINKED: 'ticket_linked',
+});
+const CALENDAR_EVENT_TYPE_VALUES = Object.freeze(Object.values(CalendarEventTypeEnum));
+
+// Colores permitidos para un CalendarEvent. Coinciden con el set canónico
+// del front: 'ocean' (default), 'brand' (navy), 'deep', 'accent' (camarón).
+// Si el cliente envía uno fuera de la lista, el servicio lo rechaza.
+const CALENDAR_EVENT_COLORS = Object.freeze(['ocean', 'brand', 'deep', 'accent']);
+
 module.exports = {
   RoleEnum,
   ROLE_VALUES,
@@ -66,4 +79,7 @@ module.exports = {
   TICKET_PRIORITY_VALUES,
   NotificationTypeEnum,
   NOTIFICATION_TYPE_VALUES,
+  CalendarEventTypeEnum,
+  CALENDAR_EVENT_TYPE_VALUES,
+  CALENDAR_EVENT_COLORS,
 };

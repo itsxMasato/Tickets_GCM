@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Hash router simple. Rutas: #/dashboard, #/tickets, #/tickets/new, #/tickets/:id, #/users, #/categories, #/notifications, #/reports
 import { api } from './api.js';
 import { setState, getState } from './store.js';

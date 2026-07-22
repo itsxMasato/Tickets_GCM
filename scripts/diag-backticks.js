@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Count backticks outside strings/comments to find unbalanced template literals.
 const fs = require('fs');
 const src = fs.readFileSync('client/components/topbar.js', 'utf8');

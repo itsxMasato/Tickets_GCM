@@ -1,3 +1,4 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 const code = require('fs').readFileSync('C:\\Users\\flore\\OneDrive\\Desktop\\Tickets_GCM\\client\\views\\roles.js', 'utf8');
 try {
   // Convert ESM to CJS-ish by wrapping — but this is module syntax. Just check the raw parse.

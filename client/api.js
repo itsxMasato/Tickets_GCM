@@ -1,5 +1,18 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 // Wrapper fetch con manejo de errores y JSON
-const BASE = '';
+function getApiBase() {
+  const raw = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL
+    ? import.meta.env.VITE_API_BASE_URL
+    : '';
+  return raw ? raw.replace(/\/$/, '') : '';
+}
+
+const BASE = getApiBase();
+
+function buildUrl(url) {
+  if (!BASE) return url;
+  return `${BASE}${url}`;
+}
 
 async function request(method, url, options = {}) {
   const opts = {
@@ -15,7 +28,7 @@ async function request(method, url, options = {}) {
   }
   if (options.headers) Object.assign(opts.headers, options.headers);
 
-  const res = await fetch(BASE + url, opts);
+  const res = await fetch(buildUrl(url), opts);
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
@@ -75,9 +88,42 @@ export const api = {
     list: () => request('GET', '/api/roles'),
     get: (role) => request('GET', `/api/roles/${role}`),
     update: (role, body) => request('PATCH', `/api/roles/${role}`, { body }),
+    delete: (role, body) => request('DELETE', `/api/roles/${role}`, { body }),
     labels: {
       list: () => request('GET', '/api/role-labels'),
       update: (role, label) => request('PATCH', `/api/role-labels/${role}`, { body: { label } }),
     },
+    permissions: {
+      remove: (key, body) => request('DELETE', `/api/roles/permissions/${key}`, { body }),
+    },
+  },
+  // Empresas (multi-tenant). Solo platform admin opera el CRUD; el resto
+  // ve solo las empresas donde tiene membresía activa (filtro del backend).
+  companies: {
+    list:        (q = {})        => request('GET',    '/api/companies?' + new URLSearchParams(q)),
+    get:         (id)            => request('GET',    `/api/companies/${id}`),
+    create:      (body)          => request('POST',   '/api/companies', { body }),
+    update:      (id, body)      => request('PATCH',  `/api/companies/${id}`, { body }),
+    remove:      (id)            => request('DELETE', `/api/companies/${id}`),
+    areas: {
+      list:        (companyId, q = {}) => request('GET',    `/api/company-areas?companyId=${companyId}&` + new URLSearchParams(q)),
+      create:      (companyId, body)   => request('POST',   '/api/company-areas', { body: { companyId, ...body } }),
+      update:      (id, body)          => request('PATCH',  `/api/company-areas/${id}`, { body }),
+      remove:      (id)                => request('DELETE', `/api/company-areas/${id}`),
+    },
+    members: {
+      list:        (companyId, q = {})  => request('GET',    `/api/companies/${companyId}/memberships?` + new URLSearchParams(q)),
+      userList:    (userId)             => request('GET',    `/api/users/${userId}/memberships`),
+      create:      (userId, body)       => request('POST',   `/api/users/${userId}/memberships`, { body }),
+      update:      (userId, memId, body) => request('PATCH', `/api/users/${userId}/memberships/${memId}`, { body }),
+      remove:      (userId, memId)      => request('DELETE', `/api/users/${userId}/memberships/${memId}`),
+    },
+  },
+  calendar: {
+    list:           (q = {}) => request('GET',    '/api/calendar/events?' + new URLSearchParams(q)),
+    schedulableTickets: (q = {}) => request('GET', '/api/calendar/events/schedulable-tickets?' + new URLSearchParams(q)),
+    create:         (body)   => request('POST',   '/api/calendar/events', { body }),
+    update:         (id, body) => request('PATCH', `/api/calendar/events/${id}`, { body }),
+    remove:         (id)     => request('DELETE', `/api/calendar/events/${id}`),
   },
 };

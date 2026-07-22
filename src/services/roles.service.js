@@ -1,5 +1,7 @@
+/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 'use strict';
 const firebaseAdmin = require('../firebaseAdmin');
+const firestoreData = require('../firestoreData');
 const validators = require('../utils/validators');
 const auditService = require('./audit.service');
 
@@ -184,4 +186,220 @@ async function update(role, body, user) {
   return perms;
 }
 
-module.exports = { list, get, update };
+module.exports = { list, get, update, deleteRole, deletePermission };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Eliminación de roles y permisos
+//
+// deleteRole(role, body, user)
+//   Body: { reassignTo: 'admin_area' }   // requerido si hay usuarios
+//   Reglas:
+//     - role === 'sac'                    → 403 (rol del sistema, inamovible)
+//     - role ∉ validators.ROLES           → 400
+//     - usuarios con ese rol > 0 y sin reassignTo (o inválido) → 409
+//
+// deletePermission(key, body, user)
+//   Body: { replacement: 'createTicket' }  // requerido si hay roles usándolo
+//   Reglas:
+//     - key ∉ PERMISSION_KEYS             → 400
+//     - replacement === key               → 400
+//     - reemplazo obligatorio si hay roles con permissions[key] === true
+//     - si key ∈ CRITICAL_PERMS, replacement debe estar activo en TODOS
+//       los roles donde estaba key (evita "apagué manageUsers y nadie
+//       puede administrar")
+//     - si key está activo en DEFAULTS de algún rol, 409 — el permiso
+//       no se puede borrar del sistema mientras el default lo incluya
+// ─────────────────────────────────────────────────────────────────────────
+
+function badRequest(message, code) {
+  const err = new Error(message);
+  err.statusCode = 400;
+  err.code = code || 'VALIDATION_ERROR';
+  return err;
+}
+function forbidden(message, code) {
+  const err = new Error(message);
+  err.statusCode = 403;
+  err.code = code || 'FORBIDDEN';
+  return err;
+}
+function conflict(message, code) {
+  const err = new Error(message);
+  err.statusCode = 409;
+  err.code = code || 'CONFLICT';
+  return err;
+}
+
+async function deleteRole(role, body, user) {
+  firebaseAdmin.init();
+  const db = firebaseAdmin.getFirestoreInstance();
+
+  if (!validators.ROLES.includes(role)) {
+    throw badRequest(`Rol "${role}" no existe.`);
+  }
+  // Defensa crítica: 'sac' es la última línea de defensa operativa. Jamás
+  // se borra. Si se borrara, el sistema quedaría sin nadie que pueda
+  // gestionar permisos (que es exactamente lo que esta pantalla permite).
+  if (role === 'sac') {
+    throw forbidden('El rol SAC es inamovible: es la única cuenta que puede gestionar permisos.', 'ROLE_PROTECTED');
+  }
+
+  // Lookup de usuarios afectados.
+  const affectedUsers = await firestoreData.listUsers({ role });
+  const hasUsers = affectedUsers.length > 0;
+
+  // Validación de reassignTo.
+  let reassignTo = null;
+  if (hasUsers) {
+    reassignTo = (body && typeof body.reassignTo === 'string') ? body.reassignTo : null;
+    if (!reassignTo) {
+      throw conflict(
+        `Hay ${affectedUsers.length} ${affectedUsers.length === 1 ? 'usuario' : 'usuarios'} con este rol. Reasígnalos antes de eliminar.`,
+        'REASSIGN_REQUIRED'
+      );
+    }
+    if (!validators.ROLES.includes(reassignTo)) {
+      throw badRequest(`El rol de reasignación "${reassignTo}" no existe.`);
+    }
+    if (reassignTo === role) {
+      throw badRequest('El rol de reasignación no puede ser el mismo que se elimina.');
+    }
+  }
+
+  // Snapshot de los permisos actuales para el audit log.
+  const oldPerms = await get(role);
+
+  // Reasignar usuarios en paralelo.
+  if (hasUsers) {
+    await Promise.all(affectedUsers.map((u) => firestoreData.updateUser(u.id, { role: reassignTo })));
+  }
+
+  // Borrar el doc de permisos del rol.
+  await db.collection('role_permissions').doc(role).delete();
+
+  // Audit log.
+  await auditService.logAsync({
+    user_id: user?.id || null,
+    action_type: 'role_deleted',
+    target_type: 'role',
+    target_code: role,
+    description: `Eliminó el rol "${validators.ROLE_LABEL[role] || role}"${hasUsers ? ` y reasignó ${affectedUsers.length} ${affectedUsers.length === 1 ? 'usuario' : 'usuarios'} a "${validators.ROLE_LABEL[reassignTo] || reassignTo}"` : ''}.`,
+    old_value: { role, permissions: oldPerms, usersReassigned: affectedUsers.length, reassignedTo: reassignTo },
+    new_value: null,
+  });
+
+  // Realtime.
+  const { emit } = require('../sockets');
+  emit('role:deleted', {
+    role,
+    reassignedTo: reassignTo,
+    usersReassigned: affectedUsers.length,
+    previousPermissions: oldPerms,
+    updatedBy: user ? { id: user.id, full_name: user.full_name || null, role: user.role || null } : null,
+    at: new Date().toISOString(),
+  }, { role: 'sac', broadcast: true });
+}
+
+async function deletePermission(key, body, user) {
+  firebaseAdmin.init();
+  const db = firebaseAdmin.getFirestoreInstance();
+
+  if (!PERMISSION_KEYS.includes(key)) {
+    throw badRequest(`El permiso "${key}" no existe.`);
+  }
+  const replacement = (body && typeof body.replacement === 'string') ? body.replacement : null;
+  if (replacement === key) {
+    throw badRequest('El permiso de reemplazo no puede ser el mismo que se elimina.');
+  }
+  if (replacement && !PERMISSION_KEYS.includes(replacement)) {
+    throw badRequest(`El permiso de reemplazo "${replacement}" no existe.`);
+  }
+
+  // 1) Detectar roles donde `key` está activo.
+  //   Combinamos dos fuentes: docs en Firestore + DEFAULTS hardcoded.
+  //   Si un rol está en defaults con key=true, el permiso no se puede
+  //   borrar — el sistema lo bloquearía con 409.
+  const snap = await db.collection('role_permissions').get();
+  const storedRoles = {};
+  for (const doc of snap.docs) storedRoles[doc.id] = doc.data() || {};
+
+  const affectedRoles = [];
+  for (const role of validators.ROLES) {
+    const stored = storedRoles[role];
+    const effective = stored
+      ? readPermissions(stored)
+      : readPermissions(DEFAULTS[role] || {});
+
+    if (effective[key]) {
+      // ¿El permiso está activo por default y el rol nunca se customizó?
+      if (!stored && DEFAULTS[role] && DEFAULTS[role][key]) {
+        throw conflict(
+          `El permiso "${PERMISSION_LABELS[key]}" está activo por defecto en el rol "${validators.ROLE_LABEL[role] || role}". Personaliza el rol (quítalo explícitamente) antes de eliminar el permiso del sistema.`,
+          'PERMISSION_IN_USE_BY_DEFAULT'
+        );
+      }
+      affectedRoles.push({ role, hadReplacement: !!effective[replacement] });
+    }
+  }
+
+  if (affectedRoles.length > 0 && !replacement) {
+    throw conflict(
+      `${affectedRoles.length} ${affectedRoles.length === 1 ? 'rol usa' : 'roles usan'} el permiso "${PERMISSION_LABELS[key]}". Indica un permiso de reemplazo.`,
+      'REPLACEMENT_REQUIRED'
+    );
+  }
+
+  // Defensa de permisos críticos: si replacement no queda activo en TODOS
+  // los roles donde estaba key, rechazamos. Evita que un SAC apague
+  // manageUsers y nadie pueda volver a encenderlo.
+  if (replacement && CRITICAL_PERMS.has(key)) {
+    const missing = affectedRoles.filter((r) => !r.hadReplacement);
+    if (missing.length > 0) {
+      const names = missing.map((r) => validators.ROLE_LABEL[r.role] || r.role).join(', ');
+      throw conflict(
+        `El permiso "${PERMISSION_LABELS[key]}" es crítico. "${PERMISSION_LABELS[replacement] || replacement}" no está activo en: ${names}. Actívalo primero en esos roles.`,
+        'CRITICAL_PERMISSION_REQUIRES_FULL_COVERAGE'
+      );
+    }
+  }
+
+  // 2) Aplicar el cambio. Set atómico: key=false, replacement=true (merge).
+  //   Si el rol ya tenía replacement=true, el merge lo deja igual (idempotente).
+  const roleMap = {};
+  for (const r of affectedRoles) roleMap[r.role] = true;
+
+  if (replacement) {
+    const batch = db.batch();
+    for (const r of affectedRoles) {
+      const ref = db.collection('role_permissions').doc(r.role);
+      batch.set(ref, { [key]: false, [replacement]: true }, { merge: true });
+    }
+    await batch.commit();
+  } else {
+    // replacement nulo + 0 affectedRoles ya se manejó arriba con 409.
+    // Este branch queda solo si affectedRoles=[] (todos los roles tienen
+    // key=false y nunca se customizó). No hay nada que escribir.
+  }
+
+  // Audit log.
+  await auditService.logAsync({
+    user_id: user?.id || null,
+    action_type: 'permission_deleted',
+    target_type: 'permission',
+    target_code: key,
+    description: `Eliminó el permiso "${PERMISSION_LABELS[key]}"${replacement ? ` reemplazándolo por "${PERMISSION_LABELS[replacement]}"` : ''} en ${affectedRoles.length} ${affectedRoles.length === 1 ? 'rol' : 'roles'}.`,
+    old_value: { permission: key, replacement, affectedRoles: affectedRoles.length, roleMap },
+    new_value: null,
+  });
+
+  // Realtime.
+  const { emit } = require('../sockets');
+  emit('permission:deleted', {
+    permission: key,
+    replacement,
+    affectedRoles: affectedRoles.length,
+    roleMap,
+    updatedBy: user ? { id: user.id, full_name: user.full_name || null, role: user.role || null } : null,
+    at: new Date().toISOString(),
+  }, { role: 'sac', broadcast: true });
+}
