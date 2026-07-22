@@ -4,7 +4,17 @@ function getApiBase() {
   const raw = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL
     ? import.meta.env.VITE_API_BASE_URL
     : '';
-  return raw ? raw.replace(/\/$/, '') : '';
+  if (raw) return raw.replace(/\/$/, '');
+
+  if (typeof window !== 'undefined' && typeof window.location?.hostname === 'string') {
+    const host = window.location.hostname.toLowerCase();
+    const isNetlify = host.endsWith('.netlify.app') || host === 'netlify.app';
+    if (import.meta.env?.PROD && isNetlify) {
+      return 'https://tickets-gcm-api.onrender.com';
+    }
+  }
+
+  return '';
 }
 
 const BASE = getApiBase();

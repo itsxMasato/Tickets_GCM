@@ -9,6 +9,18 @@ const path = require('path');
 const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
 
+// Store de sesión persistente. En producción (Render) no podemos usar
+// MemoryStore porque se pierde al reiniciar el servicio — todos los
+// usuarios quedarían deslogueados. Usamos SQLite local (data/sessions.db)
+// para que las sesiones sobrevivan redeploys. En dev local también lo
+// activamos para no divergir del comportamiento de producción.
+const SQLiteStore = require('connect-sqlite3')(session);
+const sessionStore = new SQLiteStore({
+  db: 'sessions.db',
+  dir: path.resolve(__dirname, '..', 'data'),
+  table: 'sessions',
+});
+
 // Origen permitido para CORS. En producción el frontend vive en Netlify
 // (https://ticketsgcm.netlify.app) y el backend en Render; la cookie de
 // sesión cruza dominios, así que necesitamos CORS con credentials: true y
@@ -36,6 +48,7 @@ function createApp() {
   app.use(cookieParser());
 
   const sessionMiddleware = session({
+    store: sessionStore,
     secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
@@ -63,6 +76,10 @@ function createApp() {
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.get('/favicon.ico', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'img', 'Logo.png'));
+  });
+
+  app.get('/api/health', (req, res) => {
+    res.json({ ok: true, service: 'tickets-gcm', env: config.env });
   });
 
   // Rutas API

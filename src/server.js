@@ -23,8 +23,8 @@ async function start() {
   sockets.setup(httpServer, sessionMiddleware);
 
   // 4) Listen
-  httpServer.listen(config.port, () => {
-    console.log(`[tickets-gcm] Servidor escuchando en http://localhost:${config.port}`);
+  httpServer.listen(config.port, '0.0.0.0', () => {
+    console.log(`[tickets-gcm] Servidor escuchando en http://0.0.0.0:${config.port}`);
     console.log(`[tickets-gcm] Entorno: ${config.env}`);
   });
 }

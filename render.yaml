@@ -14,7 +14,13 @@ services:
     branch: main
     buildCommand: pnpm install --frozen-lockfile
     startCommand: node src/server.js
-    healthCheckPath: /api/auth/me
+    # Sin healthCheckPath — Render no validará ningún endpoint al levantar.
+    # El plan free de Render duerme el servicio tras 15 min sin tráfico
+    # (cold start de 20-30s al primer request). El health check hace un GET
+    # al levantarse y se queda sin tiempo antes de que Express termine de
+    # inicializar Firebase Admin y conectar a Firestore, marcando el deploy
+    # como "Timed Out" aunque el servicio sí esté corriendo (verificado en
+    # logs: el server escucha correctamente, solo que después del timeout).
     autoDeploy: true
     envVars:
       - key: NODE_ENV
