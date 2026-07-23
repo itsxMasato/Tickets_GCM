@@ -15,7 +15,11 @@
         margin: 0;
         padding: 0;
         font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-        background: #f8fafc;
+        min-height: 100vh;
+        background:
+          radial-gradient(ellipse 900px 600px at 50% 28%, rgba(22,172,228,0.16), transparent 60%),
+          linear-gradient(160deg, #071D4C 0%, #44497B 78%);
+        color: #F7F9FC;
       }
       #app {
         display: none; /* Ocultar hasta que CSS se cargue completamente */
@@ -23,7 +27,7 @@
       #loading-overlay {
         position: fixed;
         inset: 0;
-        background: #f8fafc;
+        background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -34,23 +38,13 @@
       #loading-overlay.hidden {
         opacity: 0;
         pointer-events: none;
-      }
-      .loader {
-        width: 48px;
-        height: 48px;
-        border: 3px solid #e2e8f0;
-        border-top-color: #071d4c;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-      }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
+        display: none;
       }
     </style>
     
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
     <!-- CSS principal: lo emite Vite en /assets/index-<hash>.css.
          En dev, Vite sirve /client/styles.css procesado por Tailwind;
@@ -61,14 +55,272 @@
       .material-symbols-outlined {
         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         vertical-align: middle;
-      }    </style>
+      }
+      #login-splash-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10001;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        overflow: hidden;
+        opacity: 1;
+        transition: opacity 350ms cubic-bezier(.4,0,.2,1);
+      }
+      #login-splash-overlay.fading {
+        opacity: 0;
+      }
+      #login-splash-overlay .pond-grid {
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(rgba(214,222,232,0.05) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(214,222,232,0.05) 1px, transparent 1px);
+        background-size: 64px 64px;
+        mask-image: radial-gradient(ellipse 70% 60% at 50% 35%, black 10%, transparent 75%);
+        pointer-events: none;
+      }
+      #login-splash-overlay .stage {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        max-width: 480px;
+        padding: 48px 32px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
+      #login-splash-overlay .logo-wrap {
+        position: relative;
+        width: 112px;
+        height: 112px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #login-splash-overlay .logo-halo {
+        position: absolute;
+        inset: -24px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(22,172,228,0.35) 0%, rgba(22,172,228,0) 70%);
+        filter: blur(2px);
+      }
+      #login-splash-overlay .logo-wrap img,
+      #login-splash-overlay .logo-wrap .logo-fallback {
+        position: relative;
+        width: 76px;
+        height: 76px;
+        border-radius: 18px;
+        object-fit: contain;
+      }
+      #login-splash-overlay .logo-fallback {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 700;
+        font-size: 22px;
+        letter-spacing: 0.02em;
+        color: #071D4C;
+        background: linear-gradient(135deg, #16ACE4, #7FD4F2);
+      }
+      #login-splash-overlay .eyebrow {
+        font-family: 'Inter', sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #16ACE4;
+      }
+      #login-splash-overlay h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 600;
+        font-size: clamp(28px, 5vw, 36px);
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+        color: #F7F9FC;
+      }
+      #login-splash-overlay p.lead {
+        font-size: 15px;
+        line-height: 1.6;
+        color: #C7D2E5;
+        max-width: 360px;
+      }
+      #login-splash-overlay .loader {
+        margin-top: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      #login-splash-overlay .loader-track {
+        position: relative;
+        width: 240px;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(247,249,252,0.14);
+        overflow: hidden;
+      }
+      #login-splash-overlay .loader-fill {
+        display: block;
+        height: 100%;
+        width: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #16ACE4 0%, #3BC9FF 55%, #CF301D 100%);
+        transform: scaleX(0);
+        transform-origin: left center;
+        transition: transform 280ms cubic-bezier(.2,.7,.2,1);
+        will-change: transform;
+      }
+      #login-splash-overlay .loader-meta {
+        width: 240px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+      #login-splash-overlay .loader-stage {
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: #8FA0BC;
+        font-variant-numeric: tabular-nums;
+      }
+      #login-splash-overlay .loader-percent {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #16ACE4;
+        font-variant-numeric: tabular-nums;
+      }
+      #login-splash-overlay .footnote {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #8FA0BC;
+      }
+      @keyframes load-sweep {
+        0%   { transform: translateX(-120%); width: 24%; }
+        35%  { transform: translateX(10%);   width: 48%; }
+        65%  { transform: translateX(24%);   width: 38%; }
+        100% { transform: translateX(220%);  width: 24%; }
+      }
+      /* Animaciones de entrada — SOLO cuando se activa el splash */
+      #login-splash-overlay.active .logo-wrap {
+        animation: surface-in 900ms cubic-bezier(.2,.7,.2,1) 150ms forwards;
+      }
+      #login-splash-overlay.active .eyebrow,
+      #login-splash-overlay.active h1,
+      #login-splash-overlay.active p.lead,
+      #login-splash-overlay.active .loader,
+      #login-splash-overlay.active .footnote {
+        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) forwards;
+      }
+      #login-splash-overlay.active .eyebrow  { animation-delay: 380ms; }
+      #login-splash-overlay.active h1        { animation-delay: 480ms; }
+      #login-splash-overlay.active p.lead    { animation-delay: 580ms; }
+      #login-splash-overlay.active .loader   { animation-delay: 700ms; }
+      #login-splash-overlay.active .footnote { animation-delay: 820ms; }
+      #login-splash-overlay .waves {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 180px;
+        z-index: 1;
+        pointer-events: none;
+      }
+      #login-splash-overlay .waves svg {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 200%;
+        height: 100%;
+      }
+      #login-splash-overlay .wave-back {
+        opacity: 0.28;
+        animation: drift 22s linear infinite;
+      }
+      #login-splash-overlay .wave-front {
+        opacity: 0.4;
+        animation: drift 15s linear infinite reverse;
+      }
+      @media (max-width: 480px) {
+        #login-splash-overlay .stage { padding: 32px 24px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #login-splash-overlay .logo-wrap,
+        #login-splash-overlay .eyebrow,
+        #login-splash-overlay h1,
+        #login-splash-overlay p.lead,
+        #login-splash-overlay .loader,
+        #login-splash-overlay .footnote {
+          animation: none !important;
+          opacity: 1 !important;
+          transform: none !important;
+        }
+        #login-splash-overlay .wave-back,
+        #login-splash-overlay .wave-front,
+        #login-splash-overlay .loader-fill {
+          animation: none !important;
+        }
+        #login-splash-overlay .loader-fill { transform: scaleX(0.7); }
+      }
+      @keyframes rise-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes surface-in {
+        from { opacity: 0; transform: translateY(18px) scale(0.94); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes drift {
+        from { transform: translateX(0); }
+        to   { transform: translateX(-50%); }
+      }
+    </style>
   </head>
   <body>
     <!-- Loading overlay que desaparece cuando app está lista -->
     <div id="loading-overlay">
       <div class="loader"></div>
     </div>
-    
+
+    <div id="login-splash-overlay" role="status" aria-live="polite">
+      <div class="pond-grid" aria-hidden="true"></div>
+      <main class="stage">
+        <div class="logo-wrap">
+          <div class="logo-halo" aria-hidden="true"></div>
+          <img src="/img/Logo.png" alt="Logotipo de Grupo Camaronero Milcien" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+          <div class="logo-fallback">GCM</div>
+        </div>
+        <span class="eyebrow">Grupo Camaronero Milcien</span>
+        <h1>Bienvenido al Sistema de Tickets</h1>
+        <p class="lead">Registra, da seguimiento y resuelve las solicitudes de soporte de todas las áreas desde un solo lugar.</p>
+        <div class="loader">
+          <div class="loader-track">
+            <div class="loader-fill" id="login-splash-progress-bar"></div>
+          </div>
+          <div class="loader-meta">
+            <span class="loader-stage" id="login-splash-stage">Inicializando…</span>
+            <span class="loader-percent" id="login-splash-percent" aria-hidden="true">0%</span>
+          </div>
+        </div>
+        <span class="footnote">Departamento de Soporte · GCM</span>
+      </main>
+      <div class="waves" aria-hidden="true">
+        <svg class="wave-back" viewBox="0 0 1440 180" preserveAspectRatio="none">
+          <path fill="#44497B" d="M0,90 C 240,150 480,30 720,80 C 960,130 1200,40 1440,90 L1440,180 L0,180 Z M1440,90 C 1680,150 1920,30 2160,80 C 2400,130 2640,40 2880,90 L2880,180 L1440,180 Z" />
+        </svg>
+        <svg class="wave-front" viewBox="0 0 1440 180" preserveAspectRatio="none">
+          <path fill="#16ACE4" d="M0,120 C 220,70 460,150 720,110 C 980,70 1220,140 1440,110 L1440,180 L0,180 Z M1440,120 C 1660,70 1900,150 2160,110 C 2420,70 2660,140 2880,110 L2880,180 L1440,180 Z" />
+        </svg>
+      </div>
+    </div>
+
     <div id="app"></div>
     <div id="modal-root"></div>
     <div id="toast-root" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
@@ -92,6 +344,117 @@
       // main.js definirá esta función y limpiará el timeout
       window.clearShowTimeout = function() {
         clearTimeout(fallbackTimeout);
+      };
+
+      window.showLoginSplash = function() {
+        const splash = document.getElementById('login-splash-overlay');
+        const overlay = document.getElementById('loading-overlay');
+        const app = document.getElementById('app');
+        if (app) {
+          app.style.visibility = 'hidden';
+        }
+        if (overlay) {
+          overlay.classList.add('hidden');
+        }
+        if (splash) {
+          splash.style.display = 'flex';
+          splash.classList.add('active');
+          window.__loginSplashVisible = true;
+        }
+        // Motor de progreso real: 0% → 100% durante los 5s mínimos del splash.
+        // Avanza rápido al inicio, se desacelera hacia el final (easeOutCubic)
+        // y queda tickeando para que se sienta vivo si los recursos tardan más.
+        const bar = document.getElementById('login-splash-progress-bar');
+        const pctEl = document.getElementById('login-splash-percent');
+        const stageEl = document.getElementById('login-splash-stage');
+        if (!bar || !pctEl || !stageEl || window.__loginSplashProgressStarted) return;
+        window.__loginSplashProgressStarted = true;
+
+        const STAGES = [
+          { at: 0,   text: 'Inicializando…' },
+          { at: 25,  text: 'Conectando con el servidor…' },
+          { at: 55,  text: 'Cargando datos del usuario…' },
+          { at: 80,  text: 'Preparando tu panel…' },
+          { at: 100, text: 'Listo' },
+        ];
+        const TOTAL_MS = 5000;
+        const startedAt = Date.now();
+        let pct = 0;
+
+        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+        const setStage = (p) => {
+          for (let i = STAGES.length - 1; i >= 0; i--) {
+            if (p >= STAGES[i].at) {
+              if (stageEl.textContent !== STAGES[i].text) {
+                stageEl.textContent = STAGES[i].text;
+              }
+              return;
+            }
+          }
+        };
+
+        const tick = () => {
+          const elapsed = Date.now() - startedAt;
+          const t = Math.min(1, elapsed / TOTAL_MS);
+          pct = Math.round(easeOutCubic(t) * 100);
+          bar.style.transform = `scaleX(${pct / 100})`;
+          pctEl.textContent = `${pct}%`;
+          setStage(pct);
+          if (t < 1) {
+            window.__loginSplashProgressRaf = requestAnimationFrame(tick);
+          }
+        };
+        // Reset visual antes de empezar (por si quedó de un show previo)
+        bar.style.transform = 'scaleX(0)';
+        pctEl.textContent = '0%';
+        setStage(0);
+        // Primer paint en el siguiente frame para que la transición se vea
+        requestAnimationFrame(() => requestAnimationFrame(tick));
+      };
+
+      window.hideLoginSplash = function() {
+        const splash = document.getElementById('login-splash-overlay');
+        const app = document.getElementById('app');
+        if (!splash) {
+          if (app) app.style.visibility = 'visible';
+          return;
+        }
+        window.__loginSplashVisible = false;
+        // Forzar 100% antes del fade para que la barra se sienta "completa".
+        // Cancelamos el rAF y rellenamos en un solo frame.
+        if (window.__loginSplashProgressRaf) {
+          cancelAnimationFrame(window.__loginSplashProgressRaf);
+          window.__loginSplashProgressRaf = null;
+        }
+        const bar = document.getElementById('login-splash-progress-bar');
+        const pctEl = document.getElementById('login-splash-percent');
+        const stageEl = document.getElementById('login-splash-stage');
+        if (bar) bar.style.transform = 'scaleX(1)';
+        if (pctEl) pctEl.textContent = '100%';
+        if (stageEl) stageEl.textContent = 'Listo';
+        window.__loginSplashProgressStarted = false;
+        // Fade-out de 350ms; el listener de transitionend termina de esconder
+        // el overlay. Si por algún motivo la transition no dispara, el
+        // fallback de timeout de 600ms asegura que no quede pegado.
+        splash.classList.add('fading');
+        let cleaned = false;
+        const finish = () => {
+          if (cleaned) return;
+          cleaned = true;
+          splash.style.display = 'none';
+          splash.classList.remove('active');
+          splash.classList.remove('fading');
+          splash.removeEventListener('transitionend', finish);
+        };
+        splash.addEventListener('transitionend', finish);
+        setTimeout(finish, 600);
+        if (app) {
+          // Hacer visible el dashboard apenas comienza el fade. La
+          // transición de 350ms superpone el final del splash con el
+          // inicio del dashboard y se siente como un cross-fade.
+          app.style.visibility = 'visible';
+        }
       };
     </script>
     

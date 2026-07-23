@@ -45,22 +45,32 @@ const app = document.getElementById('app');
 
 // Flag para mostrar app solo una vez cuando esté lista
 let appShown = false;
+let loginSplashActive = false;
 function showAppWhenReady() {
-  if (appShown) return;
-  appShown = true;
-  
+  if (!appShown) {
+    appShown = true;
+  }
+
   // Limpiar timeout fallback del HTML
   if (typeof window.clearShowTimeout === 'function') {
     window.clearShowTimeout();
   }
-  
+
   // Usar requestAnimationFrame para asegurar que el DOM se haya renderizado
   requestAnimationFrame(() => {
     const appEl = document.getElementById('app');
     const overlay = document.getElementById('loading-overlay');
-    
-    if (appEl) appEl.style.display = 'block';
+    const splash = document.getElementById('login-splash-overlay');
+
+    if (appEl) {
+      appEl.style.display = 'block';
+      appEl.style.visibility = window.__loginSplashVisible ? 'hidden' : 'visible';
+    }
     if (overlay) overlay.classList.add('hidden');
+    if (splash && !window.__loginSplashVisible) {
+      splash.style.display = 'none';
+      splash.classList.remove('active');
+    }
   });
 }
 
@@ -84,18 +94,39 @@ function mount(node) {
 
 async function onLogin(user) {
   setState({ user });
+  // El splash de bienvenida dura mínimo 5s, incluso si la carga es más
+  // rápida. La animación del splash dura ~1.5s; los 3.5s restantes son
+  // tiempo de respiración para que el cambio de contexto no se sienta abrupto.
+  // El dashboard se monta detrás (con app.style.visibility = 'hidden' que
+  // pone el script inline de index.html) y se hace visible recién cuando
+  // hideLoginSplash se llama.
+  const splashShownAt = Date.now();
+  const MIN_SPLASH_MS = 5000;
+
+  if (typeof window.showLoginSplash === 'function') {
+    window.showLoginSplash();
+  }
   go('/dashboard');
+
   void (async () => {
     try {
-      await initRoleLabels();
+      await Promise.allSettled([
+        initRoleLabels(),
+        connectSocket().then(wireRealtime),
+        refreshBell(),
+      ]);
     } catch {}
-    try {
-      await connectSocket();
-      wireRealtime();
-    } catch {}
-    try {
-      await refreshBell();
-    } catch {}
+
+    const elapsed = Date.now() - splashShownAt;
+    const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
+
+    // Fade out corto para que la transición no sea un corte seco.
+    setTimeout(() => {
+      if (typeof window.hideLoginSplash === 'function') {
+        window.hideLoginSplash();
+      }
+      loginSplashActive = false;
+    }, remaining);
   })();
 }
 
@@ -222,9 +253,26 @@ function withLayout(view, user) {
   return wrapper;
 }
 
+function normalizePath(rawPath) {
+  if (!rawPath) return '/login';
+  let normalized = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
+  normalized = normalized.replace(/\/+/g, '/');
+  if (normalized === '/') return '/login';
+  if (normalized.length > 1 && normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
 async function dispatch(rawPath, query) {
+  const path = normalizePath(rawPath);
   const user = getState().user;
-  if (rawPath === '/login') {
+  if (path === '/login') {
+    if (user) {
+      go('/dashboard');
+      showAppWhenReady();
+      return;
+    }
     const loginResult = await handlers['/login']({ params: {}, query });
     mount(await Promise.resolve(loginResult.view));
     showAppWhenReady();
@@ -245,7 +293,7 @@ async function dispatch(rawPath, query) {
   // evitar un 403 visible y para que la UI no muestre estados vacíos
   // a roles sin permiso.
   const SAC_ONLY = new Set(['/users', '/categories', '/roles', '/audit']);
-  if (SAC_ONLY.has(rawPath) && getState().user?.role !== 'sac') {
+  if (SAC_ONLY.has(path) && getState().user?.role !== 'sac') {
     toast('No tienes permiso para acceder a esa sección.', 'error');
     go('/dashboard');
     showAppWhenReady();
@@ -256,7 +304,7 @@ async function dispatch(rawPath, query) {
   // a platform admin, se mueven a este set. Backend lo vuelve a validar
   // con requirePlatformAdmin, así que esto es solo UX (evita el 403 visible).
   const PLATFORM_ADMIN_ONLY = new Set(['/companies']);
-  if (PLATFORM_ADMIN_ONLY.has(rawPath) && getState().user?.isPlatformAdmin !== true) {
+  if (PLATFORM_ADMIN_ONLY.has(path) && getState().user?.isPlatformAdmin !== true) {
     toast('No tienes permiso para acceder a esa sección.', 'error');
     go('/dashboard');
     showAppWhenReady();
@@ -266,7 +314,7 @@ async function dispatch(rawPath, query) {
   for (const [pattern, fn] of Object.entries(handlers)) {
     if (pattern === '/login') continue;
     const ps = pattern.split('/').filter(Boolean);
-    const xs = rawPath.split('/').filter(Boolean);
+    const xs = path.split('/').filter(Boolean);
     if (ps.length !== xs.length) continue;
     const params = {};
     let ok = true;
@@ -281,7 +329,11 @@ async function dispatch(rawPath, query) {
     showAppWhenReady();
     return;
   }
-  go('/dashboard');
+  if (user) {
+    go('/dashboard');
+  } else {
+    go('/login');
+  }
   showAppWhenReady();
 }
 
