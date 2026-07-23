@@ -56,6 +56,13 @@ const ALLOWED_ORIGINS = Array.from(new Set([
 function createApp() {
   const app = express();
 
+  // En producción Render envía la petición HTTPS a través de un proxy interno.
+  // Necesitamos confiar en el proxy para que express-session sepa que la
+  // conexión es segura y pueda enviar cookies Secure correctamente.
+  if (config.env === 'production') {
+    app.set('trust proxy', 1);
+  }
+
   // CORS debe ir ANTES de sessionMiddleware para que las respuestas a
   // preflight OPTIONS (POST con credentials) incluyan los headers correctos.
   //
