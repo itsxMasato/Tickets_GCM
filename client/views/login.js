@@ -240,14 +240,25 @@ export async function renderLogin({ params, query, onLogin }) {
     const pass = passInput.value;
     if (!user || !pass) return;
 
+    // Normalizar: si el usuario tipeó un username (sin @) o un email
+    // parcial, lo convertimos a un email sintético que Firebase Auth pueda
+    // aceptar. Así el usuario puede entrar tipeando solo "Miguel" sin
+    // necesidad de recordar su email completo.
+    //   "Miguel"           → "miguel@ticketsgcm.local"
+    //   "miguel@empresa"   → "miguel@empresa" (ya es email, se respeta)
+    //   "  MIGUEL  "       → "miguel@ticketsgcm.local"
+    const loginEmail = user.includes('@')
+      ? user.toLowerCase()
+      : `${user.toLowerCase().replace(/[^a-z0-9._-]/g, '')}@ticketsgcm.local`;
+
     setBusy(true);
     try {
       // Flujo Firebase Auth + canje por sesión local.
-      // 1) Autenticar contra Firebase Auth (cliente).
+      // 1) Autenticar contra Firebase Auth (cliente) con el email normalizado.
       // 2) Canjear el ID token por una cookie de sesión en el backend.
       // El endpoint /api/auth/firebase vive en src/routes/auth.routes.js y
       // mapea el email verificado contra el usuario local en Firestore.
-      const { idToken } = await signInWithFirebaseEmail(user, pass);
+      const { idToken } = await signInWithFirebaseEmail(loginEmail, pass);
       const { user: u } = await api.auth.firebase({ idToken });
       if (nextUrl) {
         try { sessionStorage.setItem('gcm:postLoginNext', nextUrl); } catch {}
