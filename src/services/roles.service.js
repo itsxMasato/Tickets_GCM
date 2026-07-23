@@ -4,6 +4,7 @@ const firebaseAdmin = require('../firebaseAdmin');
 const firestoreData = require('../firestoreData');
 const validators = require('../utils/validators');
 const auditService = require('./audit.service');
+const { assertRoleDeletable } = require('../utils/role-guards');
 
 const PERMISSION_KEYS = ['manageUsers','manageCategories','viewReports','viewAllTickets','createTicket','assign'];
 const PERMISSION_LABELS = {
@@ -237,12 +238,10 @@ async function deleteRole(role, body, user) {
   if (!validators.ROLES.includes(role)) {
     throw badRequest(`Rol "${role}" no existe.`);
   }
-  // Defensa crítica: 'sac' es la última línea de defensa operativa. Jamás
-  // se borra. Si se borrara, el sistema quedaría sin nadie que pueda
-  // gestionar permisos (que es exactamente lo que esta pantalla permite).
-  if (role === 'sac') {
-    throw forbidden('El rol SAC es inamovible: es la única cuenta que puede gestionar permisos.', 'ROLE_PROTECTED');
-  }
+  // Defensa crítica: los roles del flujo operativo (SAC, jefe inmediato,
+  // admin de área y supervisor de campo) son la base del sistema. No deben
+  // borrarse ni reasignarse de forma accidental porque eso reescribe usuarios.
+  assertRoleDeletable(role, `El rol "${role}" es inamovible porque forma parte del flujo operativo del sistema.`);
 
   // Lookup de usuarios afectados.
   const affectedUsers = await firestoreData.listUsers({ role });
@@ -264,6 +263,7 @@ async function deleteRole(role, body, user) {
     if (reassignTo === role) {
       throw badRequest('El rol de reasignación no puede ser el mismo que se elimina.');
     }
+    assertRoleDeletable(reassignTo, `No se puede reasignar a "${reassignTo}" porque es un rol base del flujo operativo.`);
   }
 
   // Snapshot de los permisos actuales para el audit log.
