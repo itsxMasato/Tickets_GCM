@@ -22,13 +22,35 @@ function loadClient() {
   return loading;
 }
 
+function getSocketBase() {
+  const raw = typeof import.meta !== 'undefined' && import.meta.env?.VITE_SOCKET_BASE_URL
+    ? import.meta.env.VITE_SOCKET_BASE_URL
+    : '';
+  if (raw) return raw.replace(/\/$/, '');
+
+  if (typeof window !== 'undefined' && typeof window.location?.hostname === 'string') {
+    const host = window.location.hostname.toLowerCase();
+    const isNetlify = host.endsWith('.netlify.app') || host === 'netlify.app';
+    if (import.meta.env?.PROD && isNetlify) {
+      return 'https://tickets-gcm-api.onrender.com';
+    }
+  }
+  return '';
+}
+
 export async function connectSocket() {
   if (socket) return socket;
   const io = await loadClient();
-  socket = io({
-    withCredentials: true,
-    transports: ['websocket', 'polling'],
-  });
+  const socketBase = getSocketBase();
+  socket = socketBase
+    ? io(socketBase, {
+      withCredentials: true,
+      transports: ['websocket', 'polling'],
+    })
+    : io({
+      withCredentials: true,
+      transports: ['websocket', 'polling'],
+    });
   // Re-registra handlers
   for (const [event, fns] of handlers.entries()) {
     for (const fn of fns) socket.on(event, fn);
