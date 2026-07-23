@@ -24,8 +24,8 @@
 'use strict';
 
 const firebaseAdmin = require('../src/firebaseAdmin');
+const { deriveAuthEmail } = require('../src/utils/deriveAuthEmail');
 
-const DOMAIN = 'ticketsgcm.local';
 const DEFAULT_PASSWORD = 'Motagua1928';
 
 function parseArgs() {
@@ -36,17 +36,6 @@ function parseArgs() {
     else if (args[i] === '--password') out.password = args[++i];
   }
   return out;
-}
-
-function deriveEmail(user) {
-  // Preferencia: el `email` real que ya tenga el doc. Si no, derivamos
-  // desde el username para que el frontend (que ahora convierte "Miguel"
-  // a "miguel@ticketsgcm.local") coincida.
-  const email = (user.email || '').trim().toLowerCase();
-  if (email && email.includes('@')) return email;
-  const username = (user.username || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
-  if (!username) return null;
-  return `${username}@${DOMAIN}`;
 }
 
 async function run() {
@@ -61,7 +50,7 @@ async function run() {
   const db = firebaseAdmin.getFirestoreInstance();
   const auth = firebaseAdmin.getAuth();
 
-  console.log(`[bootstrap-auth] ${dryRun ? 'DRY-RUN' : 'EJECUTANDO'} — password=${password === DEFAULT_PASSWORD ? '<default ' + DEFAULT_PASSWORD + '>' : '<custom>'}`);
+  console.log(`[bootstrap-auth] ${dryRun ? 'DRY-RUN' : 'EJECUTANDO'} — password=${password === DEFAULT_PASSWORD ? '<default>' : '<custom>'}`);
 
   const usersSnap = await db.collection('users').get();
   console.log(`[bootstrap-auth] Encontrados ${usersSnap.size} usuarios en Firestore.`);
@@ -72,7 +61,7 @@ async function run() {
 
   for (const doc of usersSnap.docs) {
     const data = doc.data();
-    const email = deriveEmail(data);
+    const email = deriveAuthEmail(data);
     if (!email) {
       console.warn(`  [skip] doc ${doc.id} sin email ni username derivable`);
       skipped += 1;

@@ -57,6 +57,11 @@ export const api = {
     login:  (body)    => request('POST', '/api/auth/login',  { body }),
     logout: ()        => request('POST', '/api/auth/logout', {}),
     me:     ()        => request('GET',  '/api/auth/me'),
+    verifyPassword: (body) => request('POST', '/api/auth/verify-password', { body }),
+    // Resuelve un username o email al email canónico registrado en Firebase Auth.
+    // El login view lo llama antes de signInWithEmailAndPassword para soportar
+    // tanto username corto ("Miguel") como email real ("miguel@gmail.com").
+    resolveLogin: (body) => request('POST', '/api/auth/resolve-login', { body }),
     // Canje de ID token de Firebase Auth por sesión local (cookie connect.sid).
     // Usado en producción cuando el frontend está en Netlify y el backend en Render.
     firebase: (body)  => request('POST', '/api/auth/firebase', { body }),

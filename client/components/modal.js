@@ -134,13 +134,21 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
 
 export function confirmModal({ title = 'Confirmar', message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false, onConfirm }) {
   let modal;
-  const body = h('p.text-sm.text-slate-600');
+  const header = h('div.flex.items-center.gap-3.mb-4', {}, [
+    h('div.w-11.h-11.rounded-2xl.bg-brand-ocean\/10.text-brand-ocean.grid.place-items-center', {}, h('span.material-symbols-outlined.text-lg', {}, 'verified_user')),
+    h('div', {}, [
+      h('p.text-base.font-semibold.text-slate-900', {}, title),
+      h('p.text-sm.text-slate-500', {}, 'Confirma esta acción para continuar.'),
+    ]),
+  ]);
+  const body = h('div.flex.flex-col.gap-4', {}, [
+    header,
+    h('p.text-sm.text-slate-600', {}, String(message || '')),
+  ]);
   // message es HTML controlado por el código (no viene del usuario),
   // por seguridad usamos textContent + marcado manual cuando hace falta
   if (typeof message === 'string' && /<\/?\w+/.test(message)) {
-    body.innerHTML = message;
-  } else {
-    body.textContent = String(message || '');
+    body.lastChild.innerHTML = message;
   }
   const actions = (close) => [
     h('button.btn.btn-secondary', { onclick: close, type: 'button' }, cancelText),
@@ -148,4 +156,114 @@ export function confirmModal({ title = 'Confirmar', message, confirmText = 'Conf
   ];
   modal = openModal({ title, body, actions });
   return modal;
+}
+
+export function passwordConfirmModal({
+  title = 'Confirmar acción',
+  message = 'Ingresa tu contraseña para continuar.',
+  confirmText = 'Confirmar',
+  cancelText = 'Cancelar',
+  danger = false,
+  onConfirm,
+}) {
+  let modal;
+  let confirmButton;
+  let closeModal;
+  let resolvePromise;
+  let rejectPromise;
+
+  const error = h('div.hidden.text-sm.text-red-600', {});
+  const passwordInput = h('input.input', {
+    type: 'password',
+    autocomplete: 'current-password',
+    placeholder: 'Contraseña',
+  });
+  const brand = h('div.flex.items-center.gap-3.mb-4', {}, [
+    h('img.w-12.h-12.rounded-3xl.shadow-soft.border.border-surface-border', {
+      src: '/img/Logo.png',
+      alt: 'Logo GCM',
+      loading: 'eager',
+      decoding: 'async',
+    }),
+    h('div', {}, [
+      h('p.text-base.font-semibold.text-slate-900', {}, title),
+      h('p.text-sm.text-slate-500', {}, 'Autentica esta operación con tu contraseña.'),
+    ]),
+  ]);
+  const body = h('div.flex.flex-col.gap-4', {}, [
+    brand,
+    h('p.text-sm.text-slate-600', {}, String(message)),
+    passwordInput,
+    error,
+    h('p.text-xs.text-slate-500', {}, 'Esta acción quedará registrada en el historial de seguridad de su cuenta.'),
+  ]);
+
+  const actions = (close) => {
+    closeModal = close;
+    return [
+      h('button.btn.btn-secondary', {
+        onclick: () => {
+          close();
+          if (!settled) {
+            settled = true;
+            resolvePromise(false);
+          }
+        },
+        type: 'button',
+      }, cancelText),
+      confirmButton = h('button', {
+        class: danger ? 'btn btn-accent' : 'btn btn-primary',
+        type: 'button',
+      }, confirmText),
+    ];
+  };
+
+  let settled = false;
+  const promise = new Promise((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  modal = openModal({
+    title,
+    body,
+    actions,
+    size: 'sm',
+    onClose: () => {
+      if (!settled) {
+        settled = true;
+        resolvePromise(false);
+      }
+    },
+  });
+
+  confirmButton.addEventListener('click', async () => {
+    const value = passwordInput.value.trim();
+    if (!value) {
+      error.textContent = 'Debes ingresar tu contraseña.';
+      error.classList.remove('hidden');
+      passwordInput.focus();
+      return;
+    }
+
+    confirmButton.disabled = true;
+    const originalText = confirmButton.textContent;
+    confirmButton.textContent = 'Verificando…';
+    error.classList.add('hidden');
+
+    try {
+      await onConfirm?.(value);
+      settled = true;
+      closeModal?.();
+      resolvePromise(true);
+    } catch (err) {
+      error.textContent = err?.message || 'Contraseña incorrecta.';
+      error.classList.remove('hidden');
+      passwordInput.focus();
+      confirmButton.disabled = false;
+      confirmButton.textContent = originalText;
+    }
+  });
+
+  return promise;
 }

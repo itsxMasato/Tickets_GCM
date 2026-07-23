@@ -643,7 +643,7 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  border-radius: 0.375rem;
+  border-radius: 0.75rem;
   padding-left: 0.875rem;
   padding-right: 0.875rem;
   padding-top: 0.5rem;
@@ -677,7 +677,7 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  border-radius: 0.375rem;
+  border-radius: 0.75rem;
   padding-left: 0.875rem;
   padding-right: 0.875rem;
   padding-top: 0.5rem;
@@ -734,7 +734,7 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  border-radius: 0.375rem;
+  border-radius: 0.75rem;
   padding-left: 0.875rem;
   padding-right: 0.875rem;
   padding-top: 0.5rem;
@@ -791,7 +791,7 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  border-radius: 0.375rem;
+  border-radius: 0.75rem;
   padding-left: 0.875rem;
   padding-right: 0.875rem;
   padding-top: 0.5rem;
@@ -851,7 +851,7 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  border-radius: 0.375rem;
+  border-radius: 0.75rem;
   padding-left: 0.875rem;
   padding-right: 0.875rem;
   padding-top: 0.5rem;
@@ -937,7 +937,7 @@ a:hover {
 
 .input {
   width: 100%;
-  border-radius: 0.375rem;
+  border-radius: 0.75rem;
   border-width: 1px;
   --tw-border-opacity: 1;
   border-color: rgb(214 222 232 / var(--tw-border-opacity));
@@ -990,7 +990,7 @@ a:hover {
 /* === Card / surfaces === */
 
 .card {
-  border-radius: 0.75rem;
+  border-radius: 1.25rem;
   border-width: 1px;
   --tw-border-opacity: 1;
   border-color: rgb(214 222 232 / var(--tw-border-opacity));
@@ -1000,6 +1000,10 @@ a:hover {
   --tw-shadow: 0 1px 3px 0 rgba(7, 29, 76, 0.06), 0 1px 2px -1px rgba(7, 29, 76, 0.06);
   --tw-shadow-colored: 0 1px 3px 0 var(--tw-shadow-color), 0 1px 2px -1px var(--tw-shadow-color);
   box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
 /* === Badges ===
@@ -1024,7 +1028,7 @@ a:hover {
 .table-wrap {
   width: 100%;
   overflow-x: auto;
-  border-radius: 0.75rem;
+  border-radius: 1.25rem;
   border-width: 1px;
   --tw-border-opacity: 1;
   border-color: rgb(214 222 232 / var(--tw-border-opacity));
@@ -1758,7 +1762,7 @@ a:hover {
 /* === KPI cards === */
 
 .kpi-card {
-  border-radius: 0.75rem;
+  border-radius: 1.25rem;
   border-width: 1px;
   --tw-border-opacity: 1;
   border-color: rgb(214 222 232 / var(--tw-border-opacity));
@@ -2744,7 +2748,7 @@ a:hover {
 }
 
 .dash-hero {
-  border-radius: 0.75rem;
+  border-radius: 1.25rem;
   border-width: 1px;
   --tw-border-opacity: 1;
   border-color: rgb(214 222 232 / var(--tw-border-opacity));
@@ -2800,7 +2804,7 @@ a:hover {
 }
 
 .dash-hero-quiet {
-  border-radius: 0.75rem;
+  border-radius: 1.25rem;
   border-width: 1px;
   border-color: rgb(214 222 232 / var(--tw-border-opacity));
   --tw-bg-opacity: 1;
@@ -3011,8 +3015,6 @@ a:hover {
   width: 100%;
   border-top-left-radius: 0.25rem;
   border-top-right-radius: 0.25rem;
-  --tw-bg-opacity: 1;
-  background-color: rgb(22 172 228 / var(--tw-bg-opacity));
   transition-property: all;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 300ms;
@@ -3029,6 +3031,11 @@ a:hover {
   --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
   box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
   --tw-ring-color: rgb(22 172 228 / 0.4);
+}
+
+.dash-chart-bar-fill {
+  min-height: 16px;
+  background-color: rgb(22 172 228);
 }
 
 .dash-chart-bar-label {
@@ -3141,7 +3148,7 @@ a:hover {
 }
 
 .dash-quick {
-  border-radius: 0.75rem;
+  border-radius: 1.25rem;
   border-width: 1px;
   --tw-border-opacity: 1;
   border-color: rgb(214 222 232 / var(--tw-border-opacity));
@@ -3617,6 +3624,14 @@ a:hover {
   height: 2.5rem;
 }
 
+.h-11 {
+  height: 2.75rem;
+}
+
+.h-12 {
+  height: 3rem;
+}
+
 .h-16 {
   height: 4rem;
 }
@@ -3691,6 +3706,14 @@ a:hover {
 
 .w-10 {
   width: 2.5rem;
+}
+
+.w-11 {
+  width: 2.75rem;
+}
+
+.w-12 {
+  width: 3rem;
 }
 
 .w-16 {
@@ -3911,6 +3934,10 @@ a:hover {
   flex-wrap: wrap;
 }
 
+.place-items-center {
+  place-items: center;
+}
+
 .items-start {
   align-items: flex-start;
 }
@@ -4028,6 +4055,14 @@ a:hover {
 
 .rounded {
   border-radius: 0.25rem;
+}
+
+.rounded-2xl {
+  border-radius: 1rem;
+}
+
+.rounded-3xl {
+  border-radius: 1.5rem;
 }
 
 .rounded-full {
@@ -4963,6 +4998,10 @@ a:hover {
   transition-duration: 150ms;
 }
 
+.ease-in-out {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .content-\[\"\"\] {
   --tw-content: "";
   content: var(--tw-content);
@@ -5017,6 +5056,11 @@ a:hover {
 
 .hover\:bg-accent\/10:hover {
   background-color: rgb(207 48 29 / 0.1);
+}
+
+.hover\:bg-red-50:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(254 242 242 / var(--tw-bg-opacity));
 }
 
 .hover\:bg-slate-50:hover {

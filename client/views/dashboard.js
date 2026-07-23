@@ -275,7 +275,12 @@ function chartBars(data) {
     const intensity = pct / 100;
     const fillStyle = v === 0
       ? { height: '2px', opacity: 1, backgroundColor: 'rgb(214, 222, 232)' /* surface-border */ }
-      : { height: `${pct}%`, minHeight: '2px', opacity: 0.35 + 0.65 * intensity };
+      : {
+        height: `${pct}%`,
+        minHeight: '16px',
+        opacity: 0.7 + 0.3 * intensity,
+        backgroundColor: 'rgb(22, 172, 228)',
+      };
     const labelMajor = majorIdx.has(i) ? ' is-major' : '';
     const labelText = fmtDay(d.day || d.label);
     return h('div.dash-chart-bar.group', {

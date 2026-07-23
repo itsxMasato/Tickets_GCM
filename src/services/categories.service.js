@@ -55,4 +55,16 @@ async function update(id, { name, active } = {}) {
   return after;
 }
 
-module.exports = { list, create, update };
+async function remove(id) {
+  const before = await firestoreData.getCategoryById(id);
+  if (!before) {
+    const err = new Error('Categoría no encontrada.');
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+  await firestoreData.deleteCategory(id);
+  emitCategory('category:deleted', { id: before.id, name: before.name });
+  return before;
+}
+
+module.exports = { list, create, update, remove };

@@ -477,6 +477,17 @@ async function updateCategory(id, { name, active } = {}) {
   return normalizeCategory(updated);
 }
 
+async function deleteCategory(id) {
+  const existing = await getDoc('categories', id);
+  if (!existing) {
+    const err = new Error('Categoría no encontrada.');
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+  await firestore.getFirestore().collection('categories').doc(String(id)).delete();
+  return normalizeCategory(existing);
+}
+
 async function createNotification({ user_id, type, ticket_id, title, body }) {
   const now = firestore.nowSql();
   const doc = await createDoc('notifications', {
@@ -1114,6 +1125,7 @@ module.exports = {
   getCategoryById,
   createCategory,
   updateCategory,
+  deleteCategory,
   createNotification,
   getUnreadCount,
   listNotificationsForUser,

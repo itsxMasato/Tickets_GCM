@@ -27,4 +27,11 @@ router.patch('/:id', requireAuth, requireRole('sac'), async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
+router.delete('/:id', requireAuth, requireRole('sac'), async (req, res, next) => {
+  try {
+    await categoriesService.remove(parseInt(req.params.id, 10));
+    res.status(204).send();
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -91,6 +91,21 @@ async function login(username, password) {
   return sanitize(user);
 }
 
+async function verifyPasswordForUser(userId, password) {
+  if (!password) {
+    throw validationError('Debe ingresar su contraseña.');
+  }
+  const user = await firestoreData.getUserById(userId);
+  if (!user) {
+    throw validationError('Usuario no encontrado.');
+  }
+  const ok = await verifyPassword(password, user.password_hash);
+  if (!ok) {
+    throw validationError('Contraseña incorrecta.');
+  }
+  return true;
+}
+
 async function getById(id) {
   const user = await firestoreData.getUserById(id);
   if (!user) throw notFoundError('Usuario no encontrado.');
@@ -284,4 +299,4 @@ async function listUsers({ role, active, area } = {}) {
   return rows.map(serialize);
 }
 
-module.exports = { login, getById, sanitize, createUser, updateUser, listUsers };
+module.exports = { login, verifyPasswordForUser, getById, sanitize, createUser, updateUser, listUsers };

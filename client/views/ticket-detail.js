@@ -6,7 +6,7 @@ import { toast } from '../utils/toast.js';
 import { statusBadge, priorityBadge } from '../components/badge.js';
 import { renderChat } from '../components/chat.js';
 import { chatComposer } from '../components/chat-composer.js';
-import { openModal, confirmModal } from '../components/modal.js';
+import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
 import { canAssign, canEditMeta, canComment, canUpload, nextStates } from '../utils/permissions.js';
 import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, formatDateTime, relativeFromNow } from '../utils/format.js';
 import { getRoleLabel } from '../utils/role-labels.js';
@@ -62,7 +62,23 @@ export async function renderTicketDetail({ params, user }) {
           label: 'Exportar',
           format: 'pdf',
           kind: 'secondary',
-          onclick: () => exportTicketToPDF(ticket),
+          onclick: async () => {
+            try {
+              await passwordConfirmModal({
+                title: 'Confirmar exportación',
+                message: 'Ingresa tu contraseña para exportar el ticket en PDF.',
+                confirmText: 'Exportar',
+                onConfirm: async (password) => {
+                  await api.auth.verifyPassword({ password });
+                },
+              });
+              exportTicketToPDF(ticket);
+            } catch (e) {
+              if (e && e.message !== 'Modal closed') {
+                toast(e.message || 'Error al exportar', 'error');
+              }
+            }
+          },
         }),
         h('button.btn.btn-ghost', { onclick: reload, 'aria-label': 'Recargar', title: 'Recargar' }, [
           svg(h, ICON.refresh),

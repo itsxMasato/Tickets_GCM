@@ -133,6 +133,7 @@ function isDirty() {
 
 function pendingChanges() {
   // Devuelve [{ role, perm, from, to, affectedUsers }] con el diff real.
+  if (!current || !pending) return [];
   const out = [];
   for (const role of ROLE_ORDER) {
     const a = current[role] || {};
@@ -323,6 +324,7 @@ export async function renderRoles({ user }) {
     renderPending();
   };
   const unsubscribeUsersCache = usersCache.subscribe(() => {
+    if (!current) return;
     renderTabs();
     renderRoleCard();
     refreshCountBadges();

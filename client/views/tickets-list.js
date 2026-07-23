@@ -13,6 +13,7 @@ import { exportButton } from '../components/export-button.js';
 import { filterBadge, countActiveFilters } from '../components/filter-badge.js';
 import { activeFiltersChips } from '../components/active-filters-chips.js';
 import { mountDataList } from '../components/data-list.js';
+import { passwordConfirmModal } from '../components/modal.js';
 
 const STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
@@ -374,20 +375,34 @@ export async function renderTicketsList({ query, user }) {
   }
 
   async function doExport() {
-    const setBusy = (busy) => {
+    const setBusy = (busy, labelText = 'Exportar Excel') => {
       if (!exportBtn) return;
       exportBtn.disabled = busy;
       const label = exportBtn.querySelector('span');
-      if (label) label.textContent = busy ? 'Exportando…' : 'Exportar Excel';
+      if (label) label.textContent = labelText;
     };
-    setBusy(true);
     try {
+      setBusy(true, 'Verificando…');
+      await passwordConfirmModal({
+        title: 'Confirmar exportación',
+        message: 'Ingresa tu contraseña para exportar los datos de los tickets.',
+        confirmText: 'Exportar',
+        onConfirm: async (password) => {
+          await api.auth.verifyPassword({ password });
+        },
+      });
+      setBusy(true, 'Exportando…');
       const rows = await fetchAllForExport(filters);
-      if (!rows.length) { toast('No hay tickets para exportar con los filtros actuales.', 'info'); return; }
+      if (!rows.length) {
+        toast('No hay tickets para exportar con los filtros actuales.', 'info');
+        return;
+      }
       exportToExcel(rows, `tickets-${new Date().toISOString().slice(0, 10)}.xlsx`);
       toast(`Exportadas ${rows.length} filas a Excel.`, 'success');
     } catch (e) {
-      toast(e.message || 'Error al exportar', 'error');
+      if (e && e.message !== 'Modal closed') {
+        toast(e.message || 'Error al exportar', 'error');
+      }
     } finally {
       setBusy(false);
     }

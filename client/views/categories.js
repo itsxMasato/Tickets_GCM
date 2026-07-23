@@ -2,7 +2,7 @@
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
-import { openModal, confirmModal } from '../components/modal.js';
+import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 
 export async function renderCategories({ user }) {
@@ -42,6 +42,7 @@ export async function renderCategories({ user }) {
         <td class="text-right">
           <button class="btn btn-ghost btn-sm" data-edit="${c.id}">Editar</button>
           <button class="btn btn-ghost btn-sm text-accent hover:bg-accent/10" data-toggle="${c.id}">${c.active ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn btn-ghost btn-sm text-red-600 hover:bg-red-50" data-delete="${c.id}">Eliminar</button>
         </td>
       </tr>
     `).join('');
@@ -55,10 +56,28 @@ export async function renderCategories({ user }) {
       const c = cats.find((x) => x.id === id);
       confirmModal({
         title: c.active ? 'Desactivar categoría' : 'Activar categoría',
-        message: `¿${c.active ? 'Desactivar' : 'Activar'} <b>${escapeHtml(c.name)}</b>?`,
+        message: `¿${c.active ? 'Desactivar' : 'Activar'} ${escapeHtml(c.name)}?`,
         confirmText: c.active ? 'Desactivar' : 'Activar',
         onConfirm: async () => {
           try { await api.categories.update(id, { active: !c.active }); toast('Categoría actualizada', 'success'); reload(); } catch (e) { toast(e.message, 'error'); }
+        },
+      });
+    }));
+
+    tableWrap.querySelectorAll('[data-delete]').forEach((b) => b.addEventListener('click', async () => {
+      const id = parseInt(b.dataset.delete, 10);
+      const c = cats.find((x) => x.id === id);
+      if (!c) return;
+      await passwordConfirmModal({
+        title: 'Eliminar categoría',
+        message: `Ingresa tu contraseña para eliminar la categoría "${c.name}".`,
+        confirmText: 'Eliminar',
+        danger: true,
+        onConfirm: async (password) => {
+          await api.auth.verifyPassword({ password });
+          await api.categories.delete(id);
+          toast('Categoría eliminada', 'success');
+          reload();
         },
       });
     }));

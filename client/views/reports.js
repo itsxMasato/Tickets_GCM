@@ -9,7 +9,7 @@ import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { exportButton } from '../components/export-button.js';
 import { toast } from '../utils/toast.js';
 import { mountDataList } from '../components/data-list.js';
-
+import { passwordConfirmModal } from '../components/modal.js';
 const STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
 
@@ -225,6 +225,14 @@ export async function renderReports({ query, user }) {
 
   async function doExportExcel() {
     try {
+      await passwordConfirmModal({
+        title: 'Confirmar exportación',
+        message: 'Ingresa tu contraseña para exportar los datos de este reporte.',
+        confirmText: 'Exportar',
+        onConfirm: async (password) => {
+          await api.auth.verifyPassword({ password });
+        },
+      });
       const rows = await fetchAllForExport(filters);
       if (!rows.length) {
         toast('No hay datos para exportar con los filtros seleccionados.', 'info');
@@ -233,7 +241,9 @@ export async function renderReports({ query, user }) {
       exportToExcel(rows, `reporte-tickets-${new Date().toISOString().slice(0, 10)}.xlsx`);
       toast(`Exportadas ${rows.length} filas a Excel.`, 'success');
     } catch (e) {
-      toast(e.message || 'Error al exportar', 'error');
+      if (e && e.message !== 'Modal closed') {
+        toast(e.message || 'Error al exportar', 'error');
+      }
     }
   }
 

@@ -20,6 +20,7 @@ import {
 // ───────────────────────────────────────────────────────────────────────
 const ERROR_COPY = {
   invalid_credentials: 'Usuario o contraseña incorrectos. Verifica los datos e intenta de nuevo.',
+  not_found: 'No encontramos una cuenta con ese usuario o correo.',
   network_error: 'No se pudo contactar al servidor. Revisa tu conexión a la red.',
   rate_limited: 'Demasiados intentos. Espera un momento antes de volver a intentar.',
   server_error: 'El servicio no responde en este momento. Intenta de nuevo en unos minutos.',
@@ -28,6 +29,7 @@ const ERROR_COPY = {
 function describeError(err) {
   if (!err) return ERROR_COPY.server_error;
   if (err.status === 401) return ERROR_COPY.invalid_credentials;
+  if (err.status === 404) return ERROR_COPY.not_found;
   if (err.status === 429) return ERROR_COPY.rate_limited;
   if (err.status >= 500) return ERROR_COPY.server_error;
   if (err.code && ERROR_COPY[err.code]) return ERROR_COPY[err.code];
@@ -109,10 +111,10 @@ export async function renderLogin({ params, query, onLogin }) {
     type: 'text',
     icon: 'user',
     autocomplete: 'username',
-    placeholder: 'jperez · juan@empresa.com',
+    placeholder: 'jperez · juan@gcm.com',
     autofocus: true,
     inputmode: 'text',
-    helper: 'Tu usuario de red o tu correo corporativo.',
+    helper: 'Tu usuario o tu correo corporativo.',
   });
   form.appendChild(userNode);
 
@@ -125,13 +127,13 @@ export async function renderLogin({ params, query, onLogin }) {
   form.appendChild(passNode);
 
   // Opciones (recordarme + olvidé mi acceso)
-  const optionsRow = h('div.login-form-row', {});
-  optionsRow.appendChild(LoginCheckbox({ id: 'remember', label: 'Recordarme en este dispositivo' }));
-  optionsRow.appendChild(h('a.login-link.inline-flex.items-center.gap-1', {
-    href: '/recuperar',
-    tabindex: '0',
-  }, ['Olvidé mi acceso']));
-  form.appendChild(optionsRow);
+  //const optionsRow = h('div.login-form-row', {});
+  //optionsRow.appendChild(LoginCheckbox({ id: 'remember', label: 'Recordarme en este dispositivo' }));
+  //optionsRow.appendChild(h('a.login-link.inline-flex.items-center.gap-1', {
+    //href: '/recuperar',
+    //tabindex: '0',
+  //}, ['Olvidé mi acceso']));
+  //form.appendChild(optionsRow);
 
   // Banner de error (oculto al inicio)
   const errorBox = h('div.hidden', {});
@@ -240,24 +242,16 @@ export async function renderLogin({ params, query, onLogin }) {
     const pass = passInput.value;
     if (!user || !pass) return;
 
-    // Normalizar: si el usuario tipeó un username (sin @) o un email
-    // parcial, lo convertimos a un email sintético que Firebase Auth pueda
-    // aceptar. Así el usuario puede entrar tipeando solo "Miguel" sin
-    // necesidad de recordar su email completo.
-    //   "Miguel"           → "miguel@ticketsgcm.local"
-    //   "miguel@empresa"   → "miguel@empresa" (ya es email, se respeta)
-    //   "  MIGUEL  "       → "miguel@ticketsgcm.local"
-    const loginEmail = user.includes('@')
-      ? user.toLowerCase()
-      : `${user.toLowerCase().replace(/[^a-z0-9._-]/g, '')}@ticketsgcm.local`;
-
     setBusy(true);
     try {
       // Flujo Firebase Auth + canje por sesión local.
-      // 1) Autenticar contra Firebase Auth (cliente) con el email normalizado.
-      // 2) Canjear el ID token por una cookie de sesión en el backend.
-      // El endpoint /api/auth/firebase vive en src/routes/auth.routes.js y
-      // mapea el email verificado contra el usuario local en Firestore.
+      // 1) Pedirle al backend el email canónico registrado en Firebase Auth
+      //    para este identificador (username o email). El endpoint hace el
+      //    fallback sintético ↔ real y devuelve 404 si no hay match.
+      // 2) Autenticar contra Firebase Auth (cliente) con ese email.
+      // 3) Canjear el ID token por una cookie de sesión en el backend.
+      // El endpoint /api/auth/resolve-login vive en src/routes/auth.routes.js.
+      const { email: loginEmail } = await api.auth.resolveLogin({ identifier: user });
       const { idToken } = await signInWithFirebaseEmail(loginEmail, pass);
       const { user: u } = await api.auth.firebase({ idToken });
       if (nextUrl) {
