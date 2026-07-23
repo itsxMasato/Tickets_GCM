@@ -454,11 +454,12 @@
       z-index: 40;
       width: 84vw;
       max-width: 320px;
-      height: 100dvh;
+      height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+      max-height: 100dvh;
       transform: translateX(-100%);
       will-change: transform;
-      /* Safe-area iOS: evita que el brand se meta debajo del notch/dynamic island. */
       padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
     }
     body.gcm-sidebar-open .gcm-sidebar { transform: translateX(0); }
   }
@@ -1156,7 +1157,7 @@
      para que el contenido respete el notch / dynamic island / home bar.
      Usa @supports para que no afecte a navegadores sin env(). */
   @supports (padding: max(0px)) {
-    .gcm-shell { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+    .gcm-shell { padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); padding-bottom: env(safe-area-inset-bottom); }
     .topbar { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1.5rem, env(safe-area-inset-right)); }
     .login-aside-inner { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); padding-bottom: max(28px, env(safe-area-inset-bottom)); }
   }
