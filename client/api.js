@@ -8,8 +8,13 @@ function getApiBase() {
 
   if (typeof window !== 'undefined' && typeof window.location?.hostname === 'string') {
     const host = window.location.hostname.toLowerCase();
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
     const isNetlify = host.endsWith('.netlify.app') || host === 'netlify.app';
-    if (import.meta.env?.PROD && isNetlify) {
+    const isRender = host.endsWith('.onrender.com');
+    if (import.meta.env?.PROD && !isLocalhost) {
+      return 'https://tickets-gcm-api.onrender.com';
+    }
+    if (import.meta.env?.PROD && isRender) {
       return 'https://tickets-gcm-api.onrender.com';
     }
   }
