@@ -52,7 +52,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/css/styles.css" />
+    <!-- CSS principal: lo emite Vite en /assets/index-<hash>.css.
+         En dev, Vite sirve /client/styles.css procesado por Tailwind;
+         en prod el <link> a /assets/index-*.css (línea siguiente) es el que
+         carga estilos. NO referenciar /css/styles.css directamente: Netlify
+         haría fallback SPA a index.html y el browser rechazaría el MIME. -->
     <style>
       .material-symbols-outlined {
         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;

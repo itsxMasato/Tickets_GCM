@@ -36,22 +36,45 @@ const sessionStore = new SQLiteStore({
 });
 
 // Origen permitido para CORS. En producción el frontend vive en Netlify
-// (https://ticketsgcm.netlify.app) y el backend en Render; la cookie de
-// sesión cruza dominios, así que necesitamos CORS con credentials: true y
-// sameSite: 'none' en la cookie (ver sessionMiddleware abajo).
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || (
-  config.env === 'production'
-    ? 'https://ticketsgcm.netlify.app'
-    : 'http://localhost:5173'
-);
+// y el backend en Render; la cookie de sesión cruza dominios, así que
+// necesitamos CORS con credentials: true y sameSite: 'none' en la cookie
+// (ver sessionMiddleware abajo).
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://ticketsgcm.netlify.app',
+  'https://tickets-gcm.netlify.app',
+  'https://www.ticketsgcm.netlify.app',
+  'https://www.tickets-gcm.netlify.app',
+];
+const ALLOWED_ORIGINS = Array.from(new Set([
+  process.env.ALLOWED_ORIGIN,
+  ...(config.env === 'production' ? [] : []),
+  ...DEFAULT_ALLOWED_ORIGINS,
+].filter(Boolean)));
 
 function createApp() {
   const app = express();
 
   // CORS debe ir ANTES de sessionMiddleware para que las respuestas a
   // preflight OPTIONS (POST con credentials) incluyan los headers correctos.
+  //
+  // Logging defensivo: si un origen es rechazado, lo dejamos en consola para
+  // diagnosticar deploys desactualizados (Render free tier a veces sirve una
+  // versión vieja tras un sleep). El fix de código solo aplica tras redeploy.
   app.use(cors({
-    origin: ALLOWED_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const isAllowed =
+        ALLOWED_ORIGINS.includes(origin) ||
+        /\.netlify\.app$/i.test(origin) ||
+        /\.onrender\.com$/i.test(origin);
+      if (isAllowed) {
+        return callback(null, origin);
+      }
+      console.warn('[cors] Origen rechazado:', origin, '— no coincide con ALLOWED_ORIGINS ni con *.netlify.app / *.onrender.com');
+      return callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

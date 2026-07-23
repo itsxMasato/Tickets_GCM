@@ -1,5 +1,5 @@
 [build]
-  command = "pnpm run build:client"
+  command = "pnpm run build"
   publish = "dist"
 
 [[redirects]]
