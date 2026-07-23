@@ -15,7 +15,11 @@
         margin: 0;
         padding: 0;
         font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-        background: #f8fafc;
+        min-height: 100vh;
+        background:
+          radial-gradient(ellipse 900px 600px at 50% 28%, rgba(22,172,228,0.16), transparent 60%),
+          linear-gradient(160deg, #071D4C 0%, #44497B 78%);
+        color: #F7F9FC;
       }
       #app {
         display: none; /* Ocultar hasta que CSS se cargue completamente */
@@ -23,7 +27,7 @@
       #loading-overlay {
         position: fixed;
         inset: 0;
-        background: #f8fafc;
+        background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -34,17 +38,7 @@
       #loading-overlay.hidden {
         opacity: 0;
         pointer-events: none;
-      }
-      .loader {
-        width: 48px;
-        height: 48px;
-        border: 3px solid #e2e8f0;
-        border-top-color: #071d4c;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-      }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
+        display: none;
       }
     </style>
     
@@ -69,8 +63,7 @@
         z-index: 10001;
         align-items: center;
         justify-content: center;
-        background: radial-gradient(ellipse 900px 600px at 50% 28%, rgba(22,172,228,0.16), transparent 60%),
-                    linear-gradient(160deg, #071D4C 0%, #44497B 78%);
+        background: transparent;
         overflow: hidden;
         opacity: 1;
         transition: opacity 350ms cubic-bezier(.4,0,.2,1);
@@ -106,32 +99,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        opacity: 0;
-      }
-      #login-splash-overlay.active .logo-wrap {
-        animation: surface-in 900ms cubic-bezier(.2,.7,.2,1) 150ms forwards;
-      }
-      #login-splash-overlay .eyebrow,
-      #login-splash-overlay h1,
-      #login-splash-overlay p.lead,
-      #login-splash-overlay .loader,
-      #login-splash-overlay .footnote {
-        opacity: 0;
-      }
-      #login-splash-overlay.active .eyebrow {
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 380ms forwards;
-      }
-      #login-splash-overlay.active h1 {
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 480ms forwards;
-      }
-      #login-splash-overlay.active p.lead {
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 580ms forwards;
-      }
-      #login-splash-overlay.active .loader {
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 700ms forwards;
-      }
-      #login-splash-overlay.active .footnote {
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 820ms forwards;
       }
       #login-splash-overlay .logo-halo {
         position: absolute;
@@ -159,13 +126,6 @@
         color: #071D4C;
         background: linear-gradient(135deg, #16ACE4, #7FD4F2);
       }
-      #login-splash-overlay .eyebrow,
-      #login-splash-overlay h1,
-      #login-splash-overlay p.lead,
-      #login-splash-overlay .loader,
-      #login-splash-overlay .footnote {
-        opacity: 0;
-      }
       #login-splash-overlay .eyebrow {
         font-family: 'Inter', sans-serif;
         font-size: 12px;
@@ -173,7 +133,6 @@
         letter-spacing: 0.16em;
         text-transform: uppercase;
         color: #16ACE4;
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 380ms forwards;
       }
       #login-splash-overlay h1 {
         font-family: 'Space Grotesk', sans-serif;
@@ -182,14 +141,12 @@
         line-height: 1.2;
         letter-spacing: -0.01em;
         color: #F7F9FC;
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 480ms forwards;
       }
       #login-splash-overlay p.lead {
         font-size: 15px;
         line-height: 1.6;
         color: #C7D2E5;
         max-width: 360px;
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 580ms forwards;
       }
       #login-splash-overlay .loader {
         margin-top: 16px;
@@ -197,56 +154,75 @@
         flex-direction: column;
         align-items: center;
         gap: 10px;
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 700ms forwards;
       }
       #login-splash-overlay .loader-track {
+        position: relative;
         width: 240px;
         height: 6px;
         border-radius: 999px;
-        background: rgba(247,249,252,0.12);
+        background: rgba(247,249,252,0.14);
         overflow: hidden;
-        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
       }
       #login-splash-overlay .loader-fill {
-        position: relative;
+        display: block;
         height: 100%;
-        width: 28%;
+        width: 100%;
         border-radius: 999px;
-        background: linear-gradient(90deg, #16ACE4, #3BC9FF 45%, #CF301D);
-        animation: load-sweep 1.8s cubic-bezier(.2,.7,.2,1) infinite;
-        transform: translateX(-160%);
-        box-shadow: 0 0 20px rgba(22,172,228,0.35);
+        background: linear-gradient(90deg, #16ACE4 0%, #3BC9FF 55%, #CF301D 100%);
+        transform: scaleX(0);
+        transform-origin: left center;
+        transition: transform 280ms cubic-bezier(.2,.7,.2,1);
+        will-change: transform;
       }
-      #login-splash-overlay .loader-label {
+      #login-splash-overlay .loader-meta {
+        width: 240px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+      #login-splash-overlay .loader-stage {
         font-size: 12px;
         font-weight: 500;
         letter-spacing: 0.04em;
         color: #8FA0BC;
+        font-variant-numeric: tabular-nums;
+      }
+      #login-splash-overlay .loader-percent {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #16ACE4;
+        font-variant-numeric: tabular-nums;
       }
       #login-splash-overlay .footnote {
         margin-top: 8px;
         font-size: 12px;
         color: #8FA0BC;
-        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) 820ms forwards;
       }
       @keyframes load-sweep {
-        0% {
-          transform: translateX(-160%);
-          width: 24%;
-        }
-        35% {
-          transform: translateX(10%);
-          width: 48%;
-        }
-        65% {
-          transform: translateX(24%);
-          width: 38%;
-        }
-        100% {
-          transform: translateX(260%);
-          width: 24%;
-        }
+        0%   { transform: translateX(-120%); width: 24%; }
+        35%  { transform: translateX(10%);   width: 48%; }
+        65%  { transform: translateX(24%);   width: 38%; }
+        100% { transform: translateX(220%);  width: 24%; }
       }
+      /* Animaciones de entrada — SOLO cuando se activa el splash */
+      #login-splash-overlay.active .logo-wrap {
+        animation: surface-in 900ms cubic-bezier(.2,.7,.2,1) 150ms forwards;
+      }
+      #login-splash-overlay.active .eyebrow,
+      #login-splash-overlay.active h1,
+      #login-splash-overlay.active p.lead,
+      #login-splash-overlay.active .loader,
+      #login-splash-overlay.active .footnote {
+        animation: rise-in 700ms cubic-bezier(.2,.7,.2,1) forwards;
+      }
+      #login-splash-overlay.active .eyebrow  { animation-delay: 380ms; }
+      #login-splash-overlay.active h1        { animation-delay: 480ms; }
+      #login-splash-overlay.active p.lead    { animation-delay: 580ms; }
+      #login-splash-overlay.active .loader   { animation-delay: 700ms; }
+      #login-splash-overlay.active .footnote { animation-delay: 820ms; }
       #login-splash-overlay .waves {
         position: absolute;
         left: 0;
@@ -291,22 +267,22 @@
         #login-splash-overlay .loader-fill {
           animation: none !important;
         }
-        #login-splash-overlay .loader-fill { width: 70%; }
+        #login-splash-overlay .loader-fill { transform: scaleX(0.7); }
       }
       @keyframes rise-in {
         from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+        to   { opacity: 1; transform: translateY(0); }
       }
       @keyframes surface-in {
         from { opacity: 0; transform: translateY(18px) scale(0.94); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
       }
       @keyframes drift {
         from { transform: translateX(0); }
-        to { transform: translateX(-50%); }
+        to   { transform: translateX(-50%); }
       }
     </style>
-    <script type="module" crossorigin src="/assets/index-BdPx8ggJ.js"></script>
+    <script type="module" crossorigin src="/assets/index-3n35suYz.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-CI-p8Jp5.css">
   </head>
   <body>
@@ -328,9 +304,12 @@
         <p class="lead">Registra, da seguimiento y resuelve las solicitudes de soporte de todas las áreas desde un solo lugar.</p>
         <div class="loader">
           <div class="loader-track">
-            <div class="loader-fill"></div>
+            <div class="loader-fill" id="login-splash-progress-bar"></div>
           </div>
-          <span class="loader-label">Cargando sistema…</span>
+          <div class="loader-meta">
+            <span class="loader-stage" id="login-splash-stage">Inicializando…</span>
+            <span class="loader-percent" id="login-splash-percent" aria-hidden="true">0%</span>
+          </div>
         </div>
         <span class="footnote">Departamento de Soporte · GCM</span>
       </main>
@@ -371,15 +350,69 @@
 
       window.showLoginSplash = function() {
         const splash = document.getElementById('login-splash-overlay');
+        const overlay = document.getElementById('loading-overlay');
         const app = document.getElementById('app');
         if (app) {
           app.style.visibility = 'hidden';
+        }
+        if (overlay) {
+          overlay.classList.add('hidden');
         }
         if (splash) {
           splash.style.display = 'flex';
           splash.classList.add('active');
           window.__loginSplashVisible = true;
         }
+        // Motor de progreso real: 0% → 100% durante los 5s mínimos del splash.
+        // Avanza rápido al inicio, se desacelera hacia el final (easeOutCubic)
+        // y queda tickeando para que se sienta vivo si los recursos tardan más.
+        const bar = document.getElementById('login-splash-progress-bar');
+        const pctEl = document.getElementById('login-splash-percent');
+        const stageEl = document.getElementById('login-splash-stage');
+        if (!bar || !pctEl || !stageEl || window.__loginSplashProgressStarted) return;
+        window.__loginSplashProgressStarted = true;
+
+        const STAGES = [
+          { at: 0,   text: 'Inicializando…' },
+          { at: 25,  text: 'Conectando con el servidor…' },
+          { at: 55,  text: 'Cargando datos del usuario…' },
+          { at: 80,  text: 'Preparando tu panel…' },
+          { at: 100, text: 'Listo' },
+        ];
+        const TOTAL_MS = 5000;
+        const startedAt = Date.now();
+        let pct = 0;
+
+        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+        const setStage = (p) => {
+          for (let i = STAGES.length - 1; i >= 0; i--) {
+            if (p >= STAGES[i].at) {
+              if (stageEl.textContent !== STAGES[i].text) {
+                stageEl.textContent = STAGES[i].text;
+              }
+              return;
+            }
+          }
+        };
+
+        const tick = () => {
+          const elapsed = Date.now() - startedAt;
+          const t = Math.min(1, elapsed / TOTAL_MS);
+          pct = Math.round(easeOutCubic(t) * 100);
+          bar.style.transform = `scaleX(${pct / 100})`;
+          pctEl.textContent = `${pct}%`;
+          setStage(pct);
+          if (t < 1) {
+            window.__loginSplashProgressRaf = requestAnimationFrame(tick);
+          }
+        };
+        // Reset visual antes de empezar (por si quedó de un show previo)
+        bar.style.transform = 'scaleX(0)';
+        pctEl.textContent = '0%';
+        setStage(0);
+        // Primer paint en el siguiente frame para que la transición se vea
+        requestAnimationFrame(() => requestAnimationFrame(tick));
       };
 
       window.hideLoginSplash = function() {
@@ -390,6 +423,19 @@
           return;
         }
         window.__loginSplashVisible = false;
+        // Forzar 100% antes del fade para que la barra se sienta "completa".
+        // Cancelamos el rAF y rellenamos en un solo frame.
+        if (window.__loginSplashProgressRaf) {
+          cancelAnimationFrame(window.__loginSplashProgressRaf);
+          window.__loginSplashProgressRaf = null;
+        }
+        const bar = document.getElementById('login-splash-progress-bar');
+        const pctEl = document.getElementById('login-splash-percent');
+        const stageEl = document.getElementById('login-splash-stage');
+        if (bar) bar.style.transform = 'scaleX(1)';
+        if (pctEl) pctEl.textContent = '100%';
+        if (stageEl) stageEl.textContent = 'Listo';
+        window.__loginSplashProgressStarted = false;
         // Fade-out de 350ms; el listener de transitionend termina de esconder
         // el overlay. Si por algún motivo la transition no dispara, el
         // fallback de timeout de 600ms asegura que no quede pegado.
