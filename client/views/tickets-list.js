@@ -44,7 +44,7 @@ export async function renderTicketsList({ query, user }) {
     priority: query.priority || '',
     search: query.search || '',
     assigned_to: query.assigned_to || '',
-    area: query.area || '',
+    area: isJefe(user) ? '' : query.area || '',
     date_from: query.date_from || '',
     date_to: query.date_to || '',
     page: parseInt(query.page || '1', 10) || 1,
@@ -86,7 +86,9 @@ export async function renderTicketsList({ query, user }) {
   filtersBar.appendChild(h('div.w-full.md\\:flex-1.md\\:min-w-\\[200px\\]', {}, [h('label.label', {}, 'Búsqueda'), searchInput]));
   filtersBar.appendChild(h('div.w-full.md\\:w-44', {}, [h('label.label', {}, 'Estado'), statusSel]));
   filtersBar.appendChild(h('div.w-full.md\\:w-44', {}, [h('label.label', {}, 'Prioridad'), prioSel]));
-  filtersBar.appendChild(h('div.w-full.md\\:w-44', {}, [h('label.label', {}, 'Área'), areaSel]));
+  if (!isJefe(user)) {
+    filtersBar.appendChild(h('div.w-full.md\:w-44', {}, [h('label.label', {}, 'Área'), areaSel]));
+  }
   filtersBar.appendChild(h('div.w-full.md\\:w-44', {}, [h('label.label', {}, 'Responsable'), assignedSel]));
   filtersBar.appendChild(h('div.w-full.md\\:w-40', {}, [h('label.label', {}, 'Desde'), fromInput]));
   filtersBar.appendChild(h('div.w-full.md\\:w-40', {}, [h('label.label', {}, 'Hasta'), toInput]));
@@ -257,7 +259,7 @@ export async function renderTicketsList({ query, user }) {
     filters.search = searchInput.value.trim();
     filters.status = statusSel.value;
     filters.priority = prioSel.value;
-    filters.area = areaSel.value;
+    filters.area = isJefe(user) ? '' : areaSel.value;
     filters.assigned_to = assignedSel.value;
     filters.date_from = fromInput.value;
     filters.date_to = toInput.value;

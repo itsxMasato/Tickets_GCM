@@ -2,6 +2,8 @@
 ﻿'use strict';
 const firestoreData = require('../firestoreData');
 const { verifyPassword, hashPassword } = require('../utils/password');
+const { syncFirebaseAuthUser } = require('../utils/firebase-auth-sync');
+const { deriveAuthEmail } = require('../utils/deriveAuthEmail');
 const {
   validationError,
   notFoundError,
@@ -50,6 +52,10 @@ function emitUser(event, user, opts = {}) {
   }
 }
 
+function isUserActive(value) {
+  return value === 0 || value === false || value === '0' || value === 'false' ? false : true;
+}
+
 function serialize(row) {
   if (!row) return null;
   return {
@@ -58,7 +64,7 @@ function serialize(row) {
     full_name: row.full_name,
     role: row.role,
     area: row.area || null,
-    active: row.active ? 1 : 0,
+    active: isUserActive(row.active) ? 1 : 0,
     created_at: row.created_at instanceof Date
       ? row.created_at.toISOString().replace('T', ' ').slice(0, 19)
       : row.created_at,
@@ -72,7 +78,7 @@ function sanitize(user) {
     full_name: user.full_name,
     role: user.role,
     area: user.area || null,
-    active: !!user.active,
+    active: isUserActive(user.active),
   };
 }
 
@@ -163,6 +169,19 @@ async function createUser({ username, password, full_name, role, area, email }) 
       area: cleanArea,
       email: cleanEmail,
     });
+
+    await syncFirebaseAuthUser({
+      authClient: require('../firebaseAdmin').getAuth(),
+      user: {
+        username: cleanUsername,
+        full_name: cleanFullName,
+        email: deriveAuthEmail({ username: cleanUsername, email: cleanEmail }),
+      },
+      password,
+    }).catch((syncErr) => {
+      console.warn('[auth.service] firebase auth sync failed on create', syncErr.stack || syncErr.message);
+    });
+
     const row = await getById(created.id);
     emitUser('user:created', row);
     return row;
@@ -273,6 +292,28 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
       throw notFoundError('Usuario no encontrado.');
     }
     throw err;
+  }
+
+  const shouldSyncFirebase = password || patch.email !== undefined || patch.username !== undefined || patch.full_name !== undefined;
+  if (shouldSyncFirebase) {
+    const newEmail = deriveAuthEmail({
+      username: patch.username !== undefined ? patch.username : before.username,
+      email: patch.email !== undefined ? patch.email : before.email,
+    });
+    const currentEmail = deriveAuthEmail({ username: before.username, email: before.email });
+
+    await syncFirebaseAuthUser({
+      authClient: require('../firebaseAdmin').getAuth(),
+      user: {
+        username: patch.username !== undefined ? patch.username : before.username,
+        full_name: patch.full_name !== undefined ? patch.full_name : before.full_name,
+        email: newEmail,
+      },
+      currentEmail,
+      password,
+    }).catch((syncErr) => {
+      console.warn('[auth.service] firebase auth sync failed on update', syncErr.stack || syncErr.message);
+    });
   }
   const after = await getById(id);
 

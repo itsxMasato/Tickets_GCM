@@ -34,6 +34,10 @@ const TABLE_COLUMNS = [
   { key: 'actions',    label: '' },
 ];
 
+function isUserActive(value) {
+  return value === 0 || value === false || value === '0' || value === 'false' ? false : true;
+}
+
 export async function renderUsers({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
@@ -97,12 +101,13 @@ export async function renderUsers({ user }) {
   function onToggle(id) {
     const u = currentUsers.find((x) => x.id === id);
     if (!u) return;
+    const isActive = isUserActive(u.active);
     confirmModal({
-      title: u.active ? 'Desactivar usuario' : 'Activar usuario',
-      message: `¿${u.active ? 'Desactivar' : 'Activar'} a <b>${escapeHtml(u.full_name)}</b>?`,
-      confirmText: u.active ? 'Desactivar' : 'Activar',
+      title: isActive ? 'Desactivar usuario' : 'Activar usuario',
+      message: `¿${isActive ? 'Desactivar' : 'Activar'} a <b>${escapeHtml(u.full_name)}</b>?`,
+      confirmText: isActive ? 'Desactivar' : 'Activar',
       onConfirm: async () => {
-        try { await api.users.update(id, { active: !u.active }); toast('Usuario actualizado', 'success'); reload(); } catch (e) { toast(e.message, 'error'); }
+        try { await api.users.update(id, { active: !isActive }); toast('Usuario actualizado', 'success'); reload(); } catch (e) { toast(e.message, 'error'); }
       },
     });
   }
@@ -120,7 +125,7 @@ export async function renderUsers({ user }) {
           h('div.font-medium.text-brand-ink.truncate', {}, escapeHtml(u.full_name || '—')),
           h('div.text-xs.font-mono.text-slate-500', {}, escapeHtml(u.username || '')),
         ]),
-        u.active
+        isUserActive(u.active)
           ? h('span.badge.bg-emerald-100.text-emerald-800', {}, 'Activo')
           : h('span.badge.bg-slate-200.text-slate-700', {}, 'Inactivo'),
       ]),
@@ -137,9 +142,9 @@ export async function renderUsers({ user }) {
         }, 'Editar'),
         h('button.btn.btn-ghost.btn-sm.flex-1', {
           type: 'button',
-          class: u.active ? 'text-accent hover:bg-accent/10' : '',
+          class: isUserActive(u.active) ? 'text-accent hover:bg-accent/10' : '',
           onclick: (e) => { e.stopPropagation(); onToggle(u.id); },
-        }, u.active ? 'Desactivar' : 'Activar'),
+        }, isUserActive(u.active) ? 'Desactivar' : 'Activar'),
       ]),
     ]);
     return card;
@@ -152,10 +157,10 @@ export async function renderUsers({ user }) {
         <td>${escapeHtml(u.full_name)}</td>
         <td><span class="badge bg-brand/10 text-brand">${escapeHtml(getRoleLabel(u.role))}</span></td>
         <td>${escapeHtml(AREA_LABEL[u.area] || u.area || '—')}</td>
-        <td>${u.active ? '<span class="badge bg-emerald-100 text-emerald-800">Activo</span>' : '<span class="badge bg-slate-200 text-slate-800">Inactivo</span>'}</td>
+        <td>${isUserActive(u.active) ? '<span class="badge bg-emerald-100 text-emerald-800">Activo</span>' : '<span class="badge bg-slate-200 text-slate-800">Inactivo</span>'}</td>
         <td class="text-right">
           <button class="btn btn-ghost btn-sm" data-edit>Editar</button>
-          <button class="btn btn-ghost btn-sm ${u.active ? 'text-accent hover:bg-accent/10' : ''}" data-toggle>${u.active ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn btn-ghost btn-sm ${isUserActive(u.active) ? 'text-accent hover:bg-accent/10' : ''}" data-toggle>${isUserActive(u.active) ? 'Desactivar' : 'Activar'}</button>
         </td>
       </tr>
     `;
@@ -242,15 +247,50 @@ function openEditModal(u, onSaved, currentUser) {
   const role = h('select.input', {},
     ROLES.map((r) => h('option', { value: r, selected: u?.role === r ? '' : null }, getRoleLabel(r)))
   );
-  const area = h('select.input', {}, [
+  const area = h('select.input', { value: u?.area || '' }, [
     h('option', { value: '' }, '— Sin área —'),
     ...AREAS.map((a) => h('option', { value: a, selected: u?.area === a ? '' : null }, AREA_LABEL[a])),
   ]);
+  if (u?.area) area.value = u.area;
+  // Toggle de visibilidad de la contraseña. Devuelve el contenedor (input
+  // + botón), no el input solo, para que el caller pueda meterlo en un
+  // field. El input resultante queda accesible con su `id` original.
+  function makePasswordInput(input) {
+    const wrap = h('div.relative', {});
+    const eyeBtn = h('button', {
+      type: 'button',
+      'aria-label': 'Mostrar contraseña',
+      'aria-pressed': 'false',
+      title: 'Mostrar / ocultar contraseña',
+      class: 'absolute inset-y-0 right-0 flex items-center gap-1 rounded-r-md border-l border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-ocean/60',
+      onclick: () => {
+        const isHidden = input.type === 'password';
+        input.type = isHidden ? 'text' : 'password';
+        eyeBtn.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
+        eyeBtn.setAttribute('aria-label', isHidden ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        eyeBtn.innerHTML = isHidden
+          ? '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><span class="sr-only">Mostrar</span>'
+          : '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"></path><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"></path><path d="M9.88 5.08A10.94 10.94 0 0 1 12 5c6.5 0 10 7 10 7a20.7 20.7 0 0 1-4.07 5.03"></path><path d="M6.53 6.53A20.7 20.7 0 0 0 2 12s3.5 6 10 6a10.94 10.94 0 0 0 3.95-.83"></path></svg><span class="sr-only">Ocultar</span>';
+      },
+    }, [
+      h('svg.w-4.h-4', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+        h('path', { d: 'M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z' }),
+        h('circle', { cx: '12', cy: '12', r: '3' }),
+      ]),
+      h('span.sr-only', {}, 'Mostrar'),
+    ]);
+    input.classList.add('pr-20');
+    wrap.appendChild(input);
+    wrap.appendChild(eyeBtn);
+    return wrap;
+  }
+
   const password = h('input.input', {
     type: 'password',
     maxlength: String(VALIDATION.password.max),
     autocomplete: isEdit ? 'new-password' : 'new-password',
   });
+  const passwordWithToggle = makePasswordInput(password);
 
   // Email — sólo se muestra al crear. Se autogenera como `${username}@${DOMAIN}`
   // (espejo del `deriveAuthEmail` del backend) para que Firebase Auth y
@@ -303,26 +343,11 @@ function openEditModal(u, onSaved, currentUser) {
   ]);
   const passwordField = h('div', {}, [
     h('label.label', {}, isEdit ? 'Nueva contraseña — opcional' : 'Contraseña *'),
-    password,
+    passwordWithToggle,
     h('p.text-xs.text-slate-500.mt-1', {}, isEdit
-      ? 'Déjala en blanco para mantener la contraseña actual.'
-      : `Mínimo ${VALIDATION.password.min} caracteres.`),
+      ? 'Déjala en blanco para mantener la contraseña actual. Usa el ojo para ver lo que escribes.'
+      : `Mínimo ${VALIDATION.password.min} caracteres. Usa el ojo para ver lo que escribes.`),
     passwordErr,
-  ]);
-
-  // Estado (solo en edición)
-  const activeCheckbox = h('input', {
-    type: 'checkbox',
-    id: 'gcm-edit-active',
-    checked: u?.active ? '' : null,
-    disabled: isEdit && currentUser && Number(currentUser.id) === Number(u?.id) ? 'disabled' : null,
-  });
-  const activeField = h('div', {}, [
-    h('label.label', {}, 'Estado'),
-    h('div.flex.items-center.gap-2', {}, [
-      activeCheckbox,
-      h('label.text-sm', { for: 'gcm-edit-active' }, u?.active ? 'Activo' : 'Inactivo'),
-    ]),
   ]);
 
   // Banner de error de servidor (no es field-level; aparece abajo del form).
@@ -336,7 +361,6 @@ function openEditModal(u, onSaved, currentUser) {
     isEdit ? null : emailField,
     h('div.grid.grid-cols-2.gap-3', {}, [roleField, areaField]),
     passwordField,
-    isEdit ? activeField : null,
     banner,
   ]);
 
@@ -436,10 +460,6 @@ function openEditModal(u, onSaved, currentUser) {
           email: emailVal,
         };
     if (isEdit && passwordVal) payload.password = passwordVal;
-    if (isEdit) {
-      // include active when editing; backend will validate anti-self-demote
-      payload.active = !!activeCheckbox.checked;
-    }
     return { ok: true, payload };
   }
 

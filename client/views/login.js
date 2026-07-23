@@ -244,23 +244,27 @@ export async function renderLogin({ params, query, onLogin }) {
 
     setBusy(true);
     try {
-      // Flujo Firebase Auth + canje por sesión local.
-      // 1) Pedirle al backend el email canónico registrado en Firebase Auth
-      //    para este identificador (username o email). El endpoint hace el
-      //    fallback sintético ↔ real y devuelve 404 si no hay match.
-      // 2) Autenticar contra Firebase Auth (cliente) con ese email.
-      // 3) Canjear el ID token por una cookie de sesión en el backend.
-      // El endpoint /api/auth/resolve-login vive en src/routes/auth.routes.js.
-      const { email: loginEmail } = await api.auth.resolveLogin({ identifier: user });
-      const { idToken } = await signInWithFirebaseEmail(loginEmail, pass);
-      const { user: u } = await api.auth.firebase({ idToken });
+      let authenticatedUser;
+      try {
+        const { user: localUser } = await api.auth.login({ username: user, password: pass });
+        authenticatedUser = localUser;
+      } catch (localErr) {
+        const status = localErr?.status;
+        if (status !== 401 && status !== 404 && status !== 400) {
+          throw localErr;
+        }
+        const { email: loginEmail } = await api.auth.resolveLogin({ identifier: user });
+        const { idToken } = await signInWithFirebaseEmail(loginEmail, pass);
+        const { user: firebaseUser } = await api.auth.firebase({ idToken });
+        authenticatedUser = firebaseUser;
+      }
+
       if (nextUrl) {
         try { sessionStorage.setItem('gcm:postLoginNext', nextUrl); } catch {}
       }
-      onLogin?.(u);
+      onLogin?.(authenticatedUser);
     } catch (err) {
       state.attempts += 1;
-      // Mapear errores específicos de Firebase Auth a mensajes legibles.
       const code = err.code || '';
       let mapped = err;
       if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {

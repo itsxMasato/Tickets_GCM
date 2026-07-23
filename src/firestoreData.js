@@ -23,13 +23,16 @@ function toLegacyDate(value) {
 
 function normalizeUser(row) {
   if (!row) return null;
+  const isActive = row.active === 0 || row.active === false || row.active === '0' || row.active === 'false'
+    ? false
+    : true;
   return {
     id: toId(row.id),
     username: row.username || '',
     full_name: row.full_name || '',
     role: row.role || '',
     area: row.area || null,
-    active: row.active ? 1 : 0,
+    active: isActive ? 1 : 0,
     created_at: toLegacyDate(row.created_at),
     email: row.email || null,
   };
@@ -692,9 +695,12 @@ async function listTickets(filters, user, page = 1, limit = 25) {
   if (filters.priority) clauses.push(['priority', '==', filters.priority]);
   if (filters.category_id) clauses.push(['category_id', '==', toId(filters.category_id)]);
   if (filters.assigned_to) clauses.push(['assigned_to', '==', toId(filters.assigned_to)]);
-  if (filters.area) clauses.push(['area', '==', filters.area]);
+  if (filters.area && user.role !== 'jefe_inmediato') clauses.push(['area', '==', filters.area]);
   if (filters.date_from) clauses.push(['created_at', '>=', filters.date_from]);
   if (filters.date_to) clauses.push(['created_at', '<=', filters.date_to]);
+  if (user.role === 'jefe_inmediato' && !filters.status) {
+    clauses.unshift(['status', '==', 'solucionado']);
+  }
   const search = filters.search ? String(filters.search).toLowerCase() : null;
   const fetchLimit = search ? Math.max(page * limit * 5, 500) : page * limit;
 
