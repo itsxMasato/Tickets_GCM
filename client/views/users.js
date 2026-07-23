@@ -10,6 +10,21 @@ import { ROLES, AREAS } from '../utils/permissions.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { mountDataList } from '../components/data-list.js';
 
+// Dominio sintético de los correos autogenerados al crear un usuario.
+// Espejo de src/utils/deriveAuthEmail.js → DOMAIN para que el email que
+// se guarda en Firestore coincida con el que el backend deriva para
+// Firebase Auth.
+const AUTO_EMAIL_DOMAIN = 'gcm.com';
+
+// Sanitiza un username para que sea válido como parte local de un email:
+// mismo patrón que LIMITS.username del backend, en minúsculas.
+function usernameToLocalPart(username) {
+  return String(username || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '');
+}
+
 const TABLE_COLUMNS = [
   { key: 'username',   label: 'Usuario' },
   { key: 'full_name',  label: 'Nombre' },
@@ -137,7 +152,7 @@ export async function renderUsers({ user }) {
         <td>${escapeHtml(u.full_name)}</td>
         <td><span class="badge bg-brand/10 text-brand">${escapeHtml(getRoleLabel(u.role))}</span></td>
         <td>${escapeHtml(AREA_LABEL[u.area] || u.area || '—')}</td>
-        <td>${u.active ? '<span class="badge bg-emerald-100 text-emerald-800">Activo</span>' : '<span class="badge bg-slate-200 text-slate-700">Inactivo</span>'}</td>
+        <td>${u.active ? '<span class="badge bg-emerald-100 text-emerald-800">Activo</span>' : '<span class="badge bg-slate-200 text-slate-800">Inactivo</span>'}</td>
         <td class="text-right">
           <button class="btn btn-ghost btn-sm" data-edit>Editar</button>
           <button class="btn btn-ghost btn-sm ${u.active ? 'text-accent hover:bg-accent/10' : ''}" data-toggle>${u.active ? 'Desactivar' : 'Activar'}</button>
@@ -186,6 +201,7 @@ export async function renderUsers({ user }) {
 const VALIDATION = {
   username: { min: 3, max: 50, pattern: /^[a-zA-Z0-9._-]+$/ },
   fullName: { max: 200 },
+  email:    { max: 255, pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/ },
   password: { min: 4, max: 200 },
 };
 
@@ -235,6 +251,29 @@ function openEditModal(u, onSaved, currentUser) {
     maxlength: String(VALIDATION.password.max),
     autocomplete: isEdit ? 'new-password' : 'new-password',
   });
+
+  // Email — sólo se muestra al crear. Se autogenera como `${username}@${DOMAIN}`
+  // (espejo del `deriveAuthEmail` del backend) para que Firebase Auth y
+  // Firestore coincidan. El campo es visible pero no editable: se rellena
+  // solo a partir del username y el SAC puede copiarlo si lo necesita.
+  // `readonly` (no `disabled`) para que siga enfocable y copiable.
+  const email = h('input.input', {
+    type: 'email',
+    value: u?.email || '',
+    maxlength: String(VALIDATION.email.max),
+    readonly: isEdit ? null : 'readonly',
+    tabindex: isEdit ? null : '0',
+    'aria-readonly': isEdit ? null : 'true',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    class: isEdit ? '' : 'bg-slate-50 text-slate-600 cursor-default focus:ring-0',
+  });
+  const emailHelp = h('p.text-xs.text-slate-500.mt-1', {}, 'Se genera automáticamente como nombre+@gcm.com a partir del usuario.');
+  const emailField = h('div', {}, [
+    h('label.label', {}, 'Correo'),
+    email,
+    emailHelp,
+  ]);
 
   // Bloques con field-level error
   const usernameErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-edit-username-err', role: 'alert' });
@@ -294,6 +333,7 @@ function openEditModal(u, onSaved, currentUser) {
   const body = h('div.flex.flex-col.gap-3', {}, [
     usernameField,
     fullnameField,
+    isEdit ? null : emailField,
     h('div.grid.grid-cols-2.gap-3', {}, [roleField, areaField]),
     passwordField,
     isEdit ? activeField : null,
@@ -310,6 +350,17 @@ function openEditModal(u, onSaved, currentUser) {
   wireClear(fullname, fullnameErr);
   wireClear(role, roleErr);
   wireClear(password, passwordErr);
+
+  // Autogenerar email = `${username}@gcm.com` cada vez que cambia el
+  // username. El campo es visible pero no editable, así que no necesitamos
+  // el flag "dirty". Sólo aplica al crear; en edición el email se persiste
+  // y no se toca.
+  if (!isEdit) {
+    username.addEventListener('input', () => {
+      const local = usernameToLocalPart(username.value);
+      email.value = local ? `${local}@${AUTO_EMAIL_DOMAIN}` : '';
+    });
+  }
 
   // Valida el formulario completo. Devuelve { ok, firstInvalid, payload }.
   function validate() {
@@ -361,6 +412,17 @@ function openEditModal(u, onSaved, currentUser) {
       firstInvalid = firstInvalid || password;
     }
 
+    // Email: siempre se autogenera a partir del username con la nomenclatura
+    // ${username}@gcm.com (espejo de deriveAuthEmail en backend). El campo
+    // es visible pero no editable en el modal de creación, así que nunca
+    // viene un valor escrito a mano. Si el username quedó vacío (no debería,
+    // porque validate ya rechazó arriba), caemos a null.
+    let emailVal = null;
+    if (!isEdit) {
+      const local = usernameToLocalPart(username.value.trim());
+      emailVal = local ? `${local}@${AUTO_EMAIL_DOMAIN}` : null;
+    }
+
     if (firstInvalid) return { ok: false, firstInvalid };
 
     const payload = isEdit
@@ -371,6 +433,7 @@ function openEditModal(u, onSaved, currentUser) {
           role: roleVal,
           area: area.value || null,
           password: passwordVal,
+          email: emailVal,
         };
     if (isEdit && passwordVal) payload.password = passwordVal;
     if (isEdit) {
