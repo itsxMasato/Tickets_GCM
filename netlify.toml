@@ -2,6 +2,32 @@
   command = "pnpm run build"
   publish = "dist"
 
+# Defensa contra el bug "MIME text/html en vez de text/css": si alguien vuelve
+# a meter un <link href="/css/..."> en index.html, este redirect lo manda al
+# 404.html real (que NO se sirve con text/css) en vez de al SPA fallback.
+# Antes solo existía el catch-all /* → /index.html que rompía este caso.
+[[redirects]]
+  from = "/css/*"
+  to = "/index.html"
+  status = 404
+
+[[redirects]]
+  from = "/js/*"
+  to = "/index.html"
+  status = 404
+
+# Header de seguridad global: impide que el browser "adivine" el MIME de una
+# respuesta. Si Netlify responde HTML a /css/... (por el SPA fallback), el
+# browser se niega a interpretarlo como CSS — falla limpia en vez de aplicar
+# estilos rotos. Aplica a TODO el sitio, incluido el index.html principal.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+
+# SPA fallback: cualquier ruta no-API y no-asset devuelve la app cliente.
+# Importante: va DESPUÉS de los redirects anteriores para que /css/* y /js/*
+# no caigan acá.
 [[redirects]]
   from = "/*"
   to = "/index.html"
