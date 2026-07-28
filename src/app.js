@@ -117,6 +117,13 @@ function createApp() {
     },
   }));
 
+  // Fotos de perfil: servidas públicas (sin requireAuth) porque se muestran
+  // en <img> por toda la UI — a diferencia de los adjuntos de tickets, que
+  // se descargan vía una ruta autenticada porque son sensibles al ticket.
+  app.use('/uploads/avatars', express.static(require('./middleware/upload').avatarDir, {
+    maxAge: '7d',
+  }));
+
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.get('/favicon.ico', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'img', 'Logo.png'));
@@ -139,7 +146,6 @@ function createApp() {
 
   // Fase 2 — multi-tenant
   app.use('/api/companies',       require('./routes/companies.routes'));
-  app.use('/api/company-areas',   require('./routes/company-areas.routes'));
   const membershipsRoutes = require('./routes/memberships.routes');
   app.use('/api/users',      membershipsRoutes.userMemberships);
   app.use('/api/companies',  membershipsRoutes.companyMemberships);

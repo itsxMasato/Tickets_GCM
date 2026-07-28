@@ -32,7 +32,11 @@
       "Bash(git reset *)",
       "Bash(xargs -I{} sh -c 'wc -c \"{}\" 2>/dev/null')",
       "Bash(git commit -m 'feat: firestore migration + new modules + UI refresh *)",
-      "Bash(git commit -m 'docs: product, design system, modules y .impeccable *)"
+      "Bash(git commit -m 'docs: product, design system, modules y .impeccable *)",
+      "Bash(grep -n 'shadow-black\\\\\\\\\\\\\\\\/20\\\\|h-7\\\\.w-1\\\\\\\\\\\\\\\\/2\\\\|text-brand-ink\\\\\\\\\\\\\\\\/70' client/views/dashboard.js)",
+      "Bash(npx vite *)",
+      "Bash(grep -n '\\\\\\\\\\\\\\\\:' client/components/topbar.js)",
+      "Skill(impeccable)"
     ]
   },
   "hooks": {

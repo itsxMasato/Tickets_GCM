@@ -7,10 +7,11 @@ import { statusBadge, priorityBadge } from '../components/badge.js';
 import { renderChat } from '../components/chat.js';
 import { chatComposer } from '../components/chat-composer.js';
 import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
-import { canAssign, canEditMeta, canComment, canUpload, nextStates } from '../utils/permissions.js';
+import { verifyCurrentPassword } from '../firebase.js';
+import { canAssign, canEditMeta, canComment, canUpload, canSeeTicket, nextStates } from '../utils/permissions.js';
 import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, formatDateTime, relativeFromNow } from '../utils/format.js';
 import { getRoleLabel } from '../utils/role-labels.js';
-import { exportTicketToPDF } from '../utils/exports.js';
+import { exportTicketToPDF, exportToExcel, TICKET_EXPORT_COLUMNS } from '../utils/exports.js';
 import { on as onSocket } from '../socket.js';
 import { backButton } from '../components/back-button.js';
 import { exportButton } from '../components/export-button.js';
@@ -48,31 +49,53 @@ export async function renderTicketDetail({ params, user }) {
   const header = h('div.flex.flex-col.gap-4', {}, [
     // Header del ticket: en mobile (default flex-col) el título va arriba
     // y los botones abajo; en >=768px vuelve a fila horizontal.
-    h('div.flex.flex-col.gap-3.md\\:flex-row.md\\:items-start.md\\:justify-between.md\\:gap-3', {}, [
+    h('div.flex.flex-col.gap-3', { class: 'md:flex-row md:items-start md:justify-between md:gap-3' }, [
       h('div.min-w-0.flex-1', {}, [
         h('div.flex.items-center.gap-2.text-sm.text-slate-500', {}, [
           backButton({ href: '/tickets', label: 'Volver a tickets' }),
           h('span.text-slate-300', {}, '·'),
           h('span.font-mono.text-slate-600', {}, ticket.code),
         ]),
-        h('h1.text-2xl.md\\:text-3xl.font-bold.text-slate-900.mt-2.line-clamp-2', {}, ticket.title),
+        h('h1.text-2xl.font-bold.text-slate-900.mt-2.line-clamp-2', { class: 'md:text-3xl' }, ticket.title),
       ]),
       h('div.flex.flex-wrap.items-center.gap-2', {}, [
         exportButton({
           label: 'Exportar',
-          format: 'pdf',
           kind: 'secondary',
-          onclick: async () => {
+          onExport: async (format) => {
+            const formatLabel = format === 'pdf' ? 'PDF' : 'Excel';
             try {
               await passwordConfirmModal({
                 title: 'Confirmar exportación',
-                message: 'Ingresa tu contraseña para exportar el ticket en PDF.',
+                message: `Ingresa tu contraseña para exportar el ticket a ${formatLabel}.`,
                 confirmText: 'Exportar',
                 onConfirm: async (password) => {
-                  await api.auth.verifyPassword({ password });
+                  await verifyCurrentPassword(password);
                 },
               });
-              exportTicketToPDF(ticket);
+              if (format === 'pdf') {
+                exportTicketToPDF(ticket);
+              } else {
+                const row = {
+                  ...ticket,
+                  status: STATUS_LABEL[ticket.status] || ticket.status,
+                  priority: PRIORITY_LABEL[ticket.priority] || ticket.priority,
+                  area: AREA_LABEL[ticket.area] || ticket.area || '',
+                  created_at: formatDateTime(ticket.created_at),
+                  updated_at: formatDateTime(ticket.updated_at),
+                  closed_at: ticket.closed_at ? formatDateTime(ticket.closed_at) : '',
+                };
+                exportToExcel([row], `${ticket.code || 'ticket'}.xlsx`, {
+                  columns: TICKET_EXPORT_COLUMNS,
+                  title: `Ticket ${ticket.code || ''}`,
+                  subtitle: ticket.title,
+                  sheetName: 'Ticket',
+                  summaryField: 'status',
+                  summaryLabel: 'Estado',
+                  generatedByName: user.full_name || user.username,
+                  generatedByRole: getRoleLabel(user.role) || user.role,
+                });
+              }
             } catch (e) {
               if (e && e.message !== 'Modal closed') {
                 toast(e.message || 'Error al exportar', 'error');
@@ -85,7 +108,7 @@ export async function renderTicketDetail({ params, user }) {
         ]),
       ]),
     ]),
-    h('div.grid.grid-cols-1.md:grid-cols-2.gap-3', {}, [
+    h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-2' }, [
       h('div.card.bg-slate-50.p-5', {}, [
         h('h2.text-sm.font-semibold.text-brand-ink.mb-3', {}, 'Resumen del ticket'),
         h('div.grid.grid-cols-2.gap-4', {}, [
@@ -134,8 +157,8 @@ export async function renderTicketDetail({ params, user }) {
   ]);
   root.appendChild(header);
 
-  const layout = h('div.grid.grid-cols-1.lg\\:grid-cols-3.gap-4', {});
-  const center = h('div.lg\\:col-span-2.flex.flex-col.gap-3', {});
+  const layout = h('div.grid.grid-cols-1.gap-4', { class: 'lg:grid-cols-3' });
+  const center = h('div.flex.flex-col.gap-3', { class: 'lg:col-span-2' });
   const right = h('div.flex.flex-col.gap-3', {});
 
   const descCard = h('div.card', {}, [
@@ -144,28 +167,46 @@ export async function renderTicketDetail({ params, user }) {
   ]);
   center.appendChild(descCard);
 
-  const chat = h('div.card', {});
-  chat.appendChild(h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Historial · chat del ticket'));
-  // chat-scroll-internal: overscroll-behavior:contain evita que el scroll
-  // del chat se propague al body en iOS (rebote contra el header). El
-  // max-h se mantiene en 60vh para que el header del ticket siga visible
-  // en desktop; en mobile, el shell del modal/lista provee su propio scroll.
-  const chatBox = h('div.chat-scroll-internal.max-h-\\[60vh\\].overflow-y-auto.rounded-md.bg-slate-50.p-2', {});
-  chat.appendChild(chatBox);
-  chatBox.appendChild(renderChat({ ticket, user }));
+  // Trazabilidad: siempre visible para quien puede ver el ticket (no solo
+  // cuando no hay chat) — es lo que le permite a quien lo creó seguir su
+  // avance sin depender de tener acceso a comentar.
+  center.appendChild(renderTimeline(ticket));
 
-  if (canComment(user, ticket) || canUpload(user, ticket)) {
-    chat.appendChild(chatComposer({
-      ticketId: ticket.id,
-      onSent: async () => { await reload(); },
-      disabled: ticket.status === 'cerrado',
-    }));
-  } else if (ticket.status === 'cerrado') {
-    chat.appendChild(h('p.text-xs.text-slate-500.text-center.py-2', {}, 'El ticket está cerrado. No se pueden enviar nuevos mensajes.'));
+  // canSeeChatHistory (ver) y canWriteChat (comentar/adjuntar) se separan a
+  // proposito: antes ambos dependian de canComment/canUpload, que exigen
+  // status !== 'cerrado' — un ticket cerrado ocultaba TODO el chat (mensajes
+  // y adjuntos incluidos) para todos los roles, hasta para SAC y quien lo
+  // creo. Ahora el historial sigue visible siempre que el usuario pueda ver
+  // el ticket; solo se bloquea poder escribir.
+  const canSeeChatHistory = canSeeTicket(user, ticket);
+  const canWriteChat = canComment(user, ticket) || canUpload(user, ticket);
+  if (canSeeChatHistory) {
+    const chat = h('div.card', {});
+    chat.appendChild(h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Historial · chat del ticket'));
+    // chat-scroll-internal: overscroll-behavior:contain evita que el scroll
+    // del chat se propague al body en iOS (rebote contra el header). El
+    // max-h se mantiene en 60vh para que el header del ticket siga visible
+    // en desktop; en mobile, el shell del modal/lista provee su propio scroll.
+    const chatBox = h('div.chat-scroll-internal.overflow-y-auto.rounded-md.bg-slate-50.p-2', { class: 'max-h-[60vh]' });
+    chat.appendChild(chatBox);
+    chatBox.appendChild(renderChat({ ticket, user }));
+
+    if (canWriteChat) {
+      chat.appendChild(chatComposer({
+        ticketId: ticket.id,
+        onSent: async () => { await reload(); },
+        disabled: ticket.status === 'cerrado',
+      }));
+    } else if (ticket.status === 'cerrado') {
+      chat.appendChild(h('p.text-xs.text-slate-500.mt-2.px-1', {}, 'Este ticket está cerrado. Podés ver todo el historial, pero ya no se puede comentar ni adjuntar archivos.'));
+    }
+    center.appendChild(chat);
   } else {
-    chat.appendChild(h('p.text-xs.text-slate-500.text-center.py-2', {}, 'No tienes permisos para comentar.'));
+    center.appendChild(h('div.card', {}, [
+      h('h3.text-sm.font-semibold.text-slate-700.mb-2', {}, 'Comentarios'),
+      h('p.text-sm.text-slate-500', {}, 'No tenés acceso para ver los comentarios de este ticket.'),
+    ]));
   }
-  center.appendChild(chat);
 
   right.appendChild(renderSidebarInfo(ticket, user));
   right.appendChild(renderActions(ticket, user, reload));
@@ -202,8 +243,69 @@ export async function renderTicketDetail({ params, user }) {
   return root;
 }
 
+// ── Línea de tiempo ─────────────────────────────────────────────────────────
+// Reconstruye la trazabilidad del ticket a partir de audit_log (creación,
+// asignaciones, cambios de estado, comentarios) — mismo dato que alimenta
+// /audit, filtrado por este ticket (ver firestoreData.getTicketDetail →
+// history). Fallback vacío para tickets creados antes de que el audit log
+// quedara bien enganchado (no todos los tickets viejos tienen historial).
+const HISTORY_ICON = {
+  ticket_created: ICON.ticket_created,
+  ticket_assigned: ICON.ticket_assigned,
+  ticket_status_changed: ICON.ticket_status_changed,
+  comment_added: ICON.ticket_commented,
+  attachment_added: ICON.attach,
+};
+const HISTORY_TONE = {
+  ticket_created: 'bg-brand-ocean/10 text-brand-ocean border-brand-ocean/20',
+  ticket_assigned: 'bg-brand/10 text-brand border-brand/20',
+  ticket_status_changed: 'bg-amber-100 text-amber-800 border-amber-200',
+  comment_added: 'bg-slate-100 text-slate-600 border-slate-200',
+  attachment_added: 'bg-slate-100 text-slate-600 border-slate-200',
+};
+
+function renderTimeline(ticket) {
+  const entries = Array.isArray(ticket.history) ? ticket.history : [];
+  const card = h('div.card', {}, [
+    h('h3.text-sm.font-semibold.text-slate-700.mb-1', {}, 'Línea de tiempo'),
+    h('p.text-xs.text-slate-500.mb-4', {}, 'Todo lo que pasó con este ticket, en orden.'),
+  ]);
+
+  if (!entries.length) {
+    card.appendChild(h('p.text-sm.text-slate-500', {}, 'Sin eventos registrados todavía.'));
+    return card;
+  }
+
+  const list = h('div.flex.flex-col', {});
+  entries.forEach((entry, i) => {
+    const isLast = i === entries.length - 1;
+    const iconPath = HISTORY_ICON[entry.action_type] || ICON.ticket_commented;
+    const tone = HISTORY_TONE[entry.action_type] || 'bg-slate-100 text-slate-600 border-slate-200';
+    const row = h('div.relative.flex.gap-3', { class: isLast ? '' : 'pb-5' }, [
+      h('div.relative.flex-none.flex.flex-col.items-center', {}, [
+        h('div.w-7.h-7.rounded-full.border.flex.items-center.justify-center.flex-none', {
+          class: tone + (isLast ? ' ring-4 ring-brand-ocean/15' : ''),
+        }, [
+          svg(h, iconPath, 'w-3.5 h-3.5'),
+        ]),
+        isLast ? null : h('div.w-px.flex-1.bg-slate-200.mt-1', { 'aria-hidden': 'true' }),
+      ]),
+      h('div.flex-1.min-w-0', { class: 'pt-0.5' }, [
+        h('div.flex.items-baseline.justify-between.gap-2.flex-wrap', {}, [
+          h('p.text-sm.text-slate-800', {}, entry.description || entry.action_type),
+          h('span.text-xs.text-slate-400.flex-none', { title: formatDateTime(entry.created_at) }, relativeFromNow(entry.created_at)),
+        ]),
+        h('p.text-xs.text-slate-500', { class: 'mt-0.5' }, entry.user_name || 'Sistema'),
+      ]),
+    ]);
+    list.appendChild(row);
+  });
+  card.appendChild(list);
+  return card;
+}
+
 function renderSidebarInfo(ticket) {
-  const row = (label, value, isCode = false) => h('div.flex.items-start.justify-between.gap-3.py-2.border-b.border-slate-100.last\\:border-0', {}, [
+  const row = (label, value, isCode = false) => h('div.flex.items-start.justify-between.gap-3.py-2.border-b.border-slate-100', { class: 'last:border-0' }, [
     h('span.text-xs.text-slate-500.uppercase.tracking-wide', {}, label),
     h('span.text-sm.text-slate-800.text-right', isCode ? { class: 'font-mono text-xs' } : {}, value || '—'),
   ]);
@@ -220,7 +322,7 @@ function renderSidebarInfo(ticket) {
   ]);
   if (ticket.attachments?.length > 0) {
     info.appendChild(h('h4.text-xs.font-semibold.text-slate-700.mt-3.mb-2.uppercase.tracking-wider', {}, 'Adjuntos'));
-    const list = h('ul.flex.flex-col.gap-1\\.5', {});
+    const list = h('ul.flex.flex-col', { class: 'gap-1.5' });
     for (const att of ticket.attachments) {
       list.appendChild(h('li', {}, attachmentThumb(att, ticket.id)));
     }
@@ -373,7 +475,7 @@ async function openEditModal(ticket, onChange) {
   const body = h('div.flex.flex-col.gap-3', {}, [
     h('div', {}, [h('label.label', {}, 'Título'), title]),
     h('div', {}, [h('label.label', {}, 'Descripción'), desc]),
-    h('div.grid.grid-cols-1.md\\:grid-cols-2.gap-3', {}, [
+    h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-2' }, [
       h('div', {}, [h('label.label', {}, 'Categoría'), cat]),
       h('div', {}, [h('label.label', {}, 'Prioridad'), prio]),
     ]),

@@ -118,8 +118,8 @@ export function mountDataList(opts) {
       const list = h('div.gcm-data-list-mobile.flex.flex-col.gap-2', {});
       for (let i = 0; i < 5; i++) {
         list.appendChild(h('div.card.flex.flex-col.gap-2.p-4', { 'aria-hidden': 'true' }, [
-          h('div.h-3.w-1\\/4.bg-slate-200.rounded.animate-pulse'),
-          h('div.h-4.w-3\\/4.bg-slate-200.rounded.animate-pulse'),
+          h('div.h-3.bg-slate-200.rounded.animate-pulse', { class: 'w-1/4' }),
+          h('div.h-4.bg-slate-200.rounded.animate-pulse', { class: 'w-3/4' }),
           h('div.flex.gap-2', {}, [
             h('div.h-5.w-16.bg-slate-200.rounded-full.animate-pulse'),
             h('div.h-5.w-20.bg-slate-200.rounded-full.animate-pulse'),

@@ -20,14 +20,17 @@ router.get('/', requireAuth, async (req, res, next) => {
       role,
       active: active === undefined ? undefined : /^(1|true)$/i.test(String(active)),
       area,
-    });
+    }, req.user);
     res.json({ users: list });
   } catch (err) { next(err); }
 });
 
 router.post('/', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
-    const user = await authService.createUser(req.body || {});
+    // Pasamos `req.user` para que el service pueda crear la membresía
+    // asociada a la empresa durante la creación del usuario cuando el
+    // payload incluye `company_id`.
+    const user = await authService.createUser(req.body || {}, req.user);
     res.status(201).json({ user });
   } catch (err) { next(err); }
 });

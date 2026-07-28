@@ -7,20 +7,14 @@ import { ICON } from '../utils/icons.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
 import { subscribeToRealtimeEvents } from '../utils/realtime.js';
+import { renderCompanySwitcher } from './company-switcher.js';
+import { renderAvatar } from '../utils/avatar.js';
 
 let mountedRoot = null;
 
-function avatarColor(seed) {
-  const colors = ['#071D4C', '#44497B', '#16ACE4', '#CF301D', '#8b5cf6', '#0ea5e9', '#14b8a6', '#7c3aed', '#f97316', '#243447'];
-  return colors[(seed || 0) % colors.length];
-}
-
-function initials(name = '') {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
-}
-
 function icon(path, cls = 'w-5 h-5') {
-  return h(`svg.${cls}`, {
+  return h('svg', {
+    class: cls,
     fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8',
     viewBox: '0 0 24 24',
     html: `<path stroke-linecap="round" stroke-linejoin="round" d="${path}" />`,
@@ -87,52 +81,6 @@ function quickActions(user) {
   return [];
 }
 
-// ── Buscador (atajo "/") ─────────────────────────────────────────────────────
-// El listener se registra UNA SOLA VEZ en window (atajo global) y consulta
-// el input actual del topbar en cada pulsación. Antes capturaba el `input`
-// del primer topbar en closure — si ese nodo se desmontaba, `input.focus()`
-// fallaba silenciosamente. Ahora la referencia se actualiza por re-mount.
-function renderSearch() {
-  const input = h('input.flex-1.bg-transparent.border-0.outline-none.text-sm.placeholder\\:text-slate-500', {
-    type: 'search',
-    placeholder: 'Buscar tickets, usuarios… presiona "/"',
-    'aria-label': 'Buscar',
-  });
-  const wrap = h('div.topbar-search', {}, [
-    icon(ICON.search, 'w-4 h-4 text-slate-500'),
-    input,
-    h('kbd.hidden.md\\:inline-flex.items-center.justify-center.text-[10px].font-medium.text-slate-500.bg-white.border.border-surface-border.rounded.px-1.5.h-5', {}, '/'),
-  ]);
-
-  if (window.__gcmSearchHooked) {
-    // Re-mount: el input anterior ya no está en DOM. Actualizamos la
-    // referencia que el handler global usa para focus() y para detectar
-    // que la tecla pulsada es "dentro" de este input.
-    window.__gcmSearchInput = input;
-  } else {
-    window.__gcmSearchHooked = true;
-    window.__gcmSearchInput = input;
-    document.addEventListener('keydown', (e) => {
-      const t = e.target;
-      const isTyping = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-      const current = window.__gcmSearchInput;
-      // El input actual puede estar detached (entre navegaciones) — comprobamos.
-      const currentLive = current && document.body.contains(current);
-      if (!isTyping && e.key === '/') {
-        e.preventDefault();
-        if (currentLive) current.focus();
-      } else if (isTyping && t === current && e.key === 'Enter') {
-        const q = current.value.trim();
-        if (q) go(`/tickets?q=${encodeURIComponent(q)}`);
-      } else if (e.key === 'Escape' && t === current) {
-        current.value = '';
-        current.blur();
-      }
-    });
-  }
-  return wrap;
-}
-
 // ── Campana + dropdown de notificaciones (topbar) ────────────────────────────
 // Antes la campana navegaba a /notifications. Ahora abre un dropdown con las
 // no-leídas (lazy fetch on open), con check por item para marcar como leídas
@@ -166,7 +114,7 @@ function bellPill(type) {
   return h(`span.badge.${cls}.inline-flex.items-center`, { html: `${iconHtml}${escapeHtml(BELL_TYPE_LABEL[type] || type)}` });
 }
 function bellCheckIcon() {
-  return h('svg.w-3.5.h-3.5', { fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.check}" />` });
+  return h('svg', { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.check}" />` });
 }
 
 function renderBell() {
@@ -177,14 +125,15 @@ function renderBell() {
   const listEl = h('div.max-h-96.overflow-y-auto', {});
   const emptyEl = h('div.px-4.py-8.text-center.text-sm.text-slate-500', {}, 'Sin notificaciones pendientes');
 
-  const dropdown = h('div.absolute.right-0.top-full.mt-2.w-80.bg-white.rounded-lg.shadow-pop.border.border-surface-border.z-40.hidden.origin-top-right', {
+  const dropdown = h('div.absolute.right-0.top-full.mt-2.w-80.bg-white.rounded-xl.shadow-pop.border.border-surface-border.z-40.hidden.origin-top-right.overflow-hidden', {
     role: 'menu',
     'aria-label': 'Notificaciones',
   }, [
     h('div.flex.items-center.justify-between.px-4.py-3.border-b.border-surface-border', {}, [
       h('div.text-sm.font-semibold.text-brand-ink', {}, 'Notificaciones'),
       hasUnread
-        ? h('button.text-xs.font-medium.text-brand-ocean.hover\\:text-brand-deep', {
+        ? h('button.text-xs.font-medium.text-brand-ocean', {
+            class: 'hover:text-brand-deep',
             role: 'menuitem',
             onclick: () => markAll(),
           }, 'Marcar todas')
@@ -192,7 +141,8 @@ function renderBell() {
     ]),
     listEl,
     h('div.border-t.border-surface-border', {}, [
-      h('button.flex.items-center.justify-center.w-full.px-4.py-2.5.text-sm.font-medium.text-brand-ocean.hover\\:bg-surface.transition', {
+      h('button.flex.items-center.justify-center.w-full.px-4.text-sm.font-medium.text-brand-ocean.transition', {
+        class: 'hover:bg-surface py-2.5',
         role: 'menuitem',
         onclick: () => { closeDropdown(); go('/notifications'); },
       }, 'Ver todas las notificaciones →'),
@@ -216,8 +166,8 @@ function renderBell() {
       html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.bell}" />`,
     }),
     hasUnread
-      ? h('span.absolute.top-1\\.5.right-1\\.5.bg-accent.text-white.text-[10px].rounded-full.px-1.min-w-[16px].h-4.flex.items-center.justify-center.font-semibold.leading-none.ring-2.ring-white',
-          {},
+      ? h('span.absolute.bg-accent.text-white.rounded-full.px-1.h-4.flex.items-center.justify-center.font-semibold.leading-none.ring-2.ring-white',
+          { class: 'top-1.5 right-1.5 text-[10px] min-w-[16px]' },
           String(unreadCount > 99 ? '99+' : unreadCount))
       : null,
   ]);
@@ -270,14 +220,16 @@ function renderBell() {
       return;
     }
     for (const n of items) {
-      const checkBtn = h('button.flex-none.w-7.h-7.rounded-full.border.border-surface-border-strong.text-white.bg-white.hover\\:bg-accent\\/10.hover\\:border-accent.transition.flex.items-center.justify-center.focus\\:outline-none.focus\\:ring-2.focus\\:ring-accent\\/60', {
+      const checkBtn = h('button.flex-none.w-7.h-7.rounded-full.border.border-surface-border-strong.text-white.bg-white.transition.flex.items-center.justify-center', {
+        class: 'hover:bg-accent/10 hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/60',
         role: 'menuitem',
         'aria-label': 'Marcar como leída',
         title: 'Marcar como leída',
         onclick: (e) => { e.stopPropagation(); markOne(n); },
       }, [bellCheckIcon()]);
 
-      const item = h('button.flex.items-start.gap-3.w-full.px-4.py-3.text-left.hover\\:bg-surface.transition.border-b.border-surface-border\\/60.last\\:border-b-0', {
+      const item = h('button.flex.items-start.gap-3.w-full.px-4.py-3.text-left.transition.border-b', {
+        class: 'hover:bg-surface border-surface-border/60 last:border-b-0',
         role: 'menuitem',
         onclick: () => onItemClick(n),
       }, [
@@ -286,7 +238,7 @@ function renderBell() {
           h('div.flex.items-center.gap-2.mb-1', {}, [bellPill(n.type)]),
           h('div.text-sm.font-semibold.text-brand-ink.truncate', {}, n.title || BELL_TYPE_LABEL[n.type] || n.type),
           n.body ? h('div.text-xs.text-slate-600.line-clamp-2', {}, n.body) : null,
-          h('div.flex.items-center.gap-2.mt-1.text-[11px].text-slate-500', {}, [
+          h('div.flex.items-center.gap-2.mt-1.text-slate-500', { class: 'text-[11px]' }, [
             n.ticket_id ? h('span', {}, `Ticket #${n.ticket_id}`) : null,
             h('span', { title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
           ]),
@@ -372,36 +324,40 @@ function renderUserMenu({ user, onLogout }) {
   const roleLabel = ROLE_LABEL[user.role] || user.role;
   const areaLabel = user.area ? AREA_LABEL[user.area] : null;
 
-  const menu = h('div.absolute.right-0.top-full.mt-2.w-60.bg-white.rounded-lg.shadow-pop.border.border-surface-border.py-1.hidden.z-40', {}, [
-    h('div.px-3.py-2.5.border-b.border-surface-border', {}, [
+  const menu = h('div.absolute.right-0.top-full.mt-2.w-60.bg-white.rounded-xl.shadow-pop.border.border-surface-border.py-1.hidden.z-40.overflow-hidden', {}, [
+    h('div.px-3.border-b.border-surface-border', { class: 'py-2.5' }, [
       h('div.text-sm.font-semibold.text-brand-ink.truncate', {}, user.full_name),
       h('div.text-xs.text-slate-500.truncate', {}, [roleLabel, areaLabel ? ` · ${areaLabel}` : ''].join('')),
     ]),
-    h('button.flex.items-center.gap-2.w-full.px-3.py-2.text-sm.text-brand-ink.hover\\:bg-surface', { onclick: () => { closeMenu(); go('/dashboard'); } }, [
+    h('button.flex.items-center.gap-2.w-full.px-3.py-2.text-sm.text-brand-ink', { class: 'hover:bg-surface', onclick: () => { closeMenu(); go('/dashboard'); } }, [
       icon(ICON.home, 'w-4 h-4 text-slate-500'), 'Mi inicio',
     ]),
-    h('button.flex.items-center.gap-2.w-full.px-3.py-2.text-sm.text-brand-ink.hover\\:bg-surface', { onclick: () => { closeMenu(); go('/notifications'); } }, [
+    h('button.flex.items-center.gap-2.w-full.px-3.py-2.text-sm.text-brand-ink', { class: 'hover:bg-surface', onclick: () => { closeMenu(); go('/profile'); } }, [
+      icon(ICON.user, 'w-4 h-4 text-slate-500'), 'Mi perfil',
+    ]),
+    h('button.flex.items-center.gap-2.w-full.px-3.py-2.text-sm.text-brand-ink', { class: 'hover:bg-surface', onclick: () => { closeMenu(); go('/notifications'); } }, [
       h('svg.w-4.h-4.text-slate-500', { fill: 'none', stroke: 'currentColor', 'stroke-width': '2', viewBox: '0 0 24 24', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.bell}" />` }),
       'Notificaciones',
     ]),
     h('div.border-t.border-surface-border.my-1'),
-    h('button.flex.items-center.gap-2.w-full.px-3.py-2.text-sm.text-accent.hover\\:bg-accent/5', { onclick: () => { closeMenu(); onLogout(); } }, [
+    h('button.flex.items-center.gap-2.w-full.px-3.py-2.text-sm.text-accent', { class: 'hover:bg-accent/5', onclick: () => { closeMenu(); onLogout(); } }, [
       h('svg.w-4.h-4', { fill: 'none', stroke: 'currentColor', 'stroke-width': '2', viewBox: '0 0 24 24', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.logout}" />` }),
       'Cerrar sesión',
     ]),
   ]);
-  const trigger = h('button.topbar-user-trigger.flex.items-center.gap-2.pl-1.pr-2.py-1.rounded-md.hover\\:bg-surface.transition', {
+  const trigger = h('button.topbar-user-trigger.flex.items-center.gap-2.pl-1.pr-2.py-1.rounded-md.transition', {
+    class: 'hover:bg-surface',
     onclick: (e) => { e.stopPropagation(); toggleMenu(); },
     'aria-haspopup': 'menu',
     'aria-expanded': 'false',
   }, [
-    h('span.avatar.ring-2.ring-white', { style: { backgroundColor: avatarColor(user.id) } }, initials(user.full_name)),
+    renderAvatar(user, { className: 'avatar ring-2 ring-white' }),
     // El nombre y rol del usuario se muestran en TODOS los viewports — el
     // usuario pidió explícitamente que estén siempre visibles. Antes
     // usaba `hidden md:block`, lo que dejaba al usuario anónimo en mobile.
     h('div.text-left.flex.flex-col.justify-center', {}, [
-      h('div.text-sm.font-semibold.text-brand-ink.leading-tight.max-w-[160px].truncate', {}, user.full_name),
-      h('div.text-[11px].font-medium.text-slate-500.leading-tight.truncate', {}, [roleLabel, areaLabel ? ` · ${areaLabel}` : ''].join('')),
+      h('div.text-sm.font-semibold.text-brand-ink.leading-tight.truncate', { class: 'max-w-[160px]' }, user.full_name),
+      h('div.font-medium.text-slate-500.leading-tight.truncate', { class: 'text-[11px]' }, [roleLabel, areaLabel ? ` · ${areaLabel}` : ''].join('')),
     ]),
     h('svg.w-4.h-4.text-slate-500.flex-none', { fill: 'none', stroke: 'currentColor', 'stroke-width': '2', viewBox: '0 0 24 24', html: '<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />' }),
   ]);
@@ -432,7 +388,7 @@ function renderUserMenu({ user, onLogout }) {
 function renderQuickActions(user) {
   const actions = quickActions(user);
   if (!actions.length) return null;
-  return h('div.hidden.md\\:flex.items-center.gap-2', {}, actions.map((a) => {
+  return h('div.hidden.items-center.gap-2', { class: 'md:flex' }, actions.map((a) => {
     const cls = a.kind === 'accent' ? 'btn-accent' : a.kind === 'secondary' ? 'btn-secondary' : 'btn-ghost';
     return h(`button.${cls}`, { onclick: a.onclick }, [icon(a.icon, 'w-4 h-4'), h('span', {}, a.label)]);
   }));
@@ -489,27 +445,29 @@ export function renderTopbar({ user, onLogout }) {
   ]);
   root.appendChild(left);
 
-  // Centro: buscador
-  const center = h('div.flex-1.max-w-xl.hidden.md\\:block', {}, [renderSearch()]);
-  root.appendChild(center);
-
-  // Derecha: acciones + campana + usuario
+  // Derecha: acciones + selector de empresa + campana + usuario
   const userMenu = renderUserMenu({ user, onLogout });
   // renderBell devuelve un wrapper div.relative.inline-flex que contiene
   // el botón campana y el dropdown. Necesitamos la referencia al wrapper
   // para (1) reemplazarlo en refresh y (2) limpiar sus listeners al desmontar.
   let bellWrapper = renderBell();
-  const right = h('div.flex.items-center.gap-1\\.5.md\\:gap-2', {}, [
+  // El switcher devuelve null si el user no tiene >1 membresía (no se
+  // muestra). companySwitcher puede ser null; se filtra al armar `right`.
+  let companySwitcher = renderCompanySwitcher({ user });
+  const right = h('div.flex.items-center', { class: 'gap-1.5 md:gap-2' }, [
     renderQuickActions(user),
-    h('button.topbar-icon-btn.hidden.sm\\:inline-flex', {
+    h('button.topbar-icon-btn.hidden', {
+      class: 'sm:inline-flex',
       'aria-label': 'Ayuda', title: 'Ayuda',
       onclick: () => window.dispatchEvent(new CustomEvent('gcm:help')),
     }, [
       h('svg.w-5.h-5', { fill: 'none', stroke: 'currentColor', 'stroke-width': '2', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.help}" />` }),
     ]),
-    h('div.w-px.h-6.bg-surface-border.hidden.sm\\:block'),
+    h('div.w-px.h-6.bg-surface-border.hidden', { class: 'sm:block' }),
+    companySwitcher,
+    companySwitcher ? h('div.w-px.h-6.bg-surface-border.hidden', { class: 'sm:block' }) : null,
     bellWrapper,
-    h('div.w-px.h-6.bg-surface-border.hidden.sm\\:block'),
+    h('div.w-px.h-6.bg-surface-border.hidden', { class: 'sm:block' }),
     userMenu,
   ]);
   root.appendChild(right);
@@ -545,6 +503,7 @@ export function renderTopbar({ user, onLogout }) {
   root._gcmCleanup = () => {
     if (typeof userMenu._userMenuCleanup === 'function') userMenu._userMenuCleanup();
     if (typeof bellWrapper._bellDropdownCleanup === 'function') bellWrapper._bellDropdownCleanup();
+    if (companySwitcher && typeof companySwitcher._companySwitcherCleanup === 'function') companySwitcher._companySwitcherCleanup();
     if (typeof unsubscribe === 'function') unsubscribe();
     window.removeEventListener('gcm:sidebar-state-changed', refreshToggle);
   };

@@ -44,8 +44,8 @@ export function activeFiltersChips(filters, onClearFilter, userNames = {}) {
     
     return h('div.inline-flex.items-center.gap-1.px-3.py-1.rounded-full.bg-blue-100.border.border-blue-300.text-sm', {}, [
       h('span.text-blue-800', {}, label),
-      h('button.ml-1.text-blue-600.hover\\:text-blue-800.font-bold.text-xs', 
-        { onclick: (e) => { e.stopPropagation(); onClearFilter(key); } }, 
+      h('button.ml-1.text-blue-600.font-bold.text-xs',
+        { class: 'hover:text-blue-800', onclick: (e) => { e.stopPropagation(); onClearFilter(key); } },
         '×'
       ),
     ]);

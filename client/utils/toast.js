@@ -31,7 +31,8 @@ export function toast(message, type = 'info', timeout = 4000) {
   }, [
     h('span.font-bold', ICONS[type] || 'i'),
     msg,
-    h('button.text-white\\/80.hover\\:text-white.min-w-\\[44px\\].min-h-\\[44px\\].flex.items-center.justify-center.rounded', {
+    h('button.flex.items-center.justify-center.rounded', {
+      class: 'text-white/80 hover:text-white min-w-[44px] min-h-[44px]',
       onclick: () => remove(id),
       'aria-label': 'Cerrar notificación',
     }, '×'),

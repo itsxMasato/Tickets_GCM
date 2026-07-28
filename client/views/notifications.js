@@ -5,7 +5,7 @@ import { toast } from '../utils/toast.js';
 import { go } from '../router.js';
 import { setState, getState } from '../store.js';
 import { relativeFromNow, formatDateTime } from '../utils/format.js';
-import { ICON } from '../utils/icons.js';
+import { ICON, svg } from '../utils/icons.js';
 import { subscribeToRealtimeEvents } from '../utils/realtime.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 
@@ -19,6 +19,19 @@ const TYPE_LABEL = {
   ticket_transferred:    'Para tu revisión',
 };
 
+// Verbo de la acción rápida por tipo — mismo criterio que el mock
+// ("Abrir Ticket" / "Responder" / "Ver Detalles"), pero derivado del tipo
+// real de la notificación en vez de estar hardcodeado por fila.
+const TYPE_CTA = {
+  ticket_created:        'Abrir ticket',
+  ticket_assigned:       'Abrir ticket',
+  ticket_commented:      'Responder',
+  ticket_status_changed: 'Ver estado',
+  ticket_closed:         'Ver ticket',
+  ticket_reopened:       'Revisar',
+  ticket_transferred:    'Revisar',
+};
+
 const TYPE_TONE = {
   ticket_created:        'bg-blue-100 text-blue-800',
   ticket_assigned:       'bg-brand/10 text-brand',
@@ -29,52 +42,73 @@ const TYPE_TONE = {
   ticket_transferred:    'bg-brand-ocean/10 text-brand-ocean',
 };
 
+const LOAD_STEP = 30;
+
 function pillFor(type) {
   const tone = TYPE_TONE[type] || 'bg-slate-100 text-slate-700';
-  const cls = tone.replace(/\s+/g, '.');
   const iconPath = ICON[type];
-  const iconHtml = iconPath
-    ? `<svg class="w-3 h-3 mr-1 inline" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="${iconPath}"/></svg>`
-    : '';
-  return h(`span.badge.${cls}.inline-flex.items-center`, { html: `${iconHtml}${escapeHtml(TYPE_LABEL[type] || type)}` });
+  return h('span.badge.rounded-full.px-3.py-1.font-bold.uppercase.inline-flex.items-center.gap-1', { class: `${tone} text-[11px]` }, [
+    iconPath ? svg(h, iconPath, 'w-3 h-3') : null,
+    h('span', {}, TYPE_LABEL[type] || type),
+  ]);
 }
 
-// Mini-resumen (KPIs) sobre la lista
-function kpi(label, value, tone = 'text-brand-ink') {
-  return h('div.card.flex.flex-col.gap-1', {}, [
-    h('div.text-xs.uppercase.tracking-wider.text-slate-500.font-medium', {}, label),
-    h(`div.text-2xl.font-bold.${tone}`, {}, String(value)),
+// KPI con estilo propio por tarjeta (icono arriba, valor grande abajo) —
+// distinto del kpi-card genérico de borde lateral que usan otras vistas:
+// acá cada card tiene su propio tratamiento (borde coral para "no leídas",
+// fondo navy para "tipo frecuente"), tal como lo pide este mock puntual.
+function kpiCard({ label, value, hint = '', icon, variant = 'default' }) {
+  const isCoral = variant === 'coral';
+  const isDark = variant === 'dark';
+  return h('div.rounded-xl.p-4.flex.flex-col.justify-between.transition-shadow', {
+    class: isCoral
+      ? 'bg-white border-2 border-accent hover:shadow-md'
+      : isDark
+        ? 'bg-brand text-white border border-brand'
+        : 'bg-white border border-surface-border hover:shadow-md',
+  }, [
+    h('div.flex.justify-between.items-start', {}, [
+      h('span.text-xs.font-semibold.uppercase.tracking-wider', { class: isCoral ? 'text-accent' : isDark ? 'text-white/70' : 'text-slate-500' }, label),
+      svg(h, icon, `w-5 h-5 ${isCoral ? 'text-accent' : isDark ? 'text-white/70' : 'text-slate-400'}`),
+    ]),
+    h('div', {}, [
+      h('div.font-bold', { class: isDark ? 'text-xl' : `text-3xl ${isCoral ? 'text-accent' : 'text-brand'}` }, String(value)),
+      hint ? h('div.text-xs.mt-1', { class: isDark ? 'text-white/60' : 'text-slate-500' }, hint) : null,
+    ]),
   ]);
 }
 
 export async function renderNotifications({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
+  let limit = LOAD_STEP;
 
   // Header
-  root.appendChild(h('div.flex.items-center.justify-between.flex-wrap.gap-3', {}, [
+  root.appendChild(h('div.flex.flex-col.justify-between.gap-4', { class: 'md:flex-row md:items-end' }, [
     h('div', {}, [
-      h('h1.text-2xl.font-bold.text-brand-ink', {}, 'Centro de notificaciones'),
-      h('p.text-sm.text-slate-500', {}, 'Actividad en tiempo real sobre tus tickets.'),
+      h('div.flex.items-center.gap-2.flex-wrap', {}, [
+        h('h1.text-2xl.font-bold.text-brand.tracking-tight', { class: 'md:text-3xl' }, 'Centro de notificaciones'),
+        h('span.inline-flex.items-center.px-2.rounded-full.font-bold.uppercase.tracking-wider', { class: 'gap-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[11px]' }, [
+          h('span.w-2.h-2.rounded-full.bg-emerald-500.animate-pulse'),
+          h('span', {}, 'En vivo'),
+        ]),
+      ]),
+      h('p.text-sm.text-slate-500.mt-1', {}, 'Actividad en tiempo real sobre tus tickets y operaciones de soporte.'),
     ]),
     h('div.flex.items-center.gap-2', {}, [
-      h('span.live-dot.hidden.sm\\:inline-flex.items-center.gap-1\\.5.text-xs.text-emerald-700', {}, [
-        h('span.w-1.5.h-1.5.rounded-full.bg-emerald-500.animate-pulse'),
-        'En vivo',
-      ]),
-      h('button.btn.btn-secondary', { onclick: () => markAll(reload) }, 'Marcar todas como leídas'),
-      h('button.btn.btn-ghost', { onclick: reload, title: 'Recargar', 'aria-label': 'Recargar notificaciones' }, [
-        h('svg.w-4.h-4', { fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: '<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M4 10a8 8 0 0114-3M20 14a8 8 0 01-14 3" />' }),
-      ]),
+      h('button.btn.btn-secondary', { onclick: () => markAll(reload) }, [svg(h, ICON.check, 'w-4 h-4'), h('span', {}, 'Marcar todas como leídas')]),
+      h('button.btn-icon-sm', { onclick: reload, title: 'Recargar', 'aria-label': 'Recargar notificaciones' }, [svg(h, ICON.refresh, 'w-4 h-4')]),
     ]),
   ]));
 
-  // KPIs (rellenados tras la primera carga) y Lista — declarados antes
-  // de los filtros porque setActive() recarga y necesita acceder a ellos.
-  const kpis = h('div.grid.grid-cols-2.md\\:grid-cols-4.gap-3', {});
-  const list = h('div.flex.flex-col.gap-2', {});
+  // KPIs y Lista — declarados antes de los filtros porque setActive()
+  // recarga y necesita acceder a ellos.
+  const kpis = h('div.grid.grid-cols-2.gap-3', { class: 'lg:grid-cols-4' });
+  const list = h('div.flex.flex-col.gap-3', {});
+  const loadMoreWrap = h('div.flex.justify-center.mt-2', {});
 
-  // Filtros
-  const filterWrap = h('div.flex.items-center.gap-1.bg-white.border.border-surface-border.rounded-lg.p-1.shadow-soft.w-fit', {});
+  // Filtros — píldora segmentada, mismo lenguaje visual que el resto de
+  // la app (bg-surface envolvente + activo en blanco con sombra).
+  const filterWrap = h('div.flex.items-center.gap-1.bg-surface.rounded-xl.p-1.w-fit', {});
   const FILTERS = [
     { key: 'all',     label: 'Todas' },
     { key: 'unread',  label: 'No leídas' },
@@ -82,17 +116,22 @@ export async function renderNotifications({ user }) {
   let active = 'all';
   function setActive(k) {
     active = k;
+    limit = LOAD_STEP;
     [...filterWrap.children].forEach((c, i) => {
       const isActive = FILTERS[i].key === k;
-      c.classList.toggle('bg-brand', isActive);
-      c.classList.toggle('text-white', isActive);
-      c.classList.toggle('text-brand-ink', !isActive);
+      c.classList.toggle('bg-white', isActive);
+      c.classList.toggle('shadow-soft', isActive);
+      c.classList.toggle('text-brand', isActive);
+      c.classList.toggle('font-bold', isActive);
+      c.classList.toggle('text-slate-500', !isActive);
+      c.classList.toggle('font-medium', !isActive);
       c.setAttribute('aria-pressed', String(isActive));
     });
     reload();
   }
   FILTERS.forEach((f) => {
-    const b = h('button.px-3.py-1\\.5.text-sm.rounded-md.font-medium.focus\\:outline-none.focus\\:ring-2.focus\\:ring-brand-ocean\\/60.transition', {
+    const b = h('button.px-4.py-2.rounded-lg.text-sm.transition', {
+      class: 'focus:outline-none focus:ring-2 focus:ring-brand-ocean/60',
       onclick: () => setActive(f.key),
       'aria-pressed': 'false',
     }, f.label);
@@ -103,13 +142,14 @@ export async function renderNotifications({ user }) {
 
   root.appendChild(kpis);
   root.appendChild(list);
-
+  root.appendChild(loadMoreWrap);
 
   async function reload() {
     list.innerHTML = '<div class="card flex items-center justify-center gap-2 py-10 text-sm text-slate-600" role="status" aria-live="polite"><svg class="animate-spin w-4 h-4 text-brand-ocean" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg><span>Cargando notificaciones…</span></div>';
+    loadMoreWrap.innerHTML = '';
     try {
       const { notifications } = await api.notifications.list({
-        limit: 100,
+        limit,
         unread: active === 'unread' ? 'true' : 'false',
       });
       draw(notifications);
@@ -127,20 +167,67 @@ export async function renderNotifications({ user }) {
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  function draw(items) {
-    // KPIs
+  function drawKpis(items) {
     kpis.innerHTML = '';
     const total = items.length;
     const unread = items.filter((n) => !n.read).length;
     const byType = items.reduce((acc, n) => { acc[n.type] = (acc[n.type] || 0) + 1; return acc; }, {});
     const topType = Object.entries(byType).sort((a, b) => b[1] - a[1])[0];
-    kpis.appendChild(kpi('Total (vista)', total));
-    kpis.appendChild(kpi('No leídas (vista)', unread, unread > 0 ? 'text-accent' : 'text-brand-ink'));
-    kpis.appendChild(kpi('Última 24 h', items.filter((n) => Date.now() - new Date(n.created_at.replace(' ', 'T') + 'Z').getTime() < 24*3600*1000).length));
-    kpis.appendChild(kpi('Tipo frecuente', topType ? (TYPE_LABEL[topType[0]] || topType[0]) : '—', 'text-brand'));
+    const topPct = topType && total ? Math.round((topType[1] / total) * 100) : 0;
+    const last24h = items.filter((n) => Date.now() - new Date(n.created_at.replace(' ', 'T') + 'Z').getTime() < 24 * 3600 * 1000).length;
+
+    kpis.appendChild(kpiCard({ label: 'Total (vista)', value: total, icon: ICON.eye }));
+    kpis.appendChild(kpiCard({ label: 'No leídas', value: unread, hint: unread ? 'requieren atención' : 'todo al día', icon: ICON.bell, variant: 'coral' }));
+    kpis.appendChild(kpiCard({ label: 'Últimas 24 h', value: last24h, icon: ICON.clock }));
+    kpis.appendChild(kpiCard({
+      label: 'Tipo frecuente',
+      value: topType ? (TYPE_LABEL[topType[0]] || topType[0]) : '—',
+      hint: topType ? `${topPct}% del volumen visible` : '',
+      icon: ICON.report,
+      variant: 'dark',
+    }));
+  }
+
+  function notificationCard(n) {
+    const card = h('button.text-left.w-full.flex.flex-col.gap-3.p-4.rounded-2xl.transition.cursor-pointer', {
+      class: [
+        'md:flex-row md:items-start',
+        n.read
+          ? 'bg-white border border-surface-border opacity-60 hover:opacity-100'
+          : 'bg-accent/[0.03] border-2 border-accent/20 hover:bg-accent/[0.06]',
+      ].join(' '),
+      onclick: () => onClick(n),
+    }, [
+      // Columna izquierda: tipo + estado
+      h('div.flex.flex-row.items-center.gap-2.flex-wrap', { class: 'md:flex-col md:items-start md:min-w-[130px] md:flex-none' }, [
+        pillFor(n.type),
+        h('span.text-slate-500', { class: 'text-[11px]', title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
+        n.read ? null : h('span.rounded-full.bg-accent', { class: 'w-1.5 h-1.5' }),
+      ]),
+      // Cuerpo
+      h('div.flex-1.min-w-0.space-y-1', {}, [
+        h('div.flex.items-start.justify-between.gap-2.flex-wrap', {}, [
+          h('h4.font-bold.text-brand-ink', { class: n.read ? 'font-semibold' : '' }, n.title),
+          n.ticket_id ? h('span.font-mono.text-slate-500.bg-surface.px-2.rounded.flex-none', { class: 'text-[11px] py-0.5' }, `#${n.ticket_id}`) : null,
+        ]),
+        n.body ? h('p.text-sm.text-slate-600.line-clamp-2.leading-relaxed', {}, n.body) : null,
+        n.ticket_id ? h('div.pt-1', {}, [
+          h('span.inline-flex.items-center.gap-1.font-bold', { class: `text-sm ${n.read ? 'text-brand' : 'text-accent'}` }, [
+            h('span', {}, TYPE_CTA[n.type] || 'Abrir'),
+            svg(h, ICON.arrowR, 'w-4 h-4'),
+          ]),
+        ]) : null,
+      ]),
+    ]);
+    return card;
+  }
+
+  function draw(items) {
+    drawKpis(items);
 
     // Lista
     list.innerHTML = '';
+    loadMoreWrap.innerHTML = '';
     if (!items.length) {
       list.appendChild(emptyState({
         ...EMPTY_STATES.notifications,
@@ -151,38 +238,28 @@ export async function renderNotifications({ user }) {
       return;
     }
 
-    for (const n of items) {
-      const card = h('button.text-left.card.flex.items-start.gap-3.transition.hover\\:border-brand-ocean',
-        { onclick: () => onClick(n) },
-        [
-          // Columna izquierda: tipo + estado
-          h('div.flex.flex-col.items-center.gap-1.w-20.flex-none', {}, [
-            pillFor(n.type),
-            // text-slate-500 — WCAG AA: timestamp relativo es body text.
-            h('div.text-[10px].text-slate-500', { title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
-            n.read ? null : h('span.dot.bg-accent', { title: 'No leída', 'aria-label': 'No leída' }),
-          ]),
-          // Cuerpo
-          h('div.flex-1.min-w-0', {}, [
-            h('div.font-semibold.text-brand-ink.truncate', {}, n.title),
-            n.body ? h('div.text-sm.text-slate-600.line-clamp-2.mt-0\\.5', {}, n.body) : null,
-            h('div.flex.items-center.gap-2.mt-2.text-xs', {}, [
-              h('span.text-slate-500', {}, n.ticket_id ? `Ticket #${n.ticket_id}` : ''),
-              n.read ? null : h('span.text-accent.font-medium', {}, 'No leída'),
-            ]),
-          ]),
-          // Acción rápida
-          n.ticket_id
-            ? h('span.text-xs.text-brand.font-medium.flex-none', {}, 'Abrir →')
-            : null,
-        ],
-      );
-      // Diferenciar leídas vs no-leídas: la marca ya no es una franja lateral.
-      // No-leídas: bg-accent/5 (tinte de acento de fondo) + título en negrita.
-      // Leídas: opacity reducida.
-      if (n.read) card.classList.add('opacity-60');
-      else card.classList.add('bg-accent/5', 'ring-1', 'ring-accent/20');
-      list.appendChild(card);
+    const unreadItems = items.filter((n) => !n.read);
+    const readItems = items.filter((n) => n.read);
+
+    list.appendChild(h('h3.font-bold.text-brand-ink.px-1', {}, unreadItems.length ? 'Recientes' : 'Notificaciones'));
+    for (const n of unreadItems) list.appendChild(notificationCard(n));
+
+    if (unreadItems.length && readItems.length) {
+      list.appendChild(h('div.flex.items-center.gap-3.py-2', {}, [
+        h('div.flex-1.h-px.bg-surface-border'),
+        h('span.font-bold.uppercase.tracking-widest.text-slate-500', { class: 'text-[11px]' }, 'Anteriores'),
+        h('div.flex-1.h-px.bg-surface-border'),
+      ]));
+    }
+    for (const n of readItems) list.appendChild(notificationCard(n));
+
+    // "Cargar más" — mismo endpoint, sólo pide un límite mayor (el backend
+    // no tiene cursor de paginación todavía, así que esto es lo honesto:
+    // no finge páginas que no existen, simplemente trae más resultados).
+    if (items.length >= limit) {
+      loadMoreWrap.appendChild(h('button.btn.btn-ghost', {
+        onclick: () => { limit += LOAD_STEP; reload(); },
+      }, [h('span', {}, 'Cargar notificaciones antiguas'), svg(h, ICON.chevronD, 'w-4 h-4')]));
     }
   }
 

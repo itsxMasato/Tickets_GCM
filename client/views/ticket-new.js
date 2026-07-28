@@ -41,6 +41,7 @@ export async function renderTicketNew({ user }) {
     'Reporta una incidencia. Adjunta fotos, videos o documentos — el contexto acelera la solución.'
   ));
 
+  
   // Categorías (no bloqueantes: si falla el fetch, el select queda con "Sin
   // categoría", que es un estado válido — el ticket no requiere categoría).
   const { categories } = await api.categories.list().catch(() => ({ categories: [] }));
@@ -48,8 +49,8 @@ export async function renderTicketNew({ user }) {
   // ── Form layout ───────────────────────────────────────────────────────
   // 2 columnas en desktop: form (izq) + side de contexto (der). En mobile
   // colapsa a 1 columna con el side de contexto al final.
-  const grid = h('div.grid.grid-cols-1.lg\\:grid-cols-3.gap-4', {});
-  const formCol = h('form.card.flex.flex-col.gap-4.lg\\:col-span-2', { onsubmit: onSubmit, novalidate: 'true' });
+  const grid = h('div.grid.grid-cols-1.gap-4', { class: 'lg:grid-cols-3' });
+  const formCol = h('form.card.flex.flex-col.gap-4', { class: 'lg:col-span-2', onsubmit: onSubmit, novalidate: 'true' });
   const sideCol = h('aside.flex.flex-col.gap-3', {});
   grid.appendChild(formCol);
   grid.appendChild(sideCol);
@@ -102,7 +103,7 @@ export async function renderTicketNew({ user }) {
   const descField = h('div', {}, [
     h('div.flex.items-baseline.justify-between', {}, [
       h('label.label', {}, 'Descripción *'),
-      h('span.text-\\[10px\\].text-slate-500.tabular-nums', { 'data-counter': 'desc' }, `0/${LIMITS.description.max}`),
+      h('span.text-slate-500.tabular-nums', { class: 'text-[10px]', 'data-counter': 'desc' }, `0/${LIMITS.description.max}`),
     ]),
     descInput,
     descHelper,
@@ -127,13 +128,13 @@ export async function renderTicketNew({ user }) {
 
   formCol.appendChild(titleField);
   formCol.appendChild(descField);
-  formCol.appendChild(h('div.grid.grid-cols-1.md\\:grid-cols-2.gap-3', {}, [catField, prioField]));
+  formCol.appendChild(h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-2' }, [catField, prioField]));
 
   // ── Sección de adjuntos (dropzone) ────────────────────────────────────
   const dropzoneSection = h('div.flex.flex-col.gap-2', {}, [
     h('div.flex.items-baseline.justify-between', {}, [
       h('label.label', {}, 'Adjuntos'),
-      h('span.text-\\[10px\\].text-slate-500', {}, 'Opcional'),
+      h('span.text-slate-500', { class: 'text-[10px]' }, 'Opcional'),
     ]),
   ]);
   const dz = attachmentsDropzone({
@@ -167,12 +168,12 @@ export async function renderTicketNew({ user }) {
   const tipList = h('ul.flex.flex-col.gap-3', {});
   tips.forEach((t) => {
     tipList.appendChild(h('li.flex.items-start.gap-3', {}, [
-      h('span.flex-none.w-7.h-7.rounded-md.bg-brand-ocean\\/10.text-brand-ocean.flex.items-center.justify-center', {}, [
+      h('span.flex-none.w-7.h-7.rounded-md.text-brand-ocean.flex.items-center.justify-center', { class: 'bg-brand-ocean/10' }, [
         h('svg.w-4.h-4', { fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${t.d}"/>` }),
       ]),
       h('div.min-w-0', {}, [
         h('div.text-sm.font-medium.text-brand-ink', {}, t.t),
-        h('div.text-xs.text-slate-500.mt-0.5', {}, t.s),
+        h('div.text-xs.text-slate-500', { class: 'mt-0.5' }, t.s),
       ]),
     ]));
   });
@@ -188,7 +189,9 @@ export async function renderTicketNew({ user }) {
   const prioList = h('ul.flex.flex-col.gap-2.text-sm', {});
   prioItems.forEach((p) => {
     prioList.appendChild(h('li.flex.items-start.gap-2', {}, [
-      h(`span.flex-none.w-1.5.h-1.5.rounded-full.mt-1.5.${p.key === 'urgente' ? 'bg-accent' : p.key === 'alta' ? 'bg-amber-500' : p.key === 'media' ? 'bg-blue-500' : 'bg-slate-400'}`, {}),
+      h('span.flex-none.rounded-full', {
+        class: `w-1.5 h-1.5 mt-1.5 ${p.key === 'urgente' ? 'bg-accent' : p.key === 'alta' ? 'bg-amber-500' : p.key === 'media' ? 'bg-blue-500' : 'bg-slate-400'}`,
+      }),
       h('div.min-w-0', {}, [
         h('span.font-medium.text-brand-ink', {}, p.label),
         h('span.text-slate-500', {}, ` — ${p.desc}`),

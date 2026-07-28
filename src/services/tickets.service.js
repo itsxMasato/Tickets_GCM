@@ -4,6 +4,7 @@ const firestoreData = require('../firestoreData');
 const auditService = require('./audit.service');
 const notificationsService = require('./notifications.service');
 const attachmentsService = require('./attachments.service');
+const { canViewTicket: canView } = require('../utils/ticket-access');
 const {
   validationError, notFoundError, forbiddenError, conflictError,
   requireString, optionalString, optionalEnum, TICKET_STATUS, PRIORITIES, STATUS_LABEL,
@@ -17,20 +18,6 @@ const TRANSITIONS = {
   cerrado:     ['reabierto'],
   reabierto:   ['en_proceso', 'asignado'],
 };
-
-function canView(ticket, user) {
-  if (user.role === 'sac') return true;
-  if (user.role === 'jefe_inmediato') return ticket.status === 'solucionado';
-  if (user.role === 'admin_area') {
-    if (ticket.assigned_to && ticket.assigned_to === user.id) return true;
-    if (ticket.created_by && ticket.created_by === user.id) return true;
-    return false;
-  }
-  if (user.role === 'supervisor_campo') {
-    return ticket.created_by === user.id;
-  }
-  return false;
-}
 
 function canEditMeta(ticket, user) {
   if (user.role === 'sac') return true;
@@ -74,6 +61,15 @@ function decorate(ticket) {
 }
 
 async function createTicket(payload, user) {
+  // Un ticket sin company_id queda visible para TODAS las empresas
+  // (scopeByCompany trata company_id null como "legacy, visible para
+  // todos" — correcto para datos pre-multitenant, pero un ticket nuevo
+  // sin empresa activa se colaba con el mismo criterio y filtraba datos
+  // entre tenants). Bloqueamos la creacion en el origen en vez de tocar
+  // ese passthrough, que sigue siendo necesario para los registros legacy.
+  if (user.activeCompanyId == null) {
+    throw validationError('Tu usuario no tiene una empresa activa asignada. Contactá al administrador antes de crear un ticket.');
+  }
   const title = requireString(payload.title, 'título', 200);
   const description = requireString(payload.description, 'descripción', 5000);
   const priority = optionalEnum(payload.priority, 'prioridad', PRIORITIES) || 'media';
@@ -108,9 +104,12 @@ async function createTicket(payload, user) {
 }
 
 async function listTickets(filters, user) {
-  const page = Math.max(1, parseInt(filters.page || '1', 10));
   const limit = Math.min(100, Math.max(1, parseInt(filters.limit || '25', 10)));
-  const result = await firestoreData.listTickets(filters, user, page, limit);
+  // cursor viene del listado anterior (nextCursor). Sin cursor = primera
+  // página. Ya no se acepta "page" — ver la nota en firestoreData.listTickets
+  // sobre por qué el offset (limit(page*limit)) no escala.
+  const cursor = typeof filters.cursor === 'string' && filters.cursor ? filters.cursor : null;
+  const result = await firestoreData.listTickets(filters, user, { cursor, limit });
   return { ...result, tickets: result.tickets.map(decorate) };
 }
 
@@ -151,7 +150,14 @@ async function assignTicket(id, payload, user) {
   const ticket = await firestoreData.getTicketById(id);
   if (!ticket) throw notFoundError('Ticket no encontrado.');
 
-  const updated = await firestoreData.assignTicket(id, to_user_id, user, notes);
+  let updated;
+  try {
+    updated = await firestoreData.assignTicket(id, to_user_id, user, notes);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') throw notFoundError(err.message);
+    if (err.code === 'VALIDATION_ERROR') throw validationError(err.message);
+    throw err;
+  }
   const decorated = decorate(updated);
 
   await notificationsService.createAsync({
@@ -199,7 +205,20 @@ async function changeStatus(id, payload, user) {
     throw conflictError(`Transición no permitida: ${ticket.status} → ${next}.`);
   }
 
-  const updated = await firestoreData.changeTicketStatus(id, next, comment, user);
+  let updated;
+  try {
+    updated = await firestoreData.changeTicketStatus(id, next, comment, user);
+  } catch (err) {
+    // firestoreData.changeTicketStatus revalida la transicion dentro de una
+    // transaccion de Firestore (contra el estado mas reciente, no el `ticket`
+    // ya leido arriba) para evitar que dos cambios de estado simultaneos se
+    // pisen en silencio. Si otro cambio gano la carrera entre esta lectura y
+    // el commit, cae aca — lo traducimos al mismo 409 que el chequeo de
+    // arriba, en vez de dejar pasar un 500 crudo.
+    if (err.code === 'CONFLICT') throw conflictError(err.message);
+    if (err.code === 'NOT_FOUND') throw notFoundError(err.message);
+    throw err;
+  }
   const decorated = decorate(updated);
 
   const counterpart = next === 'cerrado' || next === 'solucionado'
@@ -274,7 +293,11 @@ async function changeStatus(id, payload, user) {
 }
 
 async function addComment(id, payload, user) {
-  const comment = requireString(payload.comment, 'comentario', 2000);
+  // El composer del chat (chat-composer.js) muestra un contador "x/4000" y
+  // permite escribir hasta 4000 caracteres — el backend cortaba en 2000, asi
+  // que un mensaje largo (alentado por el propio contador visible) fallaba
+  // sin aviso previo, y de paso dejaba sin enviar los adjuntos ya en cola.
+  const comment = requireString(payload.comment, 'comentario', 4000);
 
   const ticket = await firestoreData.getTicketById(id);
   if (!ticket) throw notFoundError('Ticket no encontrado.');

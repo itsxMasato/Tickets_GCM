@@ -92,10 +92,11 @@ export function attachmentsDropzone({
   // Lista de archivos pendientes
   const fileList = h('ul.gcm-dropzone-list.hidden.flex.flex-col.gap-2.mt-2', { 'aria-label': 'Archivos adjuntos' });
   const invalidList = h('ul.gcm-dropzone-invalids.hidden.mt-2.text-xs.text-amber-800.bg-amber-50.border.border-amber-200.rounded-md.px-3.py-2', { 'aria-label': 'Archivos no añadidos' });
-  const counter = h('div.text-\\[10px\\].text-slate-500.mt-1', {}, '0 archivos');
+  const counter = h('div.text-slate-500.mt-1', { class: 'text-[10px]' }, '0 archivos');
 
   // Zona principal: clic + teclado abren el file picker
-  const drop = h('div.gcm-dropzone.flex.flex-col.items-center.justify-center.gap-2.px-4.py-8.rounded-xl.border-2.border-dashed.border-surface-border-strong.bg-surface\\/40.text-center.transition', {
+  const drop = h('div.gcm-dropzone.flex.flex-col.items-center.justify-center.gap-2.px-4.py-8.rounded-xl.border-2.border-dashed.border-surface-border-strong.text-center.transition', {
+    class: 'bg-surface/40',
     tabindex: '0',
     role: 'button',
     'aria-label': `${label}. Enter, espacio o click para elegir. Arrastra archivos aquí. Pega con Ctrl+V.`,
@@ -105,7 +106,7 @@ export function attachmentsDropzone({
     ]),
     h('div.text-sm.font-medium.text-brand-ink', {}, label),
     h('div.text-xs.text-slate-500', {}, hint),
-    h('div.text-\\[10px\\].text-slate-500.mt-1', {}, 'Arrastra · pega con Ctrl+V · o haz click para elegir'),
+    h('div.text-slate-500.mt-1', { class: 'text-[10px]' }, 'Arrastra · pega con Ctrl+V · o haz click para elegir'),
   ]);
 
   // El input vive FUERA del dropzone (no anidado) para evitar doble trigger
@@ -213,7 +214,8 @@ export function attachmentsDropzone({
         h('div.text-sm.font-medium.text-brand-ink.truncate', {}, f.file.name),
         h('div.text-xs.text-slate-500', {}, `${(f.file.type.split('/')[1] || 'archivo').toUpperCase()} · ${fileSize(f.file.size)}`),
       ]));
-      li.appendChild(h('button.btn-icon-sm.text-slate-500.hover\\:text-accent', {
+      li.appendChild(h('button.btn-icon-sm.text-slate-500', {
+        class: 'hover:text-accent',
         type: 'button',
         'aria-label': `Quitar ${f.file.name}`,
         onclick: () => removeAt(i),

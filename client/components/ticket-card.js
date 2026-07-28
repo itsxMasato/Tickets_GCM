@@ -6,7 +6,8 @@ import { go } from '../router.js';
 import { ICON, svg } from '../utils/icons.js';
 
 export function ticketCard(t) {
-  return h('button.w-full.text-left.bg-white.border.border-surface-border.rounded-lg.p-3.hover\\:border-brand-ocean.hover\\:shadow-card.focus\\:outline-none.focus\\:ring-2.focus\\:ring-brand-ocean\\/30.transition', {
+  return h('button.w-full.text-left.bg-white.border.border-surface-border.rounded-lg.p-3.transition', {
+    class: 'hover:border-brand-ocean hover:shadow-card focus:outline-none focus:ring-2 focus:ring-brand-ocean/30',
     onclick: () => go(`/tickets/${t.id}`),
     'aria-label': `Abrir ticket ${t.code}: ${t.title}`,
   }, [
@@ -19,7 +20,7 @@ export function ticketCard(t) {
       statusBadge(t.status),
       h('span.text-slate-500', {}, `· ${relativeFromNow(t.created_at)}`),
     ]),
-    t.assigned_to_name ? h('div.text-xs.text-slate-500.mt-1.5.flex.items-center.gap-1', {}, [
+    t.assigned_to_name ? h('div.text-xs.text-slate-500.flex.items-center.gap-1', { class: 'mt-1.5' }, [
       svg(h, ICON.user, 'w-3 h-3 text-slate-400 flex-none'),
       h('span.truncate', {}, `Asignado a: ${t.assigned_to_name}`),
     ]) : null,

@@ -17,6 +17,16 @@ let initError = null;
 function init() {
   if (initialized) return;
   try {
+    // Si no hay variables de entorno y existe una llave local en /keys, úsala (dev convenience).
+    try {
+      const localKey = path.resolve(__dirname, '..', 'keys', 'service-account.json');
+      if (!process.env.FIREBASE_SERVICE_ACCOUNT && !process.env.FIREBASE_SERVICE_ACCOUNT_PATH && fs.existsSync(localKey)) {
+        process.env.FIREBASE_SERVICE_ACCOUNT_PATH = localKey;
+        console.info('[firebaseAdmin] Usando keys/service-account.json automáticamente (FIREBASE_SERVICE_ACCOUNT_PATH)');
+      }
+    } catch (e) {
+      // ignore
+    }
     // Prefer explicit JSON in env
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       const json = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);

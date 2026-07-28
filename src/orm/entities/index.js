@@ -23,7 +23,6 @@ module.exports = {
   CalendarEvent:           require('./calendar-event.entity'),
   // Multi-tenant (Fase 1)
   Company:                 require('./company.entity'),
-  CompanyArea:             require('./company-area.entity'),
   UserCompanyMembership:   require('./user-company-membership.entity'),
   RolePermission:          require('./role-permission.entity'),
 };

@@ -2,19 +2,25 @@
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
-import { openModal, confirmModal } from '../components/modal.js';
+import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
+import { verifyCurrentPassword } from '../firebase.js';
 import { emptyState } from '../components/empty-state.js';
 import { usersCache } from '../utils/users-cache.js';
 import { canManageCompanies, ROLES } from '../utils/permissions.js';
 import { ICON, svg } from '../utils/icons.js';
 import { getRoleLabel } from '../utils/role-labels.js';
+import { avatarColor, initials } from '../utils/avatar.js';
+import { exportButton } from '../components/export-button.js';
+import { exportToExcel, exportListToPDF } from '../utils/exports.js';
 
-// ── Límites espejo del backend (services/companies + company-areas + memberships) ──
+// ── Límites espejo del backend (services/companies + memberships) ──
 // El cliente valida para feedback inmediato, pero el backend es la fuente de verdad.
 const LIMITS = {
-  company: { name: { max: 200 }, slug: { max: 50 }, logo: { max: 500 }, color: { max: 20 } },
-  area:    { key: { max: 50, pattern: /^[a-z0-9_-]+$/ }, label: { max: 100 } },
+  company: { name: { max: 200 }, slug: { max: 50 }, logo: { max: 500 }, color: { max: 20 }, codePrefix: { max: 6 } },
 };
+
+// Espejo de CODE_PREFIX_RE en services/companies.service.js
+const CODE_PREFIX_RE = /^[A-Z0-9]{1,6}$/;
 
 // Roles canónicos: misma fuente que el resto de las vistas
 // (users.js, roles.js, dashboard.js). Defensa: si por error de import ROLES
@@ -27,8 +33,8 @@ const ROLES_FALLBACK = (Array.isArray(ROLES) && ROLES.length)
 // Empresas cargadas del backend (lo que ve el requester — ya filtrado por
 // membresía si no es platform admin en companies.service.js:list).
 let companies = [];
-let selectedId = null;           // empresa actualmente expandida
-let areasByCompany = new Map();  // companyId -> [areas]
+let selectedId = null;           // empresa seleccionada para abrir el modal
+let activeDetailModal = null;    // instancia activa del modal de detalle
 let membersByCompany = new Map(); // companyId -> [membresías]
 let loadedAt = null;
 let loading = false;
@@ -60,20 +66,15 @@ function colorDot(color) {
 
 // ── Carga ──────────────────────────────────────────────────────────────────
 async function loadCompanies() {
-  const res = await api.companies.list();
+  const res = await api.companies.list({ all: true });
   companies = res.companies || [];
   loadedAt = new Date();
   // Limpiar caches de detalle: si una empresa fue eliminada, soltar su sub-data.
   const liveIds = new Set(companies.map((c) => c.id));
-  for (const id of [...areasByCompany.keys()]) {
-    if (!liveIds.has(id)) { areasByCompany.delete(id); membersByCompany.delete(id); }
+  for (const id of [...membersByCompany.keys()]) {
+    if (!liveIds.has(id)) membersByCompany.delete(id);
   }
   if (selectedId && !liveIds.has(selectedId)) selectedId = null;
-}
-
-async function loadAreas(companyId) {
-  const res = await api.companies.areas.list(companyId);
-  areasByCompany.set(companyId, res.areas || []);
 }
 
 async function loadMembers(companyId) {
@@ -82,11 +83,15 @@ async function loadMembers(companyId) {
 }
 
 async function ensureDetail(companyId) {
-  // Carga áreas y miembros si no están en cache. Paralelo.
-  const tasks = [];
-  if (!areasByCompany.has(companyId)) tasks.push(loadAreas(companyId));
-  if (!membersByCompany.has(companyId)) tasks.push(loadMembers(companyId));
-  if (tasks.length) await Promise.all(tasks);
+  if (!membersByCompany.has(companyId)) await loadMembers(companyId);
+}
+
+// Encargado de cuenta (responsible_user_id) resuelto contra el cache de
+// usuarios ya cargado — no es un objeto embebido en la respuesta de
+// companies.list(), sólo el FK.
+function responsibleUser(company) {
+  if (!company?.responsible_user_id) return null;
+  return usersCache.get().find((u) => String(u.id) === String(company.responsible_user_id)) || null;
 }
 
 // ── Render principal ───────────────────────────────────────────────────────
@@ -94,6 +99,7 @@ export async function renderCompanies({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
   const canManage = canManageCompanies(user);
+  let exportBtn;
 
   // Header
   const headerRight = canManage
@@ -108,10 +114,14 @@ export async function renderCompanies({ user }) {
 
   root.appendChild(h('div.flex.flex-wrap.items-start.justify-between.gap-3', {}, [
     h('div', {}, [
-      h('h1.text-2xl.font-bold.text-slate-800', {}, 'Empresas'),
-      h('p.text-sm.text-slate-500', {}, canManage
-        ? 'Perfiles de las empresas que usan el sistema. Solo el administrador de plataforma puede crear o modificar.'
-        : 'Perfiles de las empresas. La gestión está reservada al administrador de plataforma.'),
+      h('div.flex.items-center.text-xs.font-semibold.uppercase.tracking-wider.text-brand-ocean.mb-1', { class: 'gap-1.5' }, [
+        svg(h, ICON.building, 'w-4 h-4'),
+        h('span', {}, 'Administración global'),
+      ]),
+      h('h1.text-2xl.font-bold.text-brand.tracking-tight', { class: 'md:text-3xl' }, 'Gestión de empresas'),
+      h('p.text-sm.text-slate-500.mt-1', {}, canManage
+        ? 'Administra los datos, encargados y miembros de las empresas del sistema.'
+        : 'Perfiles de las empresas. La gestión está reservada a usuarios autorizados.'),
     ]),
     h('div.flex.items-center.gap-2', {}, [
       h('button.btn.btn-ghost', {
@@ -123,36 +133,33 @@ export async function renderCompanies({ user }) {
         svg(h, ICON.refresh, 'w-4 h-4'),
         h('span', {}, 'Recargar'),
       ]),
+      exportBtn = exportButton({ label: 'Exportar', kind: 'secondary', onExport: (format) => doExportCompanies(format) }),
       headerRight,
     ]),
   ]));
 
-  const grid = h('div.grid.grid-cols-1.md\\:grid-cols-2.xl\\:grid-cols-3.gap-3', {});
+  const grid = h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-2 xl:grid-cols-3' });
   root.appendChild(grid);
-
-  const detailContainer = h('div', {});
-  root.appendChild(detailContainer);
 
   // Loading inicial
   grid.appendChild(renderLoading('Cargando empresas…'));
 
   // Realtime: refresca la lista cuando otro platform admin o sesión del
-  // propio Miguel en otra pestaña crea/edita empresas, áreas o membresías.
+  // propio Miguel en otra pestaña crea/edita empresas o membresías.
   const onRealtime = (e) => {
     const t = e.detail?.event;
     if (!t) return;
-    const relevant = t.startsWith('company:') || t.startsWith('area:') || t.startsWith('membership:');
+    const relevant = t.startsWith('company:') || t.startsWith('membership:');
     if (!relevant) return;
     // Invalida caches para que el siguiente draw() haga fetch fresco.
     if (t === 'company:created' || t === 'company:updated' || t === 'company:deleted') {
       reloadAll();
-    } else if (t.startsWith('area:') || t.startsWith('membership:')) {
+    } else if (t.startsWith('membership:')) {
       // No tenemos el companyId en el payload para saber a quién refrescar;
       // recargamos todo (es barato: 1 GET por recurso).
-      areasByCompany.clear();
       membersByCompany.clear();
       drawGrid();
-      if (selectedId) drawDetail();
+      if (selectedId) refreshDetailModal();
     }
   };
   window.addEventListener('gcm:realtime', onRealtime);
@@ -162,6 +169,10 @@ export async function renderCompanies({ user }) {
   try {
     await loadCompanies();
     await usersCache.load();
+    // Precarga de miembros de todas las empresas — sin esto, la card sólo
+    // mostraba el conteo real después de haber abierto el detalle al menos
+    // una vez en la sesión (quedaba en "0 miembros" hasta el primer click).
+    await Promise.all(companies.map((c) => loadMembers(c.id).catch(() => {})));
   } catch (e) {
     grid.innerHTML = '';
     grid.appendChild(emptyState({
@@ -174,7 +185,6 @@ export async function renderCompanies({ user }) {
     loading = false;
   }
   drawGrid();
-  if (selectedId) drawDetail();
 
   // ── Draw: grid de cards ──────────────────────────────────────────────
   function drawGrid() {
@@ -185,7 +195,7 @@ export async function renderCompanies({ user }) {
         icon: 'inbox',
         title: canManage ? 'Aún no hay empresas registradas' : 'No tienes empresas asignadas',
         message: canManage
-          ? 'Crea la primera empresa del grupo para empezar a asignarle áreas y miembros.'
+          ? 'Crea la primera empresa del grupo para empezar a asignarle miembros.'
           : 'Pídele al administrador de plataforma que te agregue como miembro de una empresa.',
         action: canManage ? { label: '+ Nueva empresa', onclick: () => openCompanyModal(null, reloadAll) } : null,
       }));
@@ -195,85 +205,117 @@ export async function renderCompanies({ user }) {
       const isActive = c.active;
       const isDefault = c.is_default;
       const isSelected = c.id === selectedId;
-      const card = h('button.text-left.card.p-4.transition.cursor-pointer', {
-        type: 'button',
-        'aria-pressed': String(isSelected),
-        onclick: () => selectCompany(c.id),
+      const memberCount = (membersByCompany.get(c.id) || []).length;
+      const encargado = responsibleUser(c);
+
+      const card = h('div.text-left.card.p-5.w-full.transition.relative.overflow-hidden', {
         class: [
-          isSelected ? 'ring-2 ring-brand-ocean' : 'hover:border-brand-ocean/40',
-          !isActive ? 'opacity-60' : '',
+          isSelected ? 'ring-2 ring-brand-ocean' : 'hover:shadow-pop hover:border-brand-ocean/40',
+          !isActive ? 'border-dashed opacity-75 hover:opacity-100' : '',
         ],
       }, [
-        h('div.flex.items-start.gap-2', {}, [
-          colorDot(c.color),
-          h('div.min-w-0.flex-1', {}, [
-            h('div.font-semibold.text-brand-ink.truncate', {}, c.name),
-            h('div.text-xs.text-slate-500.font-mono.truncate', {}, c.slug),
+        isDefault ? h('span.absolute.top-0.right-4.px-2.py-1.rounded-b-lg.font-bold.uppercase.tracking-widest.bg-brand.text-white', { class: 'text-[10px]' }, 'Por defecto') : null,
+        h('button.flex.items-start.justify-between.gap-2.w-full.text-left', {
+          type: 'button',
+          'aria-pressed': String(isSelected),
+          onclick: () => selectCompany(c.id),
+        }, [
+          h('div.flex.items-start.gap-2.min-w-0', {}, [
+            h('span.rounded-full.flex-none', {
+              class: `mt-1.5 w-2.5 h-2.5 ${isActive ? 'bg-emerald-500' : 'bg-slate-400'}`,
+            }),
+            h('div.min-w-0.flex-1', {}, [
+              h('div.font-semibold.truncate', { class: isActive ? 'text-brand-ink' : 'text-slate-400' }, c.name),
+              h('div.flex.items-center.gap-1.5.min-w-0', {}, [
+                h('span.text-xs.font-mono.truncate', { class: isActive ? 'text-slate-500' : 'text-slate-400' }, c.slug),
+                c.code_prefix ? h('span.badge.bg-brand-ocean/10.text-brand-ocean.font-mono.flex-none', { class: 'text-[10px]' }, c.code_prefix) : null,
+              ]),
+            ]),
           ]),
-        ]),
-        h('div.flex.flex-wrap.items-center.gap-1.mt-2', {}, [
-          isDefault ? h('span.badge.bg-brand-ocean\\/10.text-brand-ocean', {}, 'Por defecto') : null,
           isActive
-            ? h('span.badge.bg-emerald-100.text-emerald-800', {}, 'Activa')
-            : h('span.badge.bg-slate-200.text-slate-700', {}, 'Inactiva'),
+            ? h('span.badge.bg-emerald-100.text-emerald-800.flex-none', {}, 'Activa')
+            : h('span.badge.bg-slate-100.text-slate-500.flex-none', {}, 'Inactiva'),
         ]),
-        h('div.flex.items-center.gap-3.mt-3.text-xs.text-slate-500', {}, [
-          h('span', {}, [
-            (areasByCompany.get(c.id) || []).length,
-            ' ',
-            (areasByCompany.get(c.id) || []).length === 1 ? 'área' : 'áreas',
+        h('div.flex.flex-col.gap-2.mt-4.text-sm', {}, [
+          h('div.flex.items-center.gap-2.text-slate-600', {}, [
+            svg(h, ICON.users, 'w-4 h-4 text-slate-400 flex-none'),
+            h('span', {}, `${memberCount} ${memberCount === 1 ? 'miembro' : 'miembros'}`),
           ]),
-          h('span.text-slate-300', {}, '·'),
-          h('span', {}, [
-            (membersByCompany.get(c.id) || []).length,
-            ' ',
-            (membersByCompany.get(c.id) || []).length === 1 ? 'miembro' : 'miembros',
-          ]),
+          c.location ? h('div.flex.items-center.gap-2.text-slate-600', {}, [
+            svg(h, ICON.pin, 'w-4 h-4 text-slate-400 flex-none'),
+            h('span.truncate', {}, c.location),
+          ]) : null,
+          encargado ? h('div.flex.items-center.gap-2.text-slate-600', {}, [
+            svg(h, ICON.user, 'w-4 h-4 text-slate-400 flex-none'),
+            h('span.truncate', {}, encargado.full_name || encargado.username),
+          ]) : null,
+        ]),
+        h('div.pt-3.mt-3.border-t.border-surface-border.flex.gap-2', {}, [
+          h('button.flex-1.btn.btn-secondary.btn-sm', { type: 'button', onclick: () => selectCompany(c.id) }, 'Ver detalles'),
+          canManage ? h('button.btn.btn-sm', {
+            type: 'button',
+            class: c.active ? 'bg-red-50 text-red-700 hover:bg-red-100 font-medium' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium',
+            onclick: (e) => {
+              e.stopPropagation();
+              openConfirmToggleCompany(c.id, c.active);
+            },
+          }, c.active ? 'Desactivar' : 'Activar') : null,
         ]),
       ]);
       grid.appendChild(card);
     }
   }
 
-  // ── Draw: detalle expandido ──────────────────────────────────────────
-  function drawDetail() {
-    detailContainer.innerHTML = '';
-    if (!selectedId) return;
-    const c = companies.find((x) => x.id === selectedId);
-    if (!c) return;
-    const panel = h('div.card.p-0.overflow-hidden', {}, [
-      h('div.px-5.py-4.border-b.border-surface-border.bg-surface\\/40', {}, [
-        h('div.flex.items-start.justify-between.gap-3.flex-wrap', {}, [
-          h('div.min-w-0.flex-1', {}, [
-            h('div.flex.items-center.gap-2.flex-wrap', {}, [
-              colorDot(c.color),
-              h('h2.text-base.font-semibold.text-brand-ink', {}, c.name),
-              c.is_default ? h('span.badge.bg-brand-ocean\\/10.text-brand-ocean', {}, 'Por defecto') : null,
-              c.active
-                ? h('span.badge.bg-emerald-100.text-emerald-800', {}, 'Activa')
-                : h('span.badge.bg-slate-200.text-slate-700', {}, 'Inactiva'),
-            ]),
-            h('p.text-xs.text-slate-500.font-mono.mt-1', {}, c.slug),
+  // ── Modal: detalle de empresa ───────────────────────────────────────
+  function openDetailModal(company) {
+    if (!company) return;
+    const body = h('div.flex.flex-col.gap-4', {}, [
+      h('div.flex.items-start.justify-between.gap-3.flex-wrap', {}, [
+        h('div.min-w-0.flex-1', {}, [
+          h('div.flex.items-center.gap-2.flex-wrap', {}, [
+            colorDot(company.color),
+            h('h2.text-base.font-semibold.text-brand-ink', {}, company.name),
+            company.is_default ? h('span.badge', { class: 'bg-brand-ocean/10 text-brand-ocean' }, 'Por defecto') : null,
+            company.active
+              ? h('span.badge.bg-emerald-100.text-emerald-800', {}, 'Activa')
+              : h('span.badge.bg-slate-200.text-slate-700', {}, 'Inactiva'),
           ]),
-          h('div.flex.items-center.gap-2', {}, [
-            h('button.btn.btn-ghost.btn-sm', {
-              type: 'button',
-              onclick: () => selectCompany(null),
-              title: 'Cerrar detalle',
-            }, 'Cerrar'),
-          ]),
+          h('p.text-xs.text-slate-500.font-mono.mt-1', {}, `${company.slug} · ID ${company.id}${company.code_prefix ? ` · Prefijo ${company.code_prefix}` : ''}`),
         ]),
       ]),
-      h('div.p-0', {}, [renderTabs(c)]),
+      renderTabs(company),
     ]);
-    detailContainer.appendChild(panel);
+
+    if (activeDetailModal?.cleanup) {
+      activeDetailModal.cleanup();
+      activeDetailModal = null;
+    }
+
+    activeDetailModal = openModal({
+      title: company.name,
+      body,
+      size: 'xl',
+      onClose: () => {
+        activeDetailModal = null;
+        if (selectedId === company.id) {
+          selectedId = null;
+          drawGrid();
+        }
+      },
+    });
+  }
+
+  function refreshDetailModal() {
+    if (!selectedId) return;
+    const company = companies.find((x) => x.id === selectedId);
+    if (!company) return;
+    openDetailModal(company);
   }
 
   // ── Tabs del detalle ─────────────────────────────────────────────────
   function renderTabs(company) {
     const tabs = [
       { key: 'data',    label: 'Datos' },
-      { key: 'areas',   label: 'Áreas' },
       { key: 'members', label: 'Miembros' },
     ];
     const bar = h('div.flex.gap-1.border-b.border-surface-border.overflow-x-auto', {
@@ -306,9 +348,12 @@ export async function renderCompanies({ user }) {
 
     function renderContent() {
       tabContent.innerHTML = '';
-      if (state.active === 'data')    tabContent.appendChild(renderDataTab(company));
-      if (state.active === 'areas')   tabContent.appendChild(renderAreasTab(company));
-      if (state.active === 'members') tabContent.appendChild(renderMembersTab(company));
+      const node = state.active === 'data'
+        ? renderDataTab(company)
+        : state.active === 'members'
+          ? renderMembersTab(company)
+          : null;
+      if (node) tabContent.appendChild(node);
     }
 
     renderBar();
@@ -321,188 +366,131 @@ export async function renderCompanies({ user }) {
     if (!canManage) {
       return h('p.text-sm.text-slate-500', {}, 'Solo el administrador de plataforma puede editar los datos de la empresa.');
     }
+
     const name = h('input.input', { type: 'text', value: company.name || '', maxlength: String(LIMITS.company.name.max) });
-    const slug = h('input.input', { type: 'text', value: company.slug || '', maxlength: String(LIMITS.company.slug.max) });
-    const color = h('input.input.font-mono', { type: 'text', value: company.color || '', maxlength: String(LIMITS.company.color.max), placeholder: '#0F2A47' });
-    const logo = h('input.input', { type: 'url', value: company.logo_url || '', maxlength: String(LIMITS.company.logo.max), placeholder: 'https://…' });
-    const active = h('input', { type: 'checkbox', checked: company.active ? '' : null });
-    const isDefault = h('input', { type: 'checkbox', checked: company.is_default ? '' : null });
+    const location = h('input.input', { type: 'text', value: company.location || '', maxlength: '200', placeholder: 'Ciudad, dirección (opcional)' });
+    const codePrefix = h('input.input.font-mono.uppercase', {
+      type: 'text',
+      value: company.code_prefix || '',
+      maxlength: String(LIMITS.company.codePrefix.max),
+      placeholder: 'N7',
+      oninput: () => { codePrefix.value = codePrefix.value.toUpperCase(); },
+    });
+    const responsible = h('select.input', {}, []);
     const nameErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-name-err', role: 'alert' });
-    const slugErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-slug-err', role: 'alert' });
+    const locationErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-location-err', role: 'alert' });
+    const codePrefixErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-prefix-err', role: 'alert' });
+    const responsibleErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-resp-err', role: 'alert' });
     const banner = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', { role: 'alert' });
 
     const wireClear = (input, err) => input.addEventListener('input', () => clearFieldError(input, err));
-    wireClear(name, nameErr); wireClear(slug, slugErr);
+    wireClear(name, nameErr);
+    wireClear(codePrefix, codePrefixErr);
 
-    // Toggle: marcar "por defecto" desmarcará al resto (server-side); el cliente
-    // deshabilita el toggle de "activa" si la empresa es default (no se puede
-    // desactivar la única empresa activa del sistema — server lo valida).
-    const previewColor = h('span.inline-block.w-4.h-4.rounded.border.border-surface-border', {
-      style: { backgroundColor: (color.value && /^#[0-9A-Fa-f]{3,8}$/.test(color.value)) ? color.value : 'transparent' },
-    });
-    color.addEventListener('input', () => {
-      previewColor.style.backgroundColor = (/^#[0-9A-Fa-f]{3,8}$/.test(color.value)) ? color.value : 'transparent';
-    });
+    function populateResponsible() {
+      const users = usersCache.get().filter((u) => u.active && u.role === 'admin_area');
+      responsible.innerHTML = '';
+      const currentId = company.responsible_user_id != null ? String(company.responsible_user_id) : null;
+      const currentInList = currentId != null && users.some((u) => String(u.id) === currentId);
+      if (!users.length && !currentId) {
+        responsible.appendChild(h('option', { value: '', disabled: 'disabled' }, 'No hay administradores de área activos'));
+        return;
+      }
+      responsible.appendChild(h('option', { value: '' }, '— Selecciona un encargado —'));
+      if (currentId && !currentInList) {
+        // El encargado actual ya no es admin_area activo (se desactivó o le
+        // cambiaron el rol desde /users). Sin esta opción, el <select>
+        // quedaba en "" y el form bloqueaba GUARDAR CUALQUIER cambio (hasta
+        // ubicación o prefijo) hasta elegir un reemplazo, aunque el admin
+        // solo quisiera editar otro campo sin tocar el encargado.
+        const currentUser = usersCache.get().find((u) => String(u.id) === currentId);
+        const label = currentUser
+          ? `${currentUser.full_name || currentUser.username} (actual — ya no es admin. de área activo)`
+          : `Encargado actual #${currentId} (ya no disponible)`;
+        responsible.appendChild(h('option', { value: currentId, selected: 'selected' }, label));
+      }
+      for (const u of users) {
+        const o = h('option', { value: String(u.id) }, `${u.full_name || u.username} (${u.username || u.id})`);
+        if (currentId === String(u.id)) o.selected = 'selected';
+        responsible.appendChild(o);
+      }
+    }
 
-    const body = h('div.flex.flex-col.gap-3', {}, [
-      h('div', {}, [h('label.label', {}, 'Nombre *'), name, nameErr]),
-      h('div', {}, [h('label.label', {}, 'Slug *'), slug, slugErr, h('p.text-xs.text-slate-500.mt-1', {}, 'Identificador URL-safe. Solo letras minúsculas, dígitos y guiones.')]),
-      h('div.grid.grid-cols-1.md\\:grid-cols-2.gap-3', {}, [
-        h('div', {}, [
-          h('label.label', {}, 'Color de marca'),
-          h('div.flex.items-center.gap-2', {}, [color, previewColor]),
-          h('p.text-xs.text-slate-500.mt-1', {}, 'Hex (#0F2A47). Define el accent en sidebar y badges.'),
-        ]),
-        h('div', {}, [h('label.label', {}, 'Logo URL'), logo, h('p.text-xs.text-slate-500.mt-1', {}, 'Opcional. URL completa al asset.')]),
+    if (!usersCache.isLoaded()) {
+      responsible.appendChild(h('option', { value: '' }, 'Cargando encargados…'));
+      usersCache.load().then(populateResponsible).catch(populateResponsible);
+    } else {
+      populateResponsible();
+    }
+
+    const wireClearExtra = (input, err) => input.addEventListener('input', () => clearFieldError(input, err));
+    wireClearExtra(location, locationErr);
+    wireClearExtra(responsible, responsibleErr);
+
+    return h('div.flex.flex-col.gap-4', {}, [
+      h('div', {}, [
+        h('label.label', {}, 'Nombre *'),
+        name,
+        nameErr,
       ]),
-      h('div.flex.flex-wrap.gap-4.mt-2', {}, [
-        h('label.flex.items-center.gap-2.text-sm', { for: 'gcm-co-active' }, [active, 'Empresa activa']),
-        h('label.flex.items-center.gap-2.text-sm', { for: 'gcm-co-default' }, [isDefault, 'Empresa por defecto']),
+      h('div', {}, [
+        h('label.label', {}, 'Ubicación (opcional)'),
+        location,
+        locationErr,
+      ]),
+      h('div', {}, [
+        h('label.label', {}, 'Prefijo de nomenclatura *'),
+        codePrefix,
+        h('p.text-xs.text-slate-500.mt-1', {}, 'Define la nomenclatura de los tickets de esta empresa, ej. N7 → N7-000001. Solo letras/números, máx. 6 caracteres.'),
+        codePrefixErr,
+      ]),
+      h('div', {}, [
+        h('label.label', {}, 'Encargado *'),
+        responsible,
+        h('p.text-xs.text-slate-500.mt-1', {}, 'Solo se listan usuarios activos con rol Administrador de área.'),
+        responsibleErr,
       ]),
       banner,
-    ]);
-
-    const actions = (close) => [
-      h('button.btn.btn-ghost', { onclick: close, type: 'button' }, 'Cancelar'),
-      h('button.btn.btn-ghost.text-accent.hover\\:bg-accent\\/10', {
-        type: 'button',
-        onclick: () => {
-          confirmModal({
-            title: company.active ? 'Desactivar empresa' : 'Activar empresa',
-            message: `¿${company.active ? 'Desactivar' : 'Activar'} <b>${escapeHtml(company.name)}</b>?${company.active ? ' No se podrá desactivar si es la última empresa activa.' : ''}`,
-            confirmText: company.active ? 'Desactivar' : 'Activar',
-            danger: company.active,
-            onConfirm: async () => {
-              try {
-                await api.companies.update(company.id, { active: !company.active });
-                toast(company.active ? 'Empresa desactivada' : 'Empresa activada', 'success');
-                close(); await reloadAll();
-              } catch (e) { toast(e.message, 'error'); }
-            },
-          });
-        },
-      }, company.active ? 'Desactivar' : 'Activar'),
-      h('button.btn.btn-primary', {
-        type: 'button',
-        onclick: async () => {
-          nameErr.classList.add('hidden');
-          slugErr.classList.add('hidden');
-          banner.classList.add('hidden');
-          let firstInvalid = null;
-          const nameVal = name.value.trim();
-          const slugVal = slug.value.trim();
-          if (!nameVal) { setFieldError(name, nameErr, 'El nombre es obligatorio.'); firstInvalid = firstInvalid || name; }
-          if (!slugVal) { setFieldError(slug, slugErr, 'El slug es obligatorio.'); firstInvalid = firstInvalid || slug; }
-          else if (!/^[a-z0-9-]+$/.test(slugVal)) { setFieldError(slug, slugErr, 'Solo minúsculas, dígitos y guiones.'); firstInvalid = firstInvalid || slug; }
-          if (firstInvalid) { firstInvalid.focus(); return; }
-          try {
-            await api.companies.update(company.id, {
-              name: nameVal,
-              slug: slugVal,
-              color: color.value.trim() || null,
-              logo_url: logo.value.trim() || null,
-              active: active.checked,
-              is_default: isDefault.checked,
-            });
-            toast('Empresa actualizada', 'success');
-            close();
-            await reloadAll();
-          } catch (e) {
-            banner.textContent = e.message;
-            banner.classList.remove('hidden');
-          }
-        },
-      }, 'Guardar cambios'),
-    ];
-    openModal({ title: `Editar ${company.name}`, body, actions, size: 'lg' });
-  }
-
-  // ── Tab: Áreas ───────────────────────────────────────────────────────
-  function renderAreasTab(company) {
-    const areas = areasByCompany.get(company.id) || [];
-    const header = h('div.flex.items-center.justify-between.mb-3', {}, [
-      h('div', {}, [
-        h('h3.text-sm.font-semibold.text-brand-ink', {}, 'Áreas operativas'),
-        h('p.text-xs.text-slate-500', {}, 'Definen las áreas de trabajo de esta empresa. Cada área tiene un `key` estable (no se renombra) y un label visible.'),
-      ]),
-      canManage ? h('button.btn.btn-primary.btn-sm', {
-        type: 'button',
-        onclick: () => openAreaModal(company.id, null, async () => { await loadAreas(company.id); drawGrid(); drawDetail(); }),
-      }, [
-        svg(h, ICON.plus, 'w-4 h-4'),
-        h('span', {}, 'Nueva área'),
-      ]) : null,
-    ]);
-
-    if (!areas.length) {
-      return h('div', {}, [header, emptyState({
-        icon: 'tag',
-        title: 'Sin áreas',
-        message: 'Esta empresa no tiene áreas definidas.',
-        className: 'py-6',
-      })]);
-    }
-
-    const rows = areas.map((a) => `
-      <tr>
-        <td><span class="font-mono text-xs">${escapeHtml(a.key)}</span></td>
-        <td>${escapeHtml(a.label)}</td>
-        <td class="text-xs text-slate-500">${a.sort_order}</td>
-        <td>${a.active
-          ? '<span class="badge bg-emerald-100 text-emerald-800">Activa</span>'
-          : '<span class="badge bg-slate-200 text-slate-700">Inactiva</span>'}</td>
-        <td class="text-right">
-          ${canManage ? `
-            <button class="btn btn-ghost btn-sm" data-edit-area="${a.id}">Editar</button>
-            <button class="btn btn-ghost btn-sm ${a.active ? 'text-accent hover:bg-accent/10' : ''}" data-toggle-area="${a.id}">${a.active ? 'Desactivar' : 'Activar'}</button>
-          ` : ''}
-        </td>
-      </tr>
-    `).join('');
-
-    const wrap = h('div', {});
-    wrap.appendChild(header);
-    wrap.appendChild(h('div.table-wrap', {}, [
-      h('table.table', {}, [
-        h('thead', {}, [h('tr', {}, [
-          h('th', {}, 'Key'),
-          h('th', {}, 'Label'),
-          h('th', {}, 'Orden'),
-          h('th', {}, 'Estado'),
-          h('th', {}, ''),
-        ])]),
-        h('tbody', { html: rows }),
-      ]),
-    ]));
-
-    if (canManage) {
-      wrap.querySelectorAll('[data-edit-area]').forEach((b) => b.addEventListener('click', () => {
-        const id = Number(b.dataset.editArea);
-        const a = areas.find((x) => x.id === id);
-        if (a) openAreaModal(company.id, a, async () => { await loadAreas(company.id); drawGrid(); drawDetail(); });
-      }));
-      wrap.querySelectorAll('[data-toggle-area]').forEach((b) => b.addEventListener('click', () => {
-        const id = Number(b.dataset.toggleArea);
-        const a = areas.find((x) => x.id === id);
-        if (!a) return;
-        confirmModal({
-          title: a.active ? 'Desactivar área' : 'Activar área',
-          message: `¿${a.active ? 'Desactivar' : 'Activar'} <b>${escapeHtml(a.label)}</b>?${a.active ? ' El servidor bloquea si tiene tickets activos o miembros usándola.' : ''}`,
-          confirmText: a.active ? 'Desactivar' : 'Activar',
-          danger: a.active,
-          onConfirm: async () => {
+      h('div.flex.items-center.justify-end.gap-2.pt-2', {}, [
+        h('button.btn.btn-primary', {
+          type: 'button',
+          onclick: async () => {
+            nameErr.classList.add('hidden');
+            locationErr.classList.add('hidden');
+            codePrefixErr.classList.add('hidden');
+            responsibleErr.classList.add('hidden');
+            banner.classList.add('hidden');
+            let firstInvalid = null;
+            const nameVal = name.value.trim();
+            const codePrefixVal = codePrefix.value.trim().toUpperCase();
+            const responsibleVal = responsible.value ? Number(responsible.value) : null;
+            if (!nameVal) { setFieldError(name, nameErr, 'El nombre es obligatorio.'); firstInvalid = firstInvalid || name; }
+            if (!codePrefixVal) {
+              setFieldError(codePrefix, codePrefixErr, 'El prefijo de nomenclatura es obligatorio.');
+              firstInvalid = firstInvalid || codePrefix;
+            } else if (!CODE_PREFIX_RE.test(codePrefixVal)) {
+              setFieldError(codePrefix, codePrefixErr, 'Solo letras/números, sin espacios, máx. 6 caracteres.');
+              firstInvalid = firstInvalid || codePrefix;
+            }
+            if (!responsibleVal) { setFieldError(responsible, responsibleErr, 'El encargado es obligatorio.'); firstInvalid = firstInvalid || responsible; }
+            if (firstInvalid) { firstInvalid.focus(); return; }
             try {
-              await api.companies.areas.update(a.id, { active: !a.active });
-              toast('Área actualizada', 'success');
-              await loadAreas(company.id);
-              drawGrid();
-              drawDetail();
-            } catch (e) { toast(e.message, 'error'); }
+              await api.companies.update(company.id, {
+                name: nameVal,
+                location: location.value.trim() || null,
+                code_prefix: codePrefixVal,
+                responsible_user_id: responsibleVal,
+              });
+              toast('Empresa actualizada', 'success');
+              await reloadAll();
+            } catch (e) {
+              banner.textContent = e.message;
+              banner.classList.remove('hidden');
+            }
           },
-        });
-      }));
-    }
-    return wrap;
+        }, 'Guardar cambios'),
+      ]),
+    ]);
   }
 
   // ── Tab: Miembros ────────────────────────────────────────────────────
@@ -511,11 +499,11 @@ export async function renderCompanies({ user }) {
     const header = h('div.flex.items-center.justify-between.mb-3', {}, [
       h('div', {}, [
         h('h3.text-sm.font-semibold.text-brand-ink', {}, 'Miembros'),
-        h('p.text-xs.text-slate-500', {}, 'Personas con acceso a esta empresa. Cada una tiene un rol y opcionalmente un área.'),
+        h('p.text-xs.text-slate-500', {}, 'Personas con acceso a esta empresa y su rol.'),
       ]),
       canManage ? h('button.btn.btn-primary.btn-sm', {
         type: 'button',
-        onclick: () => openMembershipModal(company.id, async () => { await loadMembers(company.id); drawGrid(); drawDetail(); }),
+        onclick: () => openMembershipModal(company.id, async () => { await loadMembers(company.id); drawGrid(); refreshDetailModal(); }),
       }, [
         svg(h, ICON.plus, 'w-4 h-4'),
         h('span', {}, 'Agregar miembro'),
@@ -534,11 +522,15 @@ export async function renderCompanies({ user }) {
     const rows = members.map((m) => `
       <tr>
         <td>
-          <div class="font-medium text-brand-ink">${escapeHtml(m.user?.full_name || `user#${m.user_id}`)}</div>
-          <div class="text-xs text-slate-500 font-mono">${escapeHtml(m.user?.username || '')}</div>
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-none" style="background-color:${avatarColor(m.user_id)}">${escapeHtml(initials(m.user?.full_name))}</span>
+            <div class="min-w-0">
+              <div class="font-medium text-brand-ink truncate">${escapeHtml(m.user?.full_name || `user#${m.user_id}`)}</div>
+              <div class="text-xs text-slate-500 font-mono truncate">${escapeHtml(m.user?.username || '')}</div>
+            </div>
+          </div>
         </td>
         <td><span class="badge bg-brand-ocean/10 text-brand-ocean">${escapeHtml(roleLabel(m.role))}</span></td>
-        <td><span class="text-xs text-slate-600">${escapeHtml(m.area_key || '—')}</span></td>
         <td>${m.is_default ? '<span class="badge bg-brand-ocean/10 text-brand-ocean">Default</span>' : ''}</td>
         <td>${m.active
           ? '<span class="badge bg-emerald-100 text-emerald-800">Activo</span>'
@@ -559,7 +551,6 @@ export async function renderCompanies({ user }) {
         h('thead', {}, [h('tr', {}, [
           h('th', {}, 'Persona'),
           h('th', {}, 'Rol'),
-          h('th', {}, 'Área'),
           h('th', {}, 'Default'),
           h('th', {}, 'Estado'),
           h('th', {}, ''),
@@ -572,7 +563,7 @@ export async function renderCompanies({ user }) {
       wrap.querySelectorAll('[data-edit-member]').forEach((b) => b.addEventListener('click', () => {
         const id = Number(b.dataset.editMember);
         const m = members.find((x) => x.id === id);
-        if (m) openMembershipModal(company.id, async () => { await loadMembers(company.id); drawGrid(); drawDetail(); }, m);
+        if (m) openMembershipModal(company.id, async () => { await loadMembers(company.id); drawGrid(); refreshDetailModal(); }, m);
       }));
       wrap.querySelectorAll('[data-remove-member]').forEach((b) => b.addEventListener('click', () => {
         const id = Number(b.dataset.removeMember);
@@ -589,7 +580,7 @@ export async function renderCompanies({ user }) {
               toast('Membresía actualizada', 'success');
               await loadMembers(company.id);
               drawGrid();
-              drawDetail();
+              refreshDetailModal();
             } catch (e) { toast(e.message, 'error'); }
           },
         });
@@ -601,22 +592,40 @@ export async function renderCompanies({ user }) {
   async function selectCompany(id) {
     if (id === null) {
       selectedId = null;
+      if (activeDetailModal?.cleanup) {
+        activeDetailModal.cleanup();
+        activeDetailModal = null;
+      }
       drawGrid();
-      drawDetail();
       return;
     }
     selectedId = id;
     drawGrid();
-    // Mostrar loading breve mientras se cargan áreas+miembros.
-    detailContainer.innerHTML = '';
-    detailContainer.appendChild(renderLoading('Cargando detalle…'));
     try {
       await ensureDetail(id);
+      const company = companies.find((x) => x.id === id);
+      if (company) openDetailModal(company);
     } catch (e) {
       toast(e.message, 'error');
+      selectedId = null;
+      drawGrid();
     }
-    drawGrid();
-    drawDetail();
+  }
+
+  function openConfirmToggleCompany(companyId, isCurrentlyActive) {
+    confirmModal({
+      title: isCurrentlyActive ? 'Desactivar empresa' : 'Activar empresa',
+      message: `${isCurrentlyActive ? 'Desactivar' : 'Activar'} esta empresa?`,
+      confirmText: isCurrentlyActive ? 'Desactivar' : 'Activar',
+      danger: isCurrentlyActive,
+      onConfirm: async () => {
+        try {
+          await api.companies.update(companyId, { active: !isCurrentlyActive });
+          toast('Empresa actualizada', 'success');
+          await reloadAll();
+        } catch (e) { toast(e.message, 'error'); }
+      },
+    });
   }
 
   async function reloadAll() {
@@ -624,17 +633,85 @@ export async function renderCompanies({ user }) {
     drawGrid();
     try {
       await loadCompanies();
+      await Promise.all(companies.map((c) => loadMembers(c.id).catch(() => {})));
       if (selectedId) await ensureDetail(selectedId);
     } catch (e) {
       toast(e.message, 'error');
     } finally {
       loading = false;
       drawGrid();
-      if (selectedId) drawDetail();
+      if (selectedId) refreshDetailModal();
+    }
+  }
+
+  async function doExportCompanies(format) {
+    const formatLabel = format === 'pdf' ? 'PDF' : 'Excel';
+    const setBusy = (busy, label = 'Exportar') => {
+      exportBtn.disabled = busy;
+      exportBtn.setLabel(label);
+    };
+    try {
+      setBusy(true, 'Verificando…');
+      await passwordConfirmModal({
+        title: 'Confirmar exportación',
+        message: `Ingresa tu contraseña para exportar el listado de empresas a ${formatLabel}.`,
+        confirmText: 'Exportar',
+        onConfirm: async (password) => { await verifyCurrentPassword(password); },
+      });
+      setBusy(true, 'Exportando…');
+      const rows = companies.map((c) => {
+        const encargado = responsibleUser(c);
+        return {
+          name: c.name,
+          slug: c.slug,
+          code_prefix: c.code_prefix || '—',
+          location: c.location || '—',
+          responsible: encargado?.full_name || encargado?.username || '—',
+          members: (membersByCompany.get(c.id) || []).length,
+          active: c.active ? 'Activa' : 'Inactiva',
+          is_default: c.is_default ? 'Sí' : 'No',
+        };
+      });
+      if (!rows.length) { toast('No hay empresas para exportar.', 'info'); return; }
+      const columns = [
+        { key: 'name', label: 'Empresa' },
+        { key: 'slug', label: 'Slug' },
+        { key: 'code_prefix', label: 'Prefijo' },
+        { key: 'location', label: 'Ubicación' },
+        { key: 'responsible', label: 'Encargado' },
+        { key: 'members', label: 'Miembros' },
+        { key: 'active', label: 'Estado' },
+        { key: 'is_default', label: 'Por defecto' },
+      ];
+      const stamp = new Date().toISOString().slice(0, 10);
+      const exportOpts = {
+        columns,
+        title: 'Empresas registradas',
+        subtitle: `${rows.length} empresa${rows.length === 1 ? '' : 's'} del grupo`,
+        sheetName: 'Empresas',
+        summaryField: 'active',
+        summaryLabel: 'Estado más frecuente',
+        generatedByName: user.full_name || user.username,
+        generatedByRole: getRoleLabel(user.role) || user.role,
+      };
+      if (format === 'pdf') {
+        await exportListToPDF(rows, columns, `empresas-${stamp}.pdf`, exportOpts);
+      } else {
+        await exportToExcel(rows, `empresas-${stamp}.xlsx`, exportOpts);
+      }
+      toast(`Exportadas ${rows.length} empresas a ${formatLabel}.`, 'success');
+    } catch (e) {
+      if (e && e.message !== 'Modal closed') toast(e.message || 'Error al exportar', 'error');
+    } finally {
+      setBusy(false);
     }
   }
 
   root._gcmCleanup = () => {
+    if (activeDetailModal?.cleanup) {
+      activeDetailModal.cleanup();
+      activeDetailModal = null;
+    }
     window.removeEventListener('gcm:realtime', onRealtime);
   };
 
@@ -665,35 +742,57 @@ function renderLoading(message) {
 function openCompanyModal(company, onSaved) {
   const isEdit = !!company;
   const name = h('input.input', { type: 'text', value: company?.name || '', maxlength: String(LIMITS.company.name.max) });
-  const slug = h('input.input', { type: 'text', value: company?.slug || '', maxlength: String(LIMITS.company.slug.max), placeholder: 'auto desde nombre' });
-  const color = h('input.input.font-mono', { type: 'text', value: company?.color || '', maxlength: String(LIMITS.company.color.max), placeholder: '#0F2A47' });
-  const logo = h('input.input', { type: 'url', value: company?.logo_url || '', maxlength: String(LIMITS.company.logo.max), placeholder: 'https://…' });
-  const active = h('input', { type: 'checkbox', checked: (company?.active ?? 1) ? '' : null });
-  const isDefault = h('input', { type: 'checkbox', checked: company?.is_default ? '' : null });
+  const location = h('input.input', { type: 'text', value: company?.location || '', maxlength: '200', placeholder: 'Ciudad, dirección (opcional)' });
+  const codePrefix = h('input.input.font-mono.uppercase', {
+    type: 'text',
+    value: company?.code_prefix || '',
+    maxlength: String(LIMITS.company.codePrefix.max),
+    placeholder: 'N7',
+    oninput: () => { codePrefix.value = codePrefix.value.toUpperCase(); },
+  });
+  const responsible = h('select.input', {}, []);
   const nameErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-new-name-err', role: 'alert' });
-  const slugErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-new-slug-err', role: 'alert' });
+  const locationErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-new-location-err', role: 'alert' });
+  const codePrefixErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-new-prefix-err', role: 'alert' });
+  const responsibleErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-new-resp-err', role: 'alert' });
   const banner = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', { role: 'alert' });
   const wireClear = (input, err) => input.addEventListener('input', () => clearFieldError(input, err));
-  wireClear(name, nameErr); wireClear(slug, slugErr);
+  wireClear(name, nameErr);
+  wireClear(codePrefix, codePrefixErr);
+  wireClear(location, locationErr); wireClear(responsible, responsibleErr);
+
+  // Poblar encargado solo con usuarios activos que son administrador de área.
+  function populateResponsibleNew() {
+    const users = usersCache.get().filter((u) => u.active && u.role === 'admin_area');
+    responsible.innerHTML = '';
+    if (!users.length) {
+      responsible.appendChild(h('option', { value: '', disabled: 'disabled' }, 'No hay administradores de área activos'));
+      return;
+    }
+    responsible.appendChild(h('option', { value: '' }, '— Selecciona un encargado —'));
+    for (const u of users) {
+      const o = h('option', { value: String(u.id) }, `${u.full_name || u.username} (${u.username || u.id})`);
+      if (company?.responsible_user_id && String(company?.responsible_user_id) === String(u.id)) o.selected = 'selected';
+      responsible.appendChild(o);
+    }
+  }
+  if (!usersCache.isLoaded()) {
+    responsible.appendChild(h('option', { value: '' }, 'Cargando encargados…'));
+    usersCache.load().then(populateResponsibleNew).catch(populateResponsibleNew);
+  } else {
+    populateResponsibleNew();
+  }
 
   const body = h('div.flex.flex-col.gap-3', {}, [
     h('div', {}, [h('label.label', {}, 'Nombre *'), name, nameErr]),
+    h('div', {}, [h('label.label', {}, 'Ubicación (opcional)'), location, locationErr]),
     h('div', {}, [
-      h('label.label', {}, 'Slug'),
-      slug,
-      slugErr,
-      h('p.text-xs.text-slate-500.mt-1', {}, isEdit
-        ? 'Cambiar el slug puede romper URLs amigables guardadas en otros lugares.'
-        : 'Opcional. Si lo dejás vacío, se genera a partir del nombre (slugify).'),
+      h('label.label', {}, 'Prefijo de nomenclatura *'),
+      codePrefix,
+      h('p.text-xs.text-slate-500.mt-1', {}, 'Define la nomenclatura de los tickets de esta empresa, ej. N7 → N7-000001. Solo letras/números, máx. 6 caracteres.'),
+      codePrefixErr,
     ]),
-    h('div.grid.grid-cols-1.md\\:grid-cols-2.gap-3', {}, [
-      h('div', {}, [h('label.label', {}, 'Color'), color, h('p.text-xs.text-slate-500.mt-1', {}, 'Hex de marca (opcional).')]),
-      h('div', {}, [h('label.label', {}, 'Logo URL'), logo]),
-    ]),
-    h('div.flex.flex-wrap.gap-4.mt-2', {}, [
-      h('label.flex.items-center.gap-2.text-sm', { for: 'gcm-co-new-active' }, [active, 'Activa']),
-      h('label.flex.items-center.gap-2.text-sm', { for: 'gcm-co-new-default' }, [isDefault, 'Por defecto']),
-    ]),
+h('div', {}, [h('label.label', {}, 'Encargado *'), responsible, h('p.text-xs.text-slate-500.mt-1', {}, 'Solo se listan usuarios activos con rol Administrador de área.'), responsibleErr]),
     banner,
   ]);
 
@@ -703,23 +802,29 @@ function openCompanyModal(company, onSaved) {
       type: 'button',
       onclick: async () => {
         nameErr.classList.add('hidden');
-        slugErr.classList.add('hidden');
+        codePrefixErr.classList.add('hidden');
         banner.classList.add('hidden');
         let firstInvalid = null;
         const nameVal = name.value.trim();
-        const slugVal = slug.value.trim();
+        const codePrefixVal = codePrefix.value.trim().toUpperCase();
+        const responsibleVal = responsible.value ? Number(responsible.value) : null;
         if (!nameVal) { setFieldError(name, nameErr, 'El nombre es obligatorio.'); firstInvalid = firstInvalid || name; }
-        if (slugVal && !/^[a-z0-9-]+$/.test(slugVal)) { setFieldError(slug, slugErr, 'Solo minúsculas, dígitos y guiones.'); firstInvalid = firstInvalid || slug; }
+        if (!codePrefixVal) {
+          setFieldError(codePrefix, codePrefixErr, 'El prefijo de nomenclatura es obligatorio.');
+          firstInvalid = firstInvalid || codePrefix;
+        } else if (!CODE_PREFIX_RE.test(codePrefixVal)) {
+          setFieldError(codePrefix, codePrefixErr, 'Solo letras/números, sin espacios, máx. 6 caracteres.');
+          firstInvalid = firstInvalid || codePrefix;
+        }
+        if (!responsibleVal) { setFieldError(responsible, responsibleErr, 'El encargado es obligatorio.'); firstInvalid = firstInvalid || responsible; }
         if (firstInvalid) { firstInvalid.focus(); return; }
         try {
           const payload = {
             name: nameVal,
-            color: color.value.trim() || null,
-            logo_url: logo.value.trim() || null,
-            active: active.checked,
-            is_default: isDefault.checked,
+            location: location.value.trim() || null,
+            code_prefix: codePrefixVal,
+            responsible_user_id: responsibleVal,
           };
-          if (slugVal) payload.slug = slugVal;
           if (isEdit) {
             await api.companies.update(company.id, payload);
             toast('Empresa actualizada', 'success');
@@ -738,85 +843,21 @@ function openCompanyModal(company, onSaved) {
   openModal({ title: isEdit ? `Editar ${company.name}` : 'Nueva empresa', body, actions, size: 'lg' });
 }
 
-// ── Modal: crear/editar área ──────────────────────────────────────────────
-function openAreaModal(companyId, area, onSaved) {
-  const isEdit = !!area;
-  const key = h('input.input.font-mono', { type: 'text', value: area?.key || '', maxlength: String(LIMITS.area.key.max), disabled: isEdit ? 'disabled' : null });
-  const label = h('input.input', { type: 'text', value: area?.label || '', maxlength: String(LIMITS.area.label.max) });
-  const sortOrder = h('input.input', { type: 'number', value: String(area?.sort_order ?? 0), min: '0' });
-  const active = h('input', { type: 'checkbox', checked: (area?.active ?? 1) ? '' : null });
-  const keyErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-ar-key-err', role: 'alert' });
-  const labelErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-ar-label-err', role: 'alert' });
-  const banner = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', { role: 'alert' });
-  const wireClear = (input, err) => input.addEventListener('input', () => clearFieldError(input, err));
-  wireClear(key, keyErr); wireClear(label, labelErr);
-
-  const body = h('div.flex.flex-col.gap-3', {}, [
-    h('div', {}, [
-      h('label.label', {}, 'Key *'),
-      key,
-      keyErr,
-      h('p.text-xs.text-slate-500.mt-1', {}, isEdit
-        ? 'No se puede renombrar tras creación. Es la FK lógica de tickets y membresías.'
-        : 'Solo minúsculas, dígitos y guiones bajos. Si lo dejás vacío, se genera a partir del label.'),
-    ]),
-    h('div', {}, [h('label.label', {}, 'Label *'), label, labelErr]),
-    h('div.grid.grid-cols-2.gap-3', {}, [
-      h('div', {}, [h('label.label', {}, 'Orden'), sortOrder]),
-      h('div', {}, [h('label.label', {}, 'Estado'), h('label.flex.items-center.gap-2.text-sm.mt-2', { for: 'gcm-ar-active' }, [active, 'Activa'])]),
-    ]),
-    banner,
-  ]);
-
-  const actions = (close) => [
-    h('button.btn.btn-ghost', { onclick: close, type: 'button' }, 'Cancelar'),
-    h('button.btn.btn-primary', {
-      type: 'button',
-      onclick: async () => {
-        keyErr.classList.add('hidden');
-        labelErr.classList.add('hidden');
-        banner.classList.add('hidden');
-        let firstInvalid = null;
-        const keyVal = key.value.trim();
-        const labelVal = label.value.trim();
-        if (!labelVal) { setFieldError(label, labelErr, 'El label es obligatorio.'); firstInvalid = firstInvalid || label; }
-        if (keyVal && !LIMITS.area.key.pattern.test(keyVal)) { setFieldError(key, keyErr, 'Solo minúsculas, dígitos, guiones y guiones bajos.'); firstInvalid = firstInvalid || key; }
-        if (firstInvalid) { firstInvalid.focus(); return; }
-        try {
-          if (isEdit) {
-            await api.companies.areas.update(area.id, {
-              label: labelVal,
-              sort_order: Math.max(0, Math.floor(Number(sortOrder.value) || 0)),
-              active: active.checked,
-            });
-            toast('Área actualizada', 'success');
-          } else {
-            const payload = {
-              label: labelVal,
-              sort_order: Math.max(0, Math.floor(Number(sortOrder.value) || 0)),
-              active: active.checked,
-            };
-            if (keyVal) payload.key = keyVal;
-            await api.companies.areas.create(companyId, payload);
-            toast('Área creada', 'success');
-          }
-          close(); onSaved?.();
-        } catch (e) {
-          banner.textContent = e.message;
-          banner.classList.remove('hidden');
-        }
-      },
-    }, isEdit ? 'Guardar cambios' : 'Crear área'),
-  ];
-  openModal({ title: isEdit ? `Editar ${area.label}` : 'Nueva área', body, actions, size: 'md' });
-}
-
 // ── Modal: crear/editar membresía ─────────────────────────────────────────
 function openMembershipModal(companyId, onSaved, membership = null) {
   const isEdit = !!membership;
+  const company = companies.find((c) => c.id === companyId);
   // Lista de usuarios activos: usamos usersCache (sincronizado por realtime).
-  // Para edición, pre-seleccionamos el user_id y no lo dejamos cambiar.
-  const allUsers = usersCache.get();
+  // El encargado de la empresa ya pertenece a ella (es su admin de área) y
+  // no se agrega como miembro aparte, así que se excluye de la lista.
+  // También se excluye a quien YA tiene una membresía (activa o inactiva) en
+  // esta empresa — el backend rechaza duplicados con un 409 crudo
+  // ("El usuario ya tiene una membresía..."); mejor prevenirlo en el
+  // selector que dejar que el admin lo intente y se encuentre con un error.
+  const existingMemberIds = new Set((membersByCompany.get(companyId) || []).map((m) => String(m.user_id)));
+  const allUsers = usersCache.get().filter((u) =>
+    (!company?.responsible_user_id || String(u.id) !== String(company.responsible_user_id))
+    && !existingMemberIds.has(String(u.id)));
   const userOptions = allUsers.map((u) => ({ value: String(u.id), label: `${u.full_name} (${u.username})` }));
 
   const userSel = h('select.input', { disabled: isEdit ? 'disabled' : null },
@@ -828,15 +869,6 @@ function openMembershipModal(companyId, onSaved, membership = null) {
   const role = h('select.input', {},
     ROLES_FALLBACK.map((r) => h('option', { value: r, selected: (membership?.role === r) ? '' : null }, roleLabel(r)))
   );
-  const areas = areasByCompany.get(companyId) || [];
-  const areaSel = h('select.input', {},
-    [
-      h('option', { value: '' }, '— Sin área —'),
-      ...areas.map((a) => h('option', { value: a.key, selected: (membership?.area_key === a.key) ? '' : null }, a.label)),
-    ]
-  );
-  const isDefault = h('input', { type: 'checkbox', checked: membership?.is_default ? '' : null });
-  const active = h('input', { type: 'checkbox', checked: (membership?.active ?? 1) ? '' : null });
   const userErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-mb-user-err', role: 'alert' });
   const roleErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-mb-role-err', role: 'alert' });
   const banner = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', { role: 'alert' });
@@ -850,16 +882,9 @@ function openMembershipModal(companyId, onSaved, membership = null) {
       userErr,
       h('p.text-xs.text-slate-500.mt-1', {}, isEdit
         ? 'No se puede cambiar el usuario de una membresía existente. Para reasignar, desactivá y creá una nueva.'
-        : 'Solo se listan usuarios activos. Si falta alguien, activalo en /users primero.'),
+        : 'Solo se listan usuarios activos que todavía no son miembros de esta empresa.'),
     ]),
-    h('div.grid.grid-cols-2.gap-3', {}, [
-      h('div', {}, [h('label.label', {}, 'Rol *'), role, roleErr]),
-      h('div', {}, [h('label.label', {}, 'Área'), areaSel, h('p.text-xs.text-slate-500.mt-1', {}, 'Opcional. Solo áreas activas de esta empresa.')]),
-    ]),
-    h('div.flex.flex-wrap.gap-4.mt-2', {}, [
-      h('label.flex.items-center.gap-2.text-sm', { for: 'gcm-mb-default' }, [isDefault, 'Membresía por defecto']),
-      h('label.flex.items-center.gap-2.text-sm', { for: 'gcm-mb-active' }, [active, 'Activa']),
-    ]),
+    h('div', {}, [h('label.label', {}, 'Rol *'), role, roleErr]),
     banner,
   ]);
 
@@ -880,18 +905,12 @@ function openMembershipModal(companyId, onSaved, membership = null) {
           if (isEdit) {
             await api.companies.members.update(membership.user_id, membership.id, {
               role: role.value,
-              area_key: areaSel.value || null,
-              is_default: isDefault.checked,
-              active: active.checked,
             });
             toast('Membresía actualizada', 'success');
           } else {
             await api.companies.members.create(userId, {
               company_id: companyId,
               role: role.value,
-              area_key: areaSel.value || null,
-              is_default: isDefault.checked,
-              active: active.checked,
             });
             toast('Miembro agregado', 'success');
           }

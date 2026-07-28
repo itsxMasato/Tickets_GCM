@@ -9,13 +9,13 @@ const requireRole = require('../middleware/requireRole');
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const { all } = req.query;
-    res.json({ categories: await categoriesService.list({ activeOnly: all !== 'true' }) });
+    res.json({ categories: await categoriesService.list({ activeOnly: all !== 'true' }, req.user) });
   } catch (err) { next(err); }
 });
 
 router.post('/', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
-    const cat = await categoriesService.create((req.body || {}).name);
+    const cat = await categoriesService.create((req.body || {}).name, req.user);
     res.status(201).json({ category: cat });
   } catch (err) { next(err); }
 });

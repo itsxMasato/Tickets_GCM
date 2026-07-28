@@ -56,9 +56,10 @@ export function LoginField({
   describedBy,
   invalid = false,
 }) {
-  const labelEl = h('label.label.text-white\\/85.text-\\[12\\.5px\\].font-medium', {
+  const labelEl = h('label.label.font-medium', {
+    class: 'text-white/85 text-[12.5px]',
     for: id,
-  }, [label, required ? h('span.text-brand-ocean\\/80.ml-0\\.5', { 'aria-hidden': 'true' }, '·') : null]);
+  }, [label, required ? h('span', { class: 'text-brand-ocean/80 ml-0.5', 'aria-hidden': 'true' }, '·') : null]);
 
   const wrap = h('div.login-input-wrap', {});
   const iconEl = icon
@@ -93,7 +94,7 @@ export function LoginField({
     ? h('p.login-input-helper', { id: `${id}-helper` }, helper)
     : null;
 
-  const node = h('div.space-y-1\\.5', {}, [labelEl, wrap, helperEl]);
+  const node = h('div', { class: 'space-y-1.5' }, [labelEl, wrap, helperEl]);
   return { node, input };
 }
 
@@ -111,9 +112,10 @@ export function PasswordField({
   describedBy,
   invalid = false,
 }) {
-  const labelEl = h('label.label.text-white\\/85.text-\\[12\\.5px\\].font-medium', {
+  const labelEl = h('label.label.font-medium', {
+    class: 'text-white/85 text-[12.5px]',
     for: id,
-  }, [label, required ? h('span.text-brand-ocean\\/80.ml-0\\.5', { 'aria-hidden': 'true' }, '·') : null]);
+  }, [label, required ? h('span', { class: 'text-brand-ocean/80 ml-0.5', 'aria-hidden': 'true' }, '·') : null]);
 
   const wrap = h('div.login-input-wrap', {});
 
@@ -152,7 +154,8 @@ export function PasswordField({
   wrap.appendChild(toggle);
 
   // Caps Lock warning (live region, polite).
-  const caps = h('div.hidden.text-\\[11\\.5px\\].text-amber-200\\/90.flex.items-center.gap-1\\.5.mt-1', {
+  const caps = h('div.hidden.flex.items-center.mt-1', {
+    class: 'text-[11.5px] text-amber-200/90 gap-1.5',
     role: 'status',
     'aria-live': 'polite',
   }, [svg(h, 'capsLock', 'w-3.5 h-3.5'), h('span', {}, 'Bloq Mayús está activado.')]);
@@ -167,7 +170,7 @@ export function PasswordField({
     input.addEventListener('blur', () => caps.classList.add('hidden'));
   }
 
-  const node = h('div.space-y-1\\.5', {}, [labelEl, wrap, caps]);
+  const node = h('div', { class: 'space-y-1.5' }, [labelEl, wrap, caps]);
   return { node, input };
 }
 
@@ -205,7 +208,7 @@ export function PrimaryButton({ label = 'Ingresar', loadingLabel = 'Verificando�
       // icono login al lado del label (al entrar, no al cargar)
       btn.appendChild(svg(h, 'login', 'w-4 h-4'));
     }
-    const text = h('span.tracking-\\[0\\.005em\\]', {}, loading ? loadingLabel : label);
+    const text = h('span', { class: 'tracking-[0.005em]' }, loading ? loadingLabel : label);
     btn.appendChild(text);
   };
   render();

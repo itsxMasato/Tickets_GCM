@@ -137,3 +137,39 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 );
 CREATE INDEX IF NOT EXISTS idx_calendar_user_range ON calendar_events(user_id, start_at, end_at);
 CREATE INDEX IF NOT EXISTS idx_calendar_ticket    ON calendar_events(ticket_id);
+
+CREATE TABLE IF NOT EXISTS companies (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  name                  TEXT NOT NULL,
+  slug                  TEXT NOT NULL UNIQUE,
+  logo_url              TEXT,
+  color                 TEXT,
+  location              TEXT,
+  responsible_user_id   INTEGER REFERENCES users(id),
+  active                INTEGER NOT NULL DEFAULT 1,
+  is_default            INTEGER NOT NULL DEFAULT 0,
+  created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS user_company_memberships (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  company_id    INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  role          TEXT NOT NULL CHECK (role IN ('supervisor_campo','sac','admin_area','jefe_inmediato')),
+  active        INTEGER NOT NULL DEFAULT 1,
+  is_default    INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at  TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_company_memberships_user_company ON user_company_memberships(user_id, company_id);
+CREATE INDEX IF NOT EXISTS idx_user_company_memberships_company_user ON user_company_memberships(company_id, user_id);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  company_id      INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  role            TEXT NOT NULL CHECK (role IN ('supervisor_campo','sac','admin_area','jefe_inmediato')),
+  permission_key  TEXT NOT NULL,
+  value           INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_role_permissions_company_role_permission ON role_permissions(company_id, role, permission_key);

@@ -29,6 +29,22 @@ function buildUrl(url) {
   return `${BASE}${url}`;
 }
 
+// assetUrl — igual que buildUrl pero exportado para armar <img src> de
+// archivos servidos por el backend (fotos de perfil). Necesario porque en
+// producción el frontend (Netlify) y el backend (Render) son orígenes
+// distintos: una ruta relativa como "/uploads/avatars/x.jpg" resolvería
+// contra Netlify y rompería la imagen.
+export function assetUrl(path) {
+  if (!path) return path;
+  return buildUrl(path);
+}
+
+// Rutas donde un 401 es el resultado ESPERADO del flujo (credenciales
+// invalidas al loguear, o el chequeo de sesion en frio al arrancar la app) —
+// no deben disparar el interceptor global, o el propio login rebotaria a
+// si mismo en un loop.
+const AUTH_BOOTSTRAP_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/auth/firebase', '/api/auth/resolve-login', '/api/auth/me'];
+
 async function request(method, url, options = {}) {
   const opts = {
     method,
@@ -52,6 +68,9 @@ async function request(method, url, options = {}) {
     const err = new Error(msg);
     err.status = res.status;
     err.code = data?.error?.code;
+    if (res.status === 401 && typeof window !== 'undefined' && !AUTH_BOOTSTRAP_PATHS.some((p) => url.startsWith(p))) {
+      window.dispatchEvent(new CustomEvent('gcm:unauthorized'));
+    }
     throw err;
   }
   return data;
@@ -70,6 +89,12 @@ export const api = {
     // Canje de ID token de Firebase Auth por sesión local (cookie connect.sid).
     // Usado en producción cuando el frontend está en Netlify y el backend en Render.
     firebase: (body)  => request('POST', '/api/auth/firebase', { body }),
+    // Cambia la empresa activa de la sesión (selector de empresa en el topbar,
+    // para usuarios con más de una membresía).
+    setActiveCompany: (companyId) => request('POST', '/api/auth/active-company', { body: { company_id: companyId } }),
+    // Sube/reemplaza la foto de perfil propia. `formData` ya debe traer el
+    // archivo bajo el campo "file" (mismo convenio que tickets.upload).
+    uploadAvatar: (formData) => request('POST', '/api/auth/avatar', { body: formData }),
   },
   users: {
     list:    (q = {})     => request('GET',    '/api/users?' + new URLSearchParams(q)),
@@ -81,6 +106,7 @@ export const api = {
     list:   (all = false) => request('GET', `/api/categories?all=${all ? 'true' : 'false'}`),
     create: (body)        => request('POST', '/api/categories', { body }),
     update: (id, body)    => request('PATCH', `/api/categories/${id}`, { body }),
+    delete: (id)          => request('DELETE', `/api/categories/${id}`),
   },
   tickets: {
     list:        (q = {})         => request('GET',  '/api/tickets?' + new URLSearchParams(q)),
@@ -128,12 +154,6 @@ export const api = {
     create:      (body)          => request('POST',   '/api/companies', { body }),
     update:      (id, body)      => request('PATCH',  `/api/companies/${id}`, { body }),
     remove:      (id)            => request('DELETE', `/api/companies/${id}`),
-    areas: {
-      list:        (companyId, q = {}) => request('GET',    `/api/company-areas?companyId=${companyId}&` + new URLSearchParams(q)),
-      create:      (companyId, body)   => request('POST',   '/api/company-areas', { body: { companyId, ...body } }),
-      update:      (id, body)          => request('PATCH',  `/api/company-areas/${id}`, { body }),
-      remove:      (id)                => request('DELETE', `/api/company-areas/${id}`),
-    },
     members: {
       list:        (companyId, q = {})  => request('GET',    `/api/companies/${companyId}/memberships?` + new URLSearchParams(q)),
       userList:    (userId)             => request('GET',    `/api/users/${userId}/memberships`),

@@ -76,3 +76,18 @@ export function on(event, handler) {
 
 export function isConnected() { return !!socket?.connected; }
 export const whenReady = () => readyPromise;
+
+// Fuerza una reconexión (nuevo socket + handshake). Necesario después de
+// cambiar la empresa activa: la sesión HTTP ya tiene el nuevo
+// `activeCompanyId`, pero el socket existente se unió a las salas con la
+// sesión vieja al conectar — solo un handshake nuevo hace que el server
+// lo una a `company:{id}` correcto. Los handlers ya registrados se
+// reenganchan automáticamente (connectSocket() los reaplica al abrir).
+export function reconnectSocket() {
+  if (socket) {
+    try { socket.disconnect(); } catch {}
+    socket = null;
+  }
+  readyPromise = new Promise((res) => { readyResolve = res; });
+  return connectSocket();
+}

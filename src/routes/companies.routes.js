@@ -5,6 +5,7 @@ const router = express.Router();
 const companiesService = require('../services/companies.service');
 const requireAuth = require('../middleware/requireAuth');
 const requirePlatformAdmin = require('../middleware/requirePlatformAdmin');
+const requireRole = require('../middleware/requireRole');
 const { notFoundError } = require('../utils/validators');
 
 /**
@@ -49,24 +50,24 @@ router.get('/:id', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Crear empresa (solo platform admin).
-router.post('/', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+// Crear empresa (solo SAC).
+router.post('/', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     const company = await companiesService.create(req.body || {}, buildRequester(req));
     res.status(201).json({ company });
   } catch (err) { next(err); }
 });
 
-// Modificar empresa (solo platform admin).
-router.patch('/:id', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+// Modificar empresa (solo SAC).
+router.patch('/:id', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     const company = await companiesService.update(req.params.id, req.body || {}, buildRequester(req));
     res.json({ company });
   } catch (err) { next(err); }
 });
 
-// Soft-delete empresa (solo platform admin).
-router.delete('/:id', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+// Soft-delete empresa (solo SAC).
+router.delete('/:id', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     const company = await companiesService.softDelete(req.params.id, buildRequester(req));
     res.json({ company });

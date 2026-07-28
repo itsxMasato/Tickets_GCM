@@ -39,7 +39,7 @@ async function logAsync(audit) {
 
 async function list(options = {}) {
   const result = await firestoreData.listAudit({
-    page: options.page,
+    cursor: options.cursor,
     limit: options.limit,
     user_id: options.user_id,
     action_type: options.action_type,
@@ -49,7 +49,9 @@ async function list(options = {}) {
   });
   return {
     ...result,
-    pages: Math.ceil(result.total / (result.limit || 50)),
+    // pages sólo tiene sentido cuando total es exacto (sin búsqueda de
+    // texto activa — ver la nota en firestoreData.listAudit).
+    pages: result.total == null ? null : Math.ceil(result.total / (result.limit || 50)),
   };
 }
 

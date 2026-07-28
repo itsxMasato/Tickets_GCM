@@ -18,6 +18,9 @@ function requireAuth(req, res, next) {
     full_name: req.session.full_name,
     role: req.session.role,
     area: req.session.area || null,
+    isPlatformAdmin: req.session.isPlatformAdmin === true,
+    is_platform_admin: req.session.isPlatformAdmin === true,
+    activeCompanyId: req.session.activeCompanyId != null ? toId(req.session.activeCompanyId) : null,
   };
   next();
 }

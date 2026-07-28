@@ -5,7 +5,8 @@ import { toast } from '../utils/toast.js';
 import { isImage, fileSize } from '../utils/format.js';
 import { ICON } from '../utils/icons.js';
 function svg(name, cls = 'w-4 h-4') {
-  return h(`svg.${cls}`, {
+  return h('svg', {
+    class: cls,
     fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8',
     viewBox: '0 0 24 24', 'aria-hidden': 'true',
     html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON[name]}" />`,
@@ -17,8 +18,9 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
   const dropZone = h('div.relative.border.border-slate-200.rounded-lg.bg-white.transition', { 'data-composer': '' });
   const preview = h('div.hidden.px-3.py-2.border-b.border-slate-200.bg-slate-50.flex.flex-wrap.gap-2.text-xs', {});
   // text-slate-500 — WCAG AA: el counter "0/4000" es body text, no decoración.
-  const counter = h('div.text-\\[10px\\].text-slate-500.px-1', {}, '0/4000');
-  const textarea = h('textarea.w-full.resize-none.px-3.py-2.rounded-md.focus\\:outline-none.text-sm.bg-transparent', {
+  const counter = h('div.text-slate-500.px-1', { class: 'text-[10px]' }, '0/4000');
+  const textarea = h('textarea.w-full.resize-none.px-3.py-2.rounded-md.text-sm.bg-transparent', {
+    class: 'focus:outline-none',
     rows: '2',
     maxlength: '4000',
     placeholder: 'Escribe un mensaje… Presiona Enter para enviar y Shift+Enter para nueva línea',
@@ -45,7 +47,7 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
     disabled,
   }, [
     svg('attach'),
-    h('span.hidden.sm\\:inline', {}, 'Adjuntar'),
+    h('span.hidden', { class: 'sm:inline' }, 'Adjuntar'),
   ]);
 
   const queue = [];
@@ -61,13 +63,14 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
     if (queue.length === 0) { preview.classList.add('hidden'); return; }
     preview.classList.remove('hidden');
     queue.forEach((f, i) => {
-      const tag = h('span.inline-flex.items-center.gap-1\\.5.px-2.py-1.rounded-md.bg-white.border.border-slate-200', {}, [
+      const tag = h('span.inline-flex.items-center.px-2.py-1.rounded-md.bg-white.border.border-slate-200', { class: 'gap-1.5' }, [
         h('span.text-slate-500.flex-none', {}, [svg(isImage(f.type) ? 'image' : 'file', 'w-3.5 h-3.5')]),
-        h('span.font-medium.text-slate-700.max-w-\\[160px\\].truncate', {}, f.name),
+        h('span.font-medium.text-slate-700.truncate', { class: 'max-w-[160px]' }, f.name),
         h('span.text-slate-500', {}, `· ${fileSize(f.size)}`),
         // text-slate-500 — el × de quitar archivo es un control visual sobre fondo slate-50;
         // subir contraste para que no compita con el texto del nombre de archivo.
-        h('button.text-slate-500.hover\\:text-accent.min-w-\\[24px\\].min-h-\\[24px\\].rounded', {
+        h('button.text-slate-500.rounded', {
+          class: 'hover:text-accent min-w-[24px] min-h-[24px]',
           onclick: () => removeAt(i),
           'aria-label': `Quitar ${f.name}`,
         }, '×'),

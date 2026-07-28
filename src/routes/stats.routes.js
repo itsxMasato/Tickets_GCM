@@ -34,7 +34,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
 // Bitácora de auditoría (solo SAC) — async.
 router.get('/audit', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
+    const cursor = req.query.cursor || null;
     const limit = parseInt(req.query.limit, 10) || 50;
     const user_id = req.query.user_id ? parseInt(req.query.user_id, 10) : null;
     const action_type = req.query.action_type || null;
@@ -43,7 +43,7 @@ router.get('/audit', requireAuth, requireRole('sac'), async (req, res, next) => 
     const search = req.query.search || null;
 
     const result = await auditService.list({
-      page, limit, user_id, action_type, date_from, date_to, search,
+      cursor, limit, user_id, action_type, date_from, date_to, search,
     });
     res.json(result);
   } catch (err) { next(err); }

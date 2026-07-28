@@ -5,16 +5,7 @@ const path = require('path');
 const config = require('../config');
 const firestoreData = require('../firestoreData');
 const { notFoundError, forbiddenError } = require('../utils/validators');
-
-function canViewTicket(ticket, user) {
-  if (!user) return false;
-  if (user.role === 'sac') return true;
-  if (user.role === 'jefe_inmediato') return ticket.status === 'solucionado';
-  if (user.role === 'admin_area') return true;
-  if (ticket.assigned_to && ticket.assigned_to === user.id) return true;
-  if (ticket.created_by && ticket.created_by === user.id) return true;
-  return false;
-}
+const { canViewTicket } = require('../utils/ticket-access');
 
 async function getAttachment(id) {
   const row = await firestoreData.getAttachment(id);
@@ -24,6 +15,10 @@ async function getAttachment(id) {
     ...row,
     assigned_to: ticket?.assigned_to || null,
     created_by: ticket?.created_by || null,
+    // canViewTicket() (ticket-access.js) necesita el status real del ticket
+    // para el chequeo de jefe_inmediato (solo ve solucionado); sin esto
+    // quedaba undefined y jefe_inmediato nunca podia ver ningun adjunto.
+    status: ticket?.status || null,
   };
 }
 

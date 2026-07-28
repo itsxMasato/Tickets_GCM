@@ -40,6 +40,7 @@ export const ICON = {
   calendar:  'M3 7a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7zM3 11h18M8 3v4M16 3v4',
   gantt:     'M4 4h16M4 9h10M4 14h6M4 19h8',
   clock:     'M12 22a10 10 0 100-20 10 10 0 000 20zM12 6v6l4 2',
+  camera:    'M4 8a2 2 0 012-2h1.5l.9-1.5A2 2 0 0110.1 3.5h3.8a2 2 0 011.7 1L16.5 6H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8zM12 17a4 4 0 100-8 4 4 0 000 8z',
 
   // Notificaciones & Comunicación
   bell:      'M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0',
@@ -71,6 +72,7 @@ export const ICON = {
   phone:     'M22 16.92V21a1 1 0 01-1.11 1A19 19 0 012 4.11 1 1 0 013 3h4.09a1 1 0 011 .75l1 4a1 1 0 01-.27 1L7 10.5a16 16 0 006.5 6.5l1.75-1.82a1 1 0 011-.27l4 1a1 1 0 01.75 1z',
   building:  'M3 21h18M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16M9 7h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01',
   globe:     'M12 22a10 10 0 100-20 10 10 0 000 20zM2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20',
+  pin:       'M12 22s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12zM12 13a3 3 0 100-6 3 3 0 000 6z',
 
   // Dashboard & Navegación
   dashboard: 'M3 12l9-9 9 9M5 10v10h14V10',
@@ -110,7 +112,8 @@ export const ICON = {
 // y modales dibujen con el mismo grosor (antes había 1.8 vs 2 mezclado).
 export function svg(h, nameOrPath, cls = 'w-4 h-4') {
   const path = typeof nameOrPath === 'string' && nameOrPath in ICON ? ICON[nameOrPath] : nameOrPath;
-  return h(`svg.${cls}`, {
+  return h('svg', {
+    class: cls,
     fill: 'none',
     stroke: 'currentColor',
     'stroke-width': '1.8',

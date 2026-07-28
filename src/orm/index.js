@@ -53,7 +53,6 @@ module.exports = {
   CalendarEvent:           Entities.CalendarEvent,
   // Multi-tenant (Fase 1)
   Company:                 Entities.Company,
-  CompanyArea:             Entities.CompanyArea,
   UserCompanyMembership:   Entities.UserCompanyMembership,
   RolePermission:          Entities.RolePermission,
 

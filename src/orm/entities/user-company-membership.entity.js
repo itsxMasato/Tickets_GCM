@@ -13,7 +13,6 @@ const { bitBoolean } = require('../transformers');
  *   user_id       INT NOT NULL              → users(id) ON DELETE CASCADE
  *   company_id    INT NOT NULL              → companies(id) ON DELETE CASCADE
  *   role          VARCHAR(20) NOT NULL      -- 'supervisor_campo' | 'sac' | 'admin_area' | 'jefe_inmediato'
- *   area_key      NVARCHAR(50) NULL         -- FK lógica a company_areas(company_id, key)
  *   active        BIT NOT NULL DEFAULT 1
  *   is_default    BIT NOT NULL DEFAULT 0    -- membresía seleccionada al login si hay >1
  *   created_at    DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
@@ -44,7 +43,6 @@ module.exports = new EntitySchema({
     user_id:      { type: 'integer', nullable: false },
     company_id:   { type: 'integer', nullable: false },
     role:         { type: 'simple-enum', enum: ROLE_VALUES, nullable: false },
-    area_key:     { type: 'varchar', length: 50, nullable: true },
     active:       { type: 'integer', default: 1, nullable: false, transformer: bitBoolean() },
     is_default:   { type: 'integer', default: 0, nullable: false, transformer: bitBoolean() },
     created_at:   { type: 'datetime', default: require('../timestamp-default').timestampDefault, nullable: false },

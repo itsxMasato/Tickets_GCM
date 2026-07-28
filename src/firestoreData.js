@@ -1,5 +1,15 @@
 'use strict';
 const firestore = require('./firestore');
+const { FieldPath } = require('firebase-admin/firestore');
+
+// IS_NULL — sentinel para pedir explícitamente `field == null` en
+// queryCollection/countCollection. Por convención en TODO el resto del
+// código, un valor `null` literal en una cláusula significa "no aplica
+// este filtro, sáltalo" (así se arman los filtros opcionales en casi
+// todo el archivo) — así que un `['company_id', '==', null]` literal se
+// ignoraba en silencio en vez de filtrar. Este sentinel es la única forma
+// de decir "quiero el null real" sin romper esa convención existente.
+const IS_NULL = Symbol('firestoreData.IS_NULL');
 
 function normalizeString(value) {
   return value == null ? '' : String(value).trim();
@@ -21,6 +31,18 @@ function toLegacyDate(value) {
   return String(value);
 }
 
+// endOfDayInclusive — un filtro "Hasta: 2026-07-28" se comparaba tal cual
+// contra created_at ("2026-07-28 09:00:00", string YYYY-MM-DD HH:MM:SS).
+// Firestore compara strings lexicograficamente, y cualquier string mas largo
+// con el mismo prefijo ordena DESPUES del prefijo solo — "2026-07-28 09:00:00"
+// > "2026-07-28" — asi que TODO lo creado ese dia quedaba excluido en vez de
+// incluido, subestimando reportes/exports sin ningun aviso. Si viene una
+// fecha sin hora (YYYY-MM-DD), la extendemos al final del dia.
+function endOfDayInclusive(dateStr) {
+  if (!dateStr) return dateStr;
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `${dateStr} 23:59:59` : dateStr;
+}
+
 function normalizeUser(row) {
   if (!row) return null;
   const isActive = row.active === 0 || row.active === false || row.active === '0' || row.active === 'false'
@@ -35,6 +57,7 @@ function normalizeUser(row) {
     active: isActive ? 1 : 0,
     created_at: toLegacyDate(row.created_at),
     email: row.email || null,
+    avatar_url: row.avatar_url || null,
   };
 }
 
@@ -43,9 +66,52 @@ function normalizeCategory(row) {
   return {
     id: toId(row.id),
     name: row.name || '',
+    company_id: row.company_id != null ? toId(row.company_id) : null,
     active: row.active ? 1 : 0,
     created_at: toLegacyDate(row.created_at),
   };
+}
+
+/**
+ * scopeByCompany — filtra filas por empresa activa de la sesión. Un registro
+ * con company_id null es legacy/global (creado antes de que existiera esta
+ * capa) y queda visible para todos independientemente de la empresa activa.
+ * Sin empresa activa (activeCompanyId null), no filtra nada.
+ */
+function scopeByCompany(rows, activeCompanyId) {
+  // Sin empresa activa (sesion corrupta, membresias desactivadas, usuario
+  // recien creado sin asignar) no hay que devolver TODO sin filtrar: eso
+  // exponia el dashboard/listado de tickets de todas las empresas a un
+  // usuario que no deberia ver ninguna. Solo quedan visibles los registros
+  // legacy pre-multitenant (company_id null), igual que para un usuario con
+  // empresa activa.
+  if (activeCompanyId == null) return rows.filter((row) => row.company_id == null);
+  const normalized = String(activeCompanyId);
+  return rows.filter((row) => row.company_id == null || String(row.company_id) === normalized);
+}
+
+/**
+ * scopeUsersByCompany — como scopeByCompany, pero para `users`: el usuario
+ * no tiene company_id propio, pertenece a N empresas vía
+ * user_company_memberships (recibidas ya cargadas por el caller). sac y
+ * platform admin quedan globales por diseño (soporte cross-empresa). Un
+ * usuario sin ninguna membresía es legacy y queda visible para todos (mismo
+ * criterio que company_id null en tickets/categorías). El propio requester
+ * siempre se ve a sí mismo.
+ */
+function scopeUsersByCompany(rows, memberships, requester) {
+  if (!requester || requester.isPlatformAdmin || requester.role === 'sac' || requester.activeCompanyId == null) {
+    return rows;
+  }
+  const activeCompanyId = String(requester.activeCompanyId);
+  const isActive = (m) => m.active === 1 || m.active === true || m.active === '1' || m.active === 'true';
+  const memberIds = new Set(memberships.filter((m) => isActive(m) && String(m.company_id) === activeCompanyId).map((m) => String(m.user_id)));
+  const anyMembershipIds = new Set(memberships.map((m) => String(m.user_id)));
+  const requesterId = String(requester.id);
+  return rows.filter((row) => {
+    const id = String(row.id);
+    return id === requesterId || memberIds.has(id) || !anyMembershipIds.has(id);
+  });
 }
 
 function normalizeNotification(row) {
@@ -97,6 +163,7 @@ function normalizeTicket(row) {
     category_id: row.category_id != null ? toId(row.category_id) : null,
     category_name: row.category_name || null,
     area: row.area || null,
+    company_id: row.company_id != null ? toId(row.company_id) : null,
     status: row.status || 'recibido',
     priority: row.priority || 'media',
     created_by: row.created_by != null ? toId(row.created_by) : null,
@@ -180,18 +247,43 @@ function normalizeQueryRows(rows, orderBy, direction) {
   return rows.sort((a, b) => compareFieldValues(a[orderBy], b[orderBy], direction));
 }
 
+// compareRowsForCursor — mismo orden que Firestore aplicaria con
+// orderBy(field, dir).orderBy(FieldPath.documentId(), dir): compara primero
+// por el campo, y si empatan (ej. dos tickets con el mismo created_at por
+// creacion concurrente en el mismo segundo), desempata por el id del
+// documento. Se usa tanto para ordenar en memoria en el fallback como para
+// filtrar por cursor ahi mismo.
+function compareRowsForCursor(a, b, orderByField, direction, tieBreakByDocId) {
+  const primary = compareFieldValues(a[orderByField], b[orderByField], direction);
+  if (primary !== 0 || !tieBreakByDocId) return primary;
+  if (a.id === b.id) return 0;
+  const asc = direction !== 'desc';
+  return (String(a.id) > String(b.id)) === asc ? 1 : -1;
+}
+
 async function queryCollection(collectionName, whereClauses = [], options = {}) {
   const db = firestore.getFirestore();
   let q = db.collection(collectionName);
   for (const [field, op, value] of whereClauses) {
     if (value === undefined || value === null) continue;
-    q = q.where(field, op, value);
+    q = q.where(field, op, value === IS_NULL ? null : value);
   }
   if (Array.isArray(options.select) && options.select.length > 0) {
     q = q.select(...options.select);
   }
   if (options.orderBy) {
     q = q.orderBy(options.orderBy, options.direction || 'asc');
+  }
+  // tieBreakByDocId — desempata filas con el mismo valor de orderBy (ej.
+  // created_at, resolucion de 1 segundo: dos tickets creados en el mismo
+  // segundo bajo carga concurrente). Necesario para que startAfter sea
+  // determinista pagina a pagina (paginacion cursor-based) — ver
+  // listTickets, que es el consumidor principal de esta opcion.
+  if (options.tieBreakByDocId) {
+    q = q.orderBy(FieldPath.documentId(), options.direction || 'asc');
+  }
+  if (Array.isArray(options.startAfter) && options.startAfter.length > 0) {
+    q = q.startAfter(...options.startAfter);
   }
   if (options.limit) {
     q = q.limit(options.limit);
@@ -205,20 +297,32 @@ async function queryCollection(collectionName, whereClauses = [], options = {}) 
     const isIndexError = code === 'failed-precondition' || (err.message || '').toLowerCase().includes('requires an index');
     if (!isIndexError) throw err;
 
-    // Fallback para consultas que requieren un índice compuesto y que ya
-    // no están disponibles en el proyecto Firestore actual.
+    // Fallback para consultas que requieren un índice compuesto y que
+    // todavía no existe en el proyecto Firestore actual (frecuente la
+    // primera vez que se usa una combinación nueva de where+orderBy — el
+    // propio error de Firestore trae un link para crearlo). Sin el
+    // índice compuesto no se puede pedir orderBy/startAfter/limit en el
+    // servidor, así que se trae todo lo que matchea el where y se
+    // ordena/pagina en memoria — más caro, pero sigue siendo correcto
+    // mientras no exista el índice.
     let fallbackQuery = db.collection(collectionName);
     for (const [field, op, value] of whereClauses) {
       if (value === undefined || value === null) continue;
-      fallbackQuery = fallbackQuery.where(field, op, value);
+      fallbackQuery = fallbackQuery.where(field, op, value === IS_NULL ? null : value);
     }
     if (Array.isArray(options.select) && options.select.length > 0) {
       fallbackQuery = fallbackQuery.select(...options.select);
     }
     const snapshot = await fallbackQuery.get();
     let rows = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const direction = options.direction || 'asc';
     if (options.orderBy) {
-      rows = normalizeQueryRows(rows, options.orderBy, options.direction || 'asc');
+      rows = rows.sort((a, b) => compareRowsForCursor(a, b, options.orderBy, direction, options.tieBreakByDocId));
+    }
+    if (Array.isArray(options.startAfter) && options.startAfter.length > 0) {
+      const [cursorValue, cursorDocId] = options.startAfter;
+      const cursorRow = { [options.orderBy]: cursorValue, id: cursorDocId };
+      rows = rows.filter((row) => compareRowsForCursor(row, cursorRow, options.orderBy, direction, options.tieBreakByDocId) > 0);
     }
     if (options.limit) {
       rows = rows.slice(0, options.limit);
@@ -237,7 +341,7 @@ async function countCollection(collectionName, whereClauses = []) {
   let q = db.collection(collectionName);
   for (const [field, op, value] of whereClauses) {
     if (value === undefined || value === null) continue;
-    q = q.where(field, op, value);
+    q = q.where(field, op, value === IS_NULL ? null : value);
   }
   if (typeof q.count === 'function') {
     try {
@@ -339,13 +443,17 @@ async function getUserByIdentifier(identifier) {
   return user;
 }
 
-async function listUsers({ role, active, area } = {}) {
+async function listUsers({ role, active, area } = {}, requester = null) {
   const clauses = [];
   if (role) clauses.push(['role', '==', role]);
   if (active !== undefined) clauses.push(['active', '==', active ? 1 : 0]);
   if (area) clauses.push(['area', '==', area]);
   const rows = await queryCollection('users', clauses);
-  return rows.map(normalizeUser);
+  if (!requester || requester.isPlatformAdmin || requester.role === 'sac' || requester.activeCompanyId == null) {
+    return rows.map(normalizeUser);
+  }
+  const memberships = await queryCollection('user_company_memberships', []);
+  return scopeUsersByCompany(rows, memberships, requester).map(normalizeUser);
 }
 
 async function getUserById(id) {
@@ -399,26 +507,50 @@ async function updateUser(id, patch) {
   if (patch.area !== undefined) updatePayload.area = normalizeString(patch.area) || null;
   if (patch.email !== undefined) {
     const normalizedEmail = normalizeString(patch.email);
+    const lowerEmail = normalizedEmail ? normalizedEmail.toLowerCase() : null;
+    // createUser ya validaba esto contra otros usuarios; updateUser lo
+    // calculaba pero nunca lo chequeaba, asi que se podia dejar a dos
+    // usuarios con el mismo email_lower editando uno para que coincida con
+    // otro. Con eso duplicado, getUserByIdentifier (findOneByFields con
+    // limit:1, sin orden determinista) resuelve el login a cualquiera de
+    // los dos de forma impredecible.
+    if (lowerEmail) {
+      const conflict = await findOneByFields('users', [['email_lower', '==', lowerEmail]]);
+      if (conflict && String(conflict.id) !== String(id)) {
+        const error = new Error('Ese correo ya está en uso por otro usuario.');
+        error.code = 'CONFLICT';
+        throw error;
+      }
+    }
     updatePayload.email = normalizedEmail || null;
-    updatePayload.email_lower = normalizedEmail ? normalizedEmail.toLowerCase() : null;
+    updatePayload.email_lower = lowerEmail;
   }
   if (patch.active !== undefined) updatePayload.active = patch.active ? 1 : 0;
+  if (patch.avatar_url !== undefined) updatePayload.avatar_url = patch.avatar_url || null;
   if (patch.password) updatePayload.password_hash = patch.password;
   if (patch.username !== undefined) {
     const normalizedUsername = normalizeString(patch.username);
+    const lowerUsername = normalizedUsername.toLowerCase();
+    const conflict = await findOneByFields('users', [['username_lower', '==', lowerUsername]]);
+    if (conflict && String(conflict.id) !== String(id)) {
+      const error = new Error('El nombre de usuario ya existe.');
+      error.code = 'CONFLICT';
+      throw error;
+    }
     updatePayload.username = normalizedUsername;
-    updatePayload.username_lower = normalizedUsername.toLowerCase();
+    updatePayload.username_lower = lowerUsername;
   }
   updatePayload.updated_at = firestore.nowSql();
   const updated = await updateDoc('users', id, updatePayload);
   return normalizeUser(updated);
 }
 
-async function listCategories(activeOnly = true) {
+async function listCategories(activeOnly = true, user = null) {
   const clauses = [];
   if (activeOnly) clauses.push(['active', '==', 1]);
   const rows = await queryCollection('categories', clauses);
-  return rows.map(normalizeCategory);
+  const scoped = user && user.role !== 'sac' ? scopeByCompany(rows, user.activeCompanyId) : rows;
+  return scoped.map(normalizeCategory);
 }
 
 async function getCategoryById(id) {
@@ -426,7 +558,7 @@ async function getCategoryById(id) {
   return normalizeCategory(row);
 }
 
-async function createCategory(name) {
+async function createCategory(name, user = null) {
   const normalizedName = normalizeString(name);
   const lowerName = normalizedName.toLowerCase();
   if (!normalizedName) {
@@ -434,7 +566,13 @@ async function createCategory(name) {
     err.code = 'VALIDATION_ERROR';
     throw err;
   }
-  const existing = await findOneByFields('categories', [['name_lower', '==', lowerName]]);
+  const companyId = user && user.activeCompanyId != null ? toId(user.activeCompanyId) : null;
+  // Antes el chequeo de unicidad era global (name_lower en TODA la colección),
+  // aunque las categorías ya se listan/filtran por company_id. Dos empresas
+  // distintas no podían usar el mismo nombre ("Urgente" en Empresa A bloqueaba
+  // "Urgente" en Empresa B) con un falso "ya existe" que un admin de la otra
+  // empresa no tiene forma de investigar. Escopar por company_id.
+  const existing = await findOneByFields('categories', [['name_lower', '==', lowerName], ['company_id', '==', companyId]]);
   if (existing) {
     const err = new Error('Ya existe una categoría con ese nombre.');
     err.code = 'VALIDATION_ERROR';
@@ -444,6 +582,7 @@ async function createCategory(name) {
   const doc = await createDoc('categories', {
     name: normalizedName,
     name_lower: lowerName,
+    company_id: companyId,
     active: 1,
     created_at: now,
   });
@@ -465,7 +604,7 @@ async function updateCategory(id, { name, active } = {}) {
       err.code = 'VALIDATION_ERROR';
       throw err;
     }
-    const exists = await findOneByFields('categories', [['name_lower', '==', normalizedName.toLowerCase()]]);
+    const exists = await findOneByFields('categories', [['name_lower', '==', normalizedName.toLowerCase()], ['company_id', '==', existing.company_id ?? null]]);
     if (exists && String(exists.id) !== String(id)) {
       const err = new Error('Ya existe una categoría con ese nombre.');
       err.code = 'VALIDATION_ERROR';
@@ -480,6 +619,11 @@ async function updateCategory(id, { name, active } = {}) {
   return normalizeCategory(updated);
 }
 
+// deleteCategory — regla de negocio: nada se elimina de verdad en el
+// sistema, solo se deshabilita. Antes esto borraba el documento de
+// Firestore; ahora es un alias de "desactivar" (active: 0), igual que el
+// resto de las entidades (empresas, membresías, permisos). El nombre de la
+// funcion se mantiene por compatibilidad con el route/service existente.
 async function deleteCategory(id) {
   const existing = await getDoc('categories', id);
   if (!existing) {
@@ -487,8 +631,8 @@ async function deleteCategory(id) {
     err.code = 'NOT_FOUND';
     throw err;
   }
-  await firestore.getFirestore().collection('categories').doc(String(id)).delete();
-  return normalizeCategory(existing);
+  const updated = await updateDoc('categories', id, { active: 0 });
+  return normalizeCategory(updated);
 }
 
 async function createNotification({ user_id, type, ticket_id, title, body }) {
@@ -575,39 +719,78 @@ async function logAudit(audit) {
   return doc;
 }
 
-async function listAudit({ page = 1, limit = 50, user_id = null, action_type = null, date_from = null, date_to = null, search = null } = {}) {
+// listAudit — misma paginación por cursor que listTickets (ver la nota
+// grande ahí sobre por qué `limit(page*limit)` no escala). Más simple que
+// listTickets porque audit_log es SAC-only y SAC es global por diseño: una
+// sola consulta, sin merge de streams ni scope por empresa.
+async function listAudit({ cursor = null, limit = 50, user_id = null, action_type = null, date_from = null, date_to = null, search = null } = {}) {
   const clauses = [];
   if (user_id) clauses.push(['user_id', '==', toId(user_id)]);
   if (action_type) clauses.push(['action_type', '==', action_type]);
   if (date_from) clauses.push(['created_at', '>=', date_from]);
-  if (date_to) clauses.push(['created_at', '<=', date_to]);
+  if (date_to) clauses.push(['created_at', '<=', endOfDayInclusive(date_to)]);
 
-  const fetchLimit = search ? Math.max(page * limit * 5, 500) : page * limit;
-  let rows = await queryCollection('audit_log', clauses, { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
-  if (search) {
+  function applySearch(rows) {
+    if (!search) return rows;
     const needle = search.toLowerCase();
-    rows = rows.filter((row) => (row.description || '').toLowerCase().includes(needle)
+    return rows.filter((row) => (row.description || '').toLowerCase().includes(needle)
       || (row.target_code || '').toLowerCase().includes(needle));
   }
 
-  const total = search ? rows.length : await countCollection('audit_log', clauses);
-  const pageSlice = rows.slice((page - 1) * limit, page * limit);
+  const windowSize = search ? Math.max(limit * 4, 100) : Math.max(limit + 10, 30);
+  const maxIterations = search ? 15 : 8;
 
-  const userIds = Array.from(new Set(pageSlice.map((r) => String(r.user_id)).filter(Boolean)));
+  let cursorState = decodeCreatedAtCursor(cursor);
+  const collected = [];
+  let exhausted = false;
+  let iterations = 0;
+
+  while (!exhausted && iterations < maxIterations) {
+    if (collected.length >= limit) break;
+    iterations++;
+    const options = { orderBy: 'created_at', direction: 'desc', tieBreakByDocId: true, limit: windowSize };
+    if (cursorState) options.startAfter = cursorState;
+    const batch = await queryCollection('audit_log', clauses, options);
+    if (batch.length === 0) { exhausted = true; break; }
+    const last = batch[batch.length - 1];
+    cursorState = [last.created_at, String(last.id)];
+    collected.push(...applySearch(batch));
+    if (batch.length < windowSize) exhausted = true;
+  }
+
+  const pageRows = collected.slice(0, limit);
+  const hasMore = collected.length > limit || !exhausted;
+  const nextCursor = pageRows.length > 0 ? encodeCreatedAtCursor(pageRows[pageRows.length - 1]) : null;
+
+  // Total exacto sólo cuando es barato (count() sin leer documentos). Con
+  // búsqueda de texto libre se devuelve null, igual que en listTickets.
+  const total = search ? null : await countCollection('audit_log', clauses);
+
+  const userIds = Array.from(new Set(pageRows.map((r) => String(r.user_id)).filter(Boolean)));
   const users = await cacheById('users', userIds);
-  const data = pageSlice.map((row) => normalizeAudit({ ...row, user_name: users[String(row.user_id)]?.full_name || null }));
+  const data = pageRows.map((row) => normalizeAudit({ ...row, user_name: users[String(row.user_id)]?.full_name || null }));
 
-  const actionCounts = data.reduce((acc, r) => {
+  // Estadísticas ("Tipo más frecuente"/"Usuarios activos") sobre una
+  // muestra del set filtrado, no sólo la página visible — misma idea que
+  // antes, pero ahora con una query aparte acotada en vez de depender de
+  // cuántas filas se hayan traído para ESTA página (que ahora es mucho más
+  // chica que el fetchLimit viejo).
+  const STATS_SAMPLE = 1000;
+  const statsRows = search
+    ? collected
+    : await queryCollection('audit_log', clauses, { orderBy: 'created_at', direction: 'desc', tieBreakByDocId: true, limit: STATS_SAMPLE });
+  const actionCounts = statsRows.reduce((acc, r) => {
     acc[r.action_type] = (acc[r.action_type] || 0) + 1;
     return acc;
   }, {});
   const mostFrequentAction = Object.entries(actionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-  const activeUserCount = new Set(data.map((r) => r.user_id).filter(Boolean)).size;
+  const activeUserCount = new Set(statsRows.map((r) => r.user_id).filter(Boolean)).size;
   return {
     data,
     total,
-    page,
     limit,
+    hasMore,
+    nextCursor,
     mostFrequentAction,
     activeUserCount,
   };
@@ -623,12 +806,19 @@ async function getActionTypes() {
 }
 
 async function getActiveAuditUsers() {
-  const rows = await queryCollection('audit_active_users', [], { orderBy: 'full_name', direction: 'asc' });
-  if (rows.length > 0) {
-    return rows.map((user) => ({ id: toId(user.user_id), username: user.username, full_name: user.full_name }));
+  // audit_active_users es sólo una caché de IDs para no escanear todo
+  // audit_log; sus propios campos username/full_name nunca se pueblan
+  // (logAudit los escribe desde audit.user_name, que ningún caller pasa
+  // hoy), así que quedan siempre en null. Los nombres reales SIEMPRE se
+  // resuelven contra la colección users, sin importar de dónde salgan los IDs.
+  const cacheRows = await queryCollection('audit_active_users', [], {});
+  let userIds;
+  if (cacheRows.length > 0) {
+    userIds = Array.from(new Set(cacheRows.map((r) => String(r.user_id)).filter(Boolean)));
+  } else {
+    const auditRows = await queryCollection('audit_log', [], { select: ['user_id'] });
+    userIds = Array.from(new Set(auditRows.map((r) => String(r.user_id)).filter(Boolean)));
   }
-  const auditRows = await queryCollection('audit_log', [], { select: ['user_id'] });
-  const userIds = Array.from(new Set(auditRows.map((r) => String(r.user_id)).filter(Boolean)));
   const users = await cacheById('users', userIds);
   return Object.values(users)
     .map((user) => ({ id: toId(user.id), username: user.username, full_name: user.full_name }))
@@ -637,7 +827,23 @@ async function getActiveAuditUsers() {
 
 async function getTicketById(id) {
   const ticket = await getDoc('tickets', id);
-  return ticket ? { ...ticket, id: toId(ticket.id) } : null;
+  if (!ticket) return null;
+  // Normalizar los mismos campos-id que normalizeTicket() aplica en el
+  // detalle (getTicketDetail). Sin esto, canView()/canEditMeta() en
+  // tickets.service.js comparan con === contra valores crudos de Firestore
+  // que pueden venir como string en tickets viejos/migrados, mientras
+  // user.id siempre llega normalizado a Number desde requireAuth — la
+  // comparación estricta falla en silencio y el creador del ticket
+  // (ej. supervisor_campo) puede ver el chat pero no comentar.
+  return {
+    ...ticket,
+    id: toId(ticket.id),
+    category_id: ticket.category_id != null ? toId(ticket.category_id) : null,
+    company_id: ticket.company_id != null ? toId(ticket.company_id) : null,
+    created_by: ticket.created_by != null ? toId(ticket.created_by) : null,
+    assigned_to: ticket.assigned_to != null ? toId(ticket.assigned_to) : null,
+    closed_by: ticket.closed_by != null ? toId(ticket.closed_by) : null,
+  };
 }
 
 async function getTicketRelatedData(ticket) {
@@ -667,7 +873,9 @@ async function decorateTicket(ticket) {
 
 async function createTicket({ title, description, category_id, priority }, user) {
   const now = firestore.nowSql();
-  const code = await generateUniqueCode();
+  const companyId = user.activeCompanyId != null ? toId(user.activeCompanyId) : null;
+  const company = companyId != null ? await getCompanyById(companyId) : null;
+  const code = await generateUniqueCode(company?.code_prefix);
   const category = category_id ? await getDoc('categories', category_id) : null;
   const payload = {
     code,
@@ -676,6 +884,7 @@ async function createTicket({ title, description, category_id, priority }, user)
     category_id: category_id != null ? toId(category_id) : null,
     category_name: category?.name || null,
     area: category?.area || null,
+    company_id: companyId,
     status: 'recibido',
     priority,
     created_by: toId(user.id),
@@ -689,7 +898,72 @@ async function createTicket({ title, description, category_id, priority }, user)
   return normalizeTicket({ ...doc, category_name: category?.name || null });
 }
 
-async function listTickets(filters, user, page = 1, limit = 25) {
+// encodeCreatedAtCursor/decodeCreatedAtCursor — cursor de paginación
+// genérico (tickets, audit_log): opaco para el cliente, un base64 de
+// [created_at, id] de la última fila devuelta. Ver la nota grande en
+// listTickets sobre por qué esto reemplazó a `limit(page*limit)` + slice
+// en memoria.
+function encodeCreatedAtCursor(row) {
+  if (!row) return null;
+  return Buffer.from(JSON.stringify([row.created_at, String(row.id)])).toString('base64');
+}
+function decodeCreatedAtCursor(cursor) {
+  if (!cursor) return null;
+  try {
+    const [createdAt, id] = JSON.parse(Buffer.from(String(cursor), 'base64').toString('utf8'));
+    if (!createdAt || !id) return null;
+    return [createdAt, String(id)];
+  } catch {
+    return null;
+  }
+}
+
+// countTicketsTotal — total exacto vía count() de Firestore (no lee
+// documentos), con el mismo criterio de scoping por empresa que
+// scopeByCompany: company_id == empresa activa OR company_id == null
+// (legacy). Como son condiciones mutuamente excluyentes, sumar dos
+// count() da el OR correcto sin tener que traer filas.
+async function countTicketsTotal(user, clauses, companyScoped) {
+  const companyFilterSets = companyScoped
+    ? [[['company_id', '==', toId(user.activeCompanyId)]], [['company_id', '==', IS_NULL]]]
+    : [[]];
+  async function countWithClauses(extra) {
+    let total = 0;
+    for (const companyFilter of companyFilterSets) {
+      total += await countCollection('tickets', [...clauses, ...extra, ...companyFilter]);
+    }
+    return total;
+  }
+  if (user.role === 'supervisor_campo') {
+    return countWithClauses([['created_by', '==', toId(user.id)]]);
+  }
+  if (user.role === 'admin_area') {
+    const created = await countWithClauses([['created_by', '==', toId(user.id)]]);
+    const assigned = await countWithClauses([['assigned_to', '==', toId(user.id)]]);
+    const both = await countWithClauses([['created_by', '==', toId(user.id)], ['assigned_to', '==', toId(user.id)]]);
+    return created + assigned - both;
+  }
+  return countWithClauses([]);
+}
+
+// listTickets — paginación por CURSOR (Firestore startAfter), no por
+// offset. Antes: `limit(page*limit)` + `rows.slice((page-1)*limit, ...)` —
+// para ver la página 100 volvía a leer los primeros 2,500 documentos desde
+// cero y descartaba casi todos. Con 1M+ tickets eso escala en O(página²)
+// lecturas: lento y caro (Firestore cobra por documento leído).
+//
+// Ahora cada página cuesta lo mismo sin importar qué tan profunda sea:
+// `fetchWindow` trae un lote acotado empezando DESPUÉS del cursor. Los
+// filtros que no se pueden expresar como where() de Firestore (scope por
+// empresa, el post-filtro de jefe_inmediato, la búsqueda de texto) se
+// aplican en memoria sobre ese lote; si el lote filtrado no alcanza para
+// llenar la página, se pide otro lote empezando donde terminó el anterior
+// (nunca se vuelve al principio), hasta `maxIterations` veces — un tope de
+// seguridad para no barrer la colección entera si el filtro es muy
+// selectivo (esto es un límite real: una búsqueda de texto que sólo
+// matchea un ticket muy viejo puede no encontrarlo, igual que antes, pero
+// ahora el costo por página es acotado y no crece con la profundidad).
+async function listTickets(filters, user, { cursor = null, limit = 25 } = {}) {
   const clauses = [];
   if (filters.status) clauses.push(['status', '==', filters.status]);
   if (filters.priority) clauses.push(['priority', '==', filters.priority]);
@@ -697,67 +971,94 @@ async function listTickets(filters, user, page = 1, limit = 25) {
   if (filters.assigned_to) clauses.push(['assigned_to', '==', toId(filters.assigned_to)]);
   if (filters.area && user.role !== 'jefe_inmediato') clauses.push(['area', '==', filters.area]);
   if (filters.date_from) clauses.push(['created_at', '>=', filters.date_from]);
-  if (filters.date_to) clauses.push(['created_at', '<=', filters.date_to]);
+  if (filters.date_to) clauses.push(['created_at', '<=', endOfDayInclusive(filters.date_to)]);
   if (user.role === 'jefe_inmediato' && !filters.status) {
     clauses.unshift(['status', '==', 'solucionado']);
   }
   const search = filters.search ? String(filters.search).toLowerCase() : null;
-  const fetchLimit = search ? Math.max(page * limit * 5, 500) : page * limit;
+  const companyScoped = user.role !== 'sac' && user.activeCompanyId != null;
 
-  let rows = [];
-  if (user.role === 'supervisor_campo') {
-    rows = await queryCollection('tickets', [['created_by', '==', toId(user.id)], ...clauses], { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
-  } else if (user.role === 'admin_area') {
-    const createdRows = await queryCollection('tickets', [['created_by', '==', toId(user.id)], ...clauses], { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
-    const assignedRows = await queryCollection('tickets', [['assigned_to', '==', toId(user.id)], ...clauses], { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
-    const map = new Map();
-    for (const ticket of [...createdRows, ...assignedRows]) {
-      map.set(String(ticket.id), ticket);
+  async function fetchWindow(windowCursor, windowSize) {
+    const baseOptions = { orderBy: 'created_at', direction: 'desc', tieBreakByDocId: true, limit: windowSize };
+    if (windowCursor) baseOptions.startAfter = windowCursor;
+    if (user.role === 'supervisor_campo') {
+      return queryCollection('tickets', [['created_by', '==', toId(user.id)], ...clauses], baseOptions);
     }
-    rows = Array.from(map.values()).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-  } else if (user.role === 'jefe_inmediato') {
-    rows = await queryCollection('tickets', [...clauses], { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
-  } else {
-    rows = await queryCollection('tickets', clauses, { orderBy: 'created_at', direction: 'desc', limit: fetchLimit });
-  }
-
-  if (user.role === 'jefe_inmediato') {
-    rows = rows.filter((ticket) => ticket.status === 'solucionado');
-  }
-
-  if (search) {
-    rows = rows.filter((ticket) => {
-      const text = String(ticket.title).toLowerCase();
-      return text.includes(search)
-        || String(ticket.code || '').toLowerCase().includes(search)
-        || String(ticket.description || '').toLowerCase().includes(search);
-    });
-  }
-
-  const total = search || user.role === 'jefe_inmediato'
-    ? rows.length
-    : user.role === 'admin_area'
-      ? await countCollection('tickets', [['created_by', '==', toId(user.id)], ...clauses])
-        + await countCollection('tickets', [['assigned_to', '==', toId(user.id)], ...clauses])
-        - await countCollection('tickets', [['created_by', '==', toId(user.id)], ['assigned_to', '==', toId(user.id)], ...clauses])
-      : await countCollection('tickets', [
-        ...(user.role === 'supervisor_campo' ? [['created_by', '==', toId(user.id)]] : []),
-        ...clauses,
+    if (user.role === 'admin_area') {
+      const [createdRows, assignedRows] = await Promise.all([
+        queryCollection('tickets', [['created_by', '==', toId(user.id)], ...clauses], baseOptions),
+        queryCollection('tickets', [['assigned_to', '==', toId(user.id)], ...clauses], baseOptions),
       ]);
+      const map = new Map();
+      for (const ticket of [...createdRows, ...assignedRows]) map.set(String(ticket.id), ticket);
+      return Array.from(map.values()).sort((a, b) => compareRowsForCursor(a, b, 'created_at', 'desc', true));
+    }
+    if (user.role === 'jefe_inmediato') {
+      return queryCollection('tickets', [...clauses], baseOptions);
+    }
+    return queryCollection('tickets', clauses, baseOptions);
+  }
 
-  const pageSlice = rows.slice((page - 1) * limit, page * limit);
-  const decorated = await Promise.all(pageSlice.map(decorateTicket));
-  return { total, page, limit, tickets: decorated };
+  function applyInMemoryFilters(rows) {
+    let out = companyScoped ? scopeByCompany(rows, user.activeCompanyId) : rows;
+    if (user.role === 'jefe_inmediato') out = out.filter((t) => t.status === 'solucionado');
+    if (search) {
+      out = out.filter((ticket) => {
+        const text = String(ticket.title).toLowerCase();
+        return text.includes(search)
+          || String(ticket.code || '').toLowerCase().includes(search)
+          || String(ticket.description || '').toLowerCase().includes(search);
+      });
+    }
+    return out;
+  }
+
+  const windowSize = search ? Math.max(limit * 4, 100) : Math.max(limit + 10, 30);
+  const maxIterations = search ? 15 : 8;
+
+  let cursorState = decodeCreatedAtCursor(cursor);
+  const collected = [];
+  let exhausted = false;
+  let iterations = 0;
+
+  while (!exhausted && iterations < maxIterations) {
+    if (collected.length >= limit) break;
+    iterations++;
+    const batch = await fetchWindow(cursorState, windowSize);
+    if (batch.length === 0) { exhausted = true; break; }
+    const last = batch[batch.length - 1];
+    cursorState = [last.created_at, String(last.id)];
+    collected.push(...applyInMemoryFilters(batch));
+    if (batch.length < windowSize) exhausted = true;
+  }
+
+  const pageRows = collected.slice(0, limit);
+  const hasMore = collected.length > limit || !exhausted;
+  const nextCursor = pageRows.length > 0 ? encodeCreatedAtCursor(pageRows[pageRows.length - 1]) : null;
+
+  // Total exacto sólo cuando es barato (count() de Firestore, sin leer
+  // documentos). Con búsqueda de texto libre no hay forma barata de
+  // contar sin escanear todo — se devuelve null y el cliente muestra
+  // "mostrando N" en vez de "N de M", más honesto que inventar un número.
+  const total = search ? null : await countTicketsTotal(user, clauses, companyScoped);
+
+  const decorated = await Promise.all(pageRows.map(decorateTicket));
+  return { total, limit, hasMore, nextCursor, tickets: decorated };
 }
 
 async function getTicketDetail(id, user) {
   const ticket = await getTicketById(id);
   if (!ticket) return null;
   const decorated = await decorateTicket(ticket);
-  const [assignments, comments, attachments] = await Promise.all([
+  const [assignments, comments, attachments, historyEntries] = await Promise.all([
     queryCollection('ticket_assignments', [['ticket_id', '==', toId(id)]]),
     queryCollection('ticket_comments', [['ticket_id', '==', toId(id)]]),
     queryCollection('attachments', [['ticket_id', '==', toId(id)]]),
+    // Trazabilidad: audit_log ya registra creación, asignación, cambios de
+    // estado y comentarios de cada ticket (ver tickets.service.js →
+    // auditService.logAsync en cada acción). La leemos en orden cronológico
+    // para armar la línea de tiempo del ticket.
+    queryCollection('audit_log', [['target_type', '==', 'ticket'], ['target_id', '==', toId(id)]], { orderBy: 'created_at', direction: 'asc', limit: 200 }),
   ]);
   const relatedAssignments = assignments;
   const relatedComments = comments;
@@ -768,6 +1069,7 @@ async function getTicketDetail(id, user) {
     ...relatedAssignments.map((a) => a.assigned_by),
     ...relatedComments.map((c) => c.user_id),
     ...relatedAttachments.map((a) => a.user_id),
+    ...historyEntries.map((a) => a.user_id),
   ].filter(Boolean).map(String)));
   const users = await cacheById('users', userIds);
   const assignmentRows = relatedAssignments.map((row) => normalizeAssignment({
@@ -786,31 +1088,35 @@ async function getTicketDetail(id, user) {
     user_name: users[String(row.user_id)]?.full_name || null,
     user_role: users[String(row.user_id)]?.role || null,
   }));
+  const historyRows = historyEntries.map((row) => normalizeAudit({
+    ...row,
+    user_name: users[String(row.user_id)]?.full_name || null,
+  }));
   return {
     ...decorated,
     assignments: assignmentRows,
     comments: commentRows,
     attachments: attachmentRows,
+    history: historyRows,
   };
 }
 
-async function generateUniqueCode() {
-  const prefix = require('./utils/time').ticketCodeFor();
-  const db = firestore.getFirestore();
-  const end = `${prefix}\uf8ff`;
-  const snapshot = await db.collection('tickets')
-    .where('code', '>=', prefix)
-    .where('code', '<=', end)
-    .select(['code'])
-    .get();
-  let seq = 1;
-  for (const doc of snapshot.docs) {
-    const code = doc.data().code;
-    const parts = String(code).split('-');
-    const n = parseInt(parts[parts.length - 1], 10);
-    if (!Number.isNaN(n) && n >= seq) seq = n + 1;
-  }
-  return `${prefix}${String(seq).padStart(4, '0')}`;
+// Nomenclatura por empresa: cada empresa define su propio code_prefix
+// (ej. "N7", "C1", "ESP") y los tickets se numeran con un contador continuo
+// por empresa, nunca se reinicia por mes o anio, con 6 digitos: N7-000001,
+// N7-000002... Si la empresa no tiene prefijo configurado (legacy, o no
+// asignada), se usa "TKT" como fallback para no romper la creacion.
+//
+// Antes esto leia el codigo maximo existente con ese prefijo y escribia en
+// un segundo paso separado (no atomico): dos creaciones de ticket casi
+// simultaneas para la misma empresa podian leer el mismo maximo y terminar
+// con el mismo codigo. Ahora reutiliza el contador atomico de
+// firestore.getNextId (transaccion sobre metadata/counters), namespaced por
+// prefijo para que cada empresa tenga su propia secuencia sin colisiones.
+async function generateUniqueCode(codePrefix) {
+  const base = `${codePrefix || 'TKT'}-`;
+  const seq = await firestore.getNextId(`ticket_code:${base}`);
+  return `${base}${String(seq).padStart(6, '0')}`;
 }
 
 async function updateTicket(id, patch, user) {
@@ -920,12 +1226,6 @@ async function listTicketAttachments(ticketId) {
 }
 
 async function assignTicket(id, to_user_id, user, notes) {
-  const ticket = await getTicketById(id);
-  if (!ticket) {
-    const err = new Error('Ticket no encontrado.');
-    err.code = 'NOT_FOUND';
-    throw err;
-  }
   const target = await getUserById(to_user_id);
   if (!target) {
     const err = new Error('El usuario destino no existe.');
@@ -942,33 +1242,51 @@ async function assignTicket(id, to_user_id, user, notes) {
     err.code = 'VALIDATION_ERROR';
     throw err;
   }
-  const fromUserId = ticket.assigned_to || null;
-  const newStatus = ticket.status === 'recibido' || ticket.status === 'reabierto' ? 'asignado' : ticket.status;
-  await createDoc('ticket_assignments', {
-    ticket_id: toId(id),
-    from_user_id: fromUserId,
-    to_user_id: toId(to_user_id),
-    assigned_by: toId(user.id),
-    notes: notes || null,
-    assigned_at: firestore.nowSql(),
-  });
-  await updateDoc('tickets', id, {
-    assigned_to: toId(to_user_id),
-    area: target.area || null,
-    status: newStatus,
-    updated_at: firestore.nowSql(),
-    closed_at: null,
+
+  // fromUserId/newStatus dependen del estado ACTUAL del ticket
+  // (assigned_to/status). Leer eso fuera de una transaccion y escribir
+  // despues en dos pasos separados (createDoc + updateDoc) dejaba una
+  // ventana: dos reasignaciones casi simultaneas podian leer el mismo
+  // estado viejo, y la que escribe segunda pisa a la primera sin avisar —
+  // igual se dispara la notificacion de "asignado" aunque la asignacion
+  // real haya quedado sobreescrita. runTransaction relee el doc justo antes
+  // de escribir y reintenta solo si hubo un cambio concurrente.
+  const db = firestore.getFirestore();
+  const ticketRef = db.collection('tickets').doc(String(id));
+  const assignmentId = String(await firestore.getNextId('ticket_assignments'));
+  const assignmentRef = db.collection('ticket_assignments').doc(assignmentId);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ticketRef);
+    if (!snap.exists) {
+      const err = new Error('Ticket no encontrado.');
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+    const ticket = snap.data();
+    const fromUserId = ticket.assigned_to || null;
+    const newStatus = ticket.status === 'recibido' || ticket.status === 'reabierto' ? 'asignado' : ticket.status;
+    const now = firestore.nowSql();
+    tx.set(assignmentRef, {
+      ticket_id: toId(id),
+      from_user_id: fromUserId,
+      to_user_id: toId(to_user_id),
+      assigned_by: toId(user.id),
+      notes: notes || null,
+      assigned_at: now,
+    });
+    tx.update(ticketRef, {
+      assigned_to: toId(to_user_id),
+      area: target.area || null,
+      status: newStatus,
+      updated_at: now,
+      closed_at: null,
+    });
   });
   return getTicketDetail(id, user);
 }
 
 async function changeTicketStatus(id, next, comment, user) {
-  const ticket = await getTicketById(id);
-  if (!ticket) {
-    const err = new Error('Ticket no encontrado.');
-    err.code = 'NOT_FOUND';
-    throw err;
-  }
   const transitions = {
     recibido: ['asignado', 'cerrado'],
     asignado: ['en_proceso', 'asignado'],
@@ -977,24 +1295,48 @@ async function changeTicketStatus(id, next, comment, user) {
     cerrado: ['reabierto'],
     reabierto: ['en_proceso', 'asignado'],
   };
-  if (!(transitions[ticket.status] || []).includes(next)) {
-    const err = new Error(`Transición no permitida: ${ticket.status} → ${next}.`);
-    err.code = 'CONFLICT';
-    throw err;
-  }
-  const updatePayload = { status: next, updated_at: firestore.nowSql() };
-  if (next === 'cerrado') updatePayload.closed_at = firestore.nowSql();
-  if (next !== 'cerrado') updatePayload.closed_at = null;
-  await updateDoc('tickets', id, updatePayload);
-  if (comment) {
-    await createDoc('ticket_comments', {
-      ticket_id: toId(id),
-      user_id: toId(user.id),
-      comment,
-      attachment_id: null,
-      created_at: firestore.nowSql(),
-    });
-  }
+
+  // La validacion de transicion (transitions[ticket.status].includes(next))
+  // dependia de un ticket leido antes, separado de la escritura posterior
+  // (updateDoc). Dos cambios de estado simultaneos (ej. uno cierra mientras
+  // otro reabre) podian validar ambos contra el mismo estado viejo y la
+  // segunda escritura pisaba a la primera en silencio. La transaccion relee
+  // el doc justo antes de escribir y revalida la transicion contra ese
+  // estado fresco; si cambio entre el intento y el commit, Firestore
+  // reintenta la funcion automaticamente.
+  const db = firestore.getFirestore();
+  const ticketRef = db.collection('tickets').doc(String(id));
+  const commentId = comment ? String(await firestore.getNextId('ticket_comments')) : null;
+  const commentRef = commentId ? db.collection('ticket_comments').doc(commentId) : null;
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ticketRef);
+    if (!snap.exists) {
+      const err = new Error('Ticket no encontrado.');
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+    const ticket = snap.data();
+    if (!(transitions[ticket.status] || []).includes(next)) {
+      const err = new Error(`Transición no permitida: ${ticket.status} → ${next}.`);
+      err.code = 'CONFLICT';
+      throw err;
+    }
+    const now = firestore.nowSql();
+    const updatePayload = { status: next, updated_at: now };
+    if (next === 'cerrado') updatePayload.closed_at = now;
+    if (next !== 'cerrado') updatePayload.closed_at = null;
+    tx.update(ticketRef, updatePayload);
+    if (commentRef) {
+      tx.set(commentRef, {
+        ticket_id: toId(id),
+        user_id: toId(user.id),
+        comment,
+        attachment_id: null,
+        created_at: now,
+      });
+    }
+  });
   return getTicketDetail(id, user);
 }
 
@@ -1056,6 +1398,34 @@ async function getStats() {
   };
 }
 
+// completeTotals — calcula los campos que stats.service.js:enrichTotals()
+// necesita (recibido/asignado/en_proceso/solucionado/reabierto/urgent/
+// closed_today) a partir de los tickets YA filtrados por usuario/área que
+// cada rama de getStatsForUser trae en memoria. Sin esto, si faltaba
+// aunque sea uno de esos campos, enrichTotals() caía a un fallback que
+// consulta TODA la colección `tickets` sin ningún filtro por usuario ni
+// empresa — un supervisor_campo (o admin_area/jefe_inmediato) veía
+// "Urgentes"/"Cerrados hoy"/"Reabiertos" de TODO el sistema, no los suyos.
+function completeTotals(tickets) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return {
+    recibido: tickets.filter((t) => t.status === 'recibido').length,
+    asignado: tickets.filter((t) => t.status === 'asignado').length,
+    en_proceso: tickets.filter((t) => t.status === 'en_proceso').length,
+    solucionado: tickets.filter((t) => t.status === 'solucionado').length,
+    reabierto: tickets.filter((t) => t.status === 'reabierto').length,
+    urgent: tickets.filter((t) => t.priority === 'urgente').length,
+    closed_today: tickets.filter((t) => {
+      if (!t.closed_at) return false;
+      const c = new Date(String(t.closed_at).replace(' ', 'T'));
+      return c >= today && c < tomorrow;
+    }).length,
+  };
+}
+
 /**
  * Genera métricas para el usuario autenticado según su rol.
  * Usa consultas específicas por usuario y área, evitando escaneos de tickets.
@@ -1063,23 +1433,23 @@ async function getStats() {
  */
 async function getStatsForUser(userId, user) {
   const uid = toId(userId);
+  const companyScoped = user.role !== 'sac' && user.activeCompanyId != null;
   if (user.role === 'admin_area') {
     const [created, assigned] = await Promise.all([
-      queryCollection('tickets', [['created_by', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'priority', 'created_at', 'closed_at'] }),
-      queryCollection('tickets', [['assigned_to', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'priority', 'created_at', 'closed_at'] }),
+      queryCollection('tickets', [['created_by', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'priority', 'created_at', 'closed_at', 'company_id'] }),
+      queryCollection('tickets', [['assigned_to', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'priority', 'created_at', 'closed_at', 'company_id'] }),
     ]);
     const map = new Map();
     for (const ticket of [...created, ...assigned]) {
       map.set(String(ticket.id), ticket);
     }
-    const merged = Array.from(map.values());
+    const merged = companyScoped
+      ? scopeByCompany(Array.from(map.values()), user.activeCompanyId)
+      : Array.from(map.values());
     const totals = {
       total: merged.length,
-      en_proceso: merged.filter((t) => t.status === 'en_proceso').length,
-      solucionado: merged.filter((t) => t.status === 'solucionado').length,
-      asignado: merged.filter((t) => t.status === 'asignado').length,
       cerrado: merged.filter((t) => t.status === 'cerrado').length,
-      reabierto: merged.filter((t) => t.status === 'reabierto').length,
+      ...completeTotals(merged),
     };
     const closed = merged.filter((t) => t.closed_at);
     const avgHours = closed.length
@@ -1093,22 +1463,213 @@ async function getStatsForUser(userId, user) {
     return { totals, avg_resolution_hours: avgHours, by_priority: byPriority };
   }
   if (user.role === 'supervisor_campo') {
-    const tickets = await queryCollection('tickets', [['created_by', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status'] });
-    const totals = { total: tickets.length, open: tickets.filter((t) => t.status !== 'cerrado').length, closed: tickets.filter((t) => t.status === 'cerrado').length };
+    const raw = await queryCollection('tickets', [['created_by', '==', uid]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'priority', 'closed_at', 'company_id'] });
+    const tickets = companyScoped ? scopeByCompany(raw, user.activeCompanyId) : raw;
+    const totals = {
+      total: tickets.length,
+      open: tickets.filter((t) => t.status !== 'cerrado').length,
+      closed: tickets.filter((t) => t.status === 'cerrado').length,
+      ...completeTotals(tickets),
+    };
     return { totals };
   }
   if (user.role === 'jefe_inmediato') {
-    const tickets = await queryCollection('tickets', [['area', '==', user.area]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'assigned_to'] });
-    const totals = { total: tickets.length, open: tickets.filter((t) => t.status !== 'cerrado').length, closed: tickets.filter((t) => t.status === 'cerrado').length, solved: tickets.filter((t) => t.status === 'solucionado').length, reopened: tickets.filter((t) => t.status === 'reabierto').length };
+    const raw = await queryCollection('tickets', [['area', '==', user.area]], { orderBy: 'created_at', direction: 'desc', limit: 1000, select: ['status', 'priority', 'closed_at', 'assigned_to', 'company_id'] });
+    const tickets = companyScoped ? scopeByCompany(raw, user.activeCompanyId) : raw;
+    const totals = {
+      total: tickets.length,
+      open: tickets.filter((t) => t.status !== 'cerrado').length,
+      closed: tickets.filter((t) => t.status === 'cerrado').length,
+      solved: tickets.filter((t) => t.status === 'solucionado').length,
+      reopened: tickets.filter((t) => t.status === 'reabierto').length,
+      ...completeTotals(tickets),
+    };
     const byAssignee = Object.entries(tickets.reduce((acc, ticket) => {
       const assignee = String(ticket.assigned_to || '');
       if (assignee) acc[assignee] = (acc[assignee] || 0) + 1;
       return acc;
     }, {})).map(([uidStr, c]) => ({ id: toId(uidStr), c })).sort((a, b) => b.c - a.c);
     const userMap = (await cacheById('users', byAssignee.map((item) => item.id).filter(Boolean).map(String))) || {};
-    return { totals, by_assignee: byAssignee.map((item) => ({ ...item, full_name: userMap[String(item.id)]?.full_name || null })) };
+    return {
+      totals,
+      by_assignee: byAssignee.map((item) => ({
+        ...item,
+        full_name: userMap[String(item.id)]?.full_name || null,
+        avatar_url: userMap[String(item.id)]?.avatar_url || null,
+      })),
+    };
   }
   return {};
+}
+
+/* ---------- Companies (Firestore) ---------- */
+function normalizeCompany(row) {
+  if (!row) return null;
+  return {
+    id: toId(row.id),
+    name: row.name || '',
+    slug: row.slug || '',
+    logo_url: row.logo_url || null,
+    location: row.location || null,
+    responsible_user_id: row.responsible_user_id != null ? toId(row.responsible_user_id) : null,
+    color: row.color || null,
+    code_prefix: row.code_prefix || null,
+    active: row.active ? 1 : 0,
+    is_default: row.is_default ? 1 : 0,
+    created_at: toLegacyDate(row.created_at),
+    updated_at: toLegacyDate(row.updated_at),
+  };
+}
+
+async function listCompanies({ activeOnly = true, requester } = {}) {
+  if (requester && !requester.isPlatformAdmin) {
+    const mems = await queryCollection('user_company_memberships', []);
+    const companyIds = mems.filter((m) => String(m.user_id) === String(requester.id) && (m.active === 1 || m.active === true || m.active === '1' || m.active === 'true')).map((m) => String(m.company_id)).filter(Boolean);
+    const companies = [];
+    for (const cid of companyIds) {
+      const doc = await getDoc('companies', cid);
+      if (doc) companies.push(doc);
+    }
+    let rows = companies.map(normalizeCompany);
+    if (activeOnly) rows = rows.filter((c) => c.active);
+    return rows;
+  }
+  const clauses = [];
+  if (activeOnly) clauses.push(['active', '==', 1]);
+  const rows = await queryCollection('companies', clauses);
+  return rows.map(normalizeCompany);
+}
+
+async function getCompanyById(id, { requester } = {}) {
+  const row = await getDoc('companies', id);
+  if (!row) return null;
+  if (requester && !requester.isPlatformAdmin) {
+    const mems = await queryCollection('user_company_memberships', []);
+    const hasAccess = mems.some((m) => String(m.user_id) === String(requester.id) && (m.active === 1 || m.active === true || m.active === '1' || m.active === 'true') && String(m.company_id) === String(id));
+    if (!hasAccess) return null;
+  }
+  return normalizeCompany(row);
+}
+
+// createCompany y updateCompany resuelven slug/code_prefix unicos DENTRO de
+// una transaccion de Firestore (leyendo cada candidato con tx.get justo
+// antes de escribir), en vez de un query de chequeo seguido de un write
+// separado. Antes, dos altas/ediciones simultaneas con el mismo nombre o
+// prefijo podian leer "libre" al mismo tiempo y las dos escribir el mismo
+// slug/code_prefix — dos empresas con "N7" hubieran mezclado su numeracion
+// de tickets en la misma secuencia.
+async function createCompany({ name, slug, logo_url, location, responsible_user_id, color, code_prefix, is_default } = {}) {
+  const seedSlug = slug || (name || '').toLowerCase().replace(/[^a-z0-9-_]+/g, '-');
+  const seed = seedSlug && seedSlug.length > 0 ? seedSlug : `empresa-${Date.now()}`;
+  const db = firestore.getFirestore();
+  const companiesRef = db.collection('companies');
+  const now = firestore.nowSql();
+  const newId = String(await firestore.getNextId('companies'));
+  const docRef = companiesRef.doc(newId);
+
+  const doc = await db.runTransaction(async (tx) => {
+    let finalSlug = null;
+    for (let i = 0; i < 100; i += 1) {
+      const candidate = i === 0 ? seed : `${seed}-${i + 1}`;
+      const snap = await tx.get(companiesRef.where('slug', '==', candidate).limit(1));
+      if (snap.empty) { finalSlug = candidate; break; }
+    }
+    if (!finalSlug) {
+      const err = new Error('No se pudo generar un slug único.');
+      err.code = 'CONFLICT';
+      throw err;
+    }
+    if (code_prefix) {
+      const prefixSnap = await tx.get(companiesRef.where('code_prefix', '==', code_prefix).limit(1));
+      if (!prefixSnap.empty) {
+        const err = new Error(`El prefijo "${code_prefix}" ya lo usa otra empresa.`);
+        err.code = 'CONFLICT';
+        throw err;
+      }
+    }
+    const payload = {
+      name: normalizeString(name),
+      slug: finalSlug,
+      logo_url: logo_url || null,
+      location: location || null,
+      responsible_user_id: responsible_user_id != null ? toId(responsible_user_id) : null,
+      color: color || null,
+      code_prefix: code_prefix || null,
+      active: 1,
+      is_default: is_default ? 1 : 0,
+      created_at: now,
+      updated_at: now,
+    };
+    tx.set(docRef, payload);
+    return { id: newId, ...payload };
+  });
+  return normalizeCompany(doc);
+}
+
+async function updateCompany(id, patch) {
+  const updatePayload = {};
+  if (patch.name !== undefined) updatePayload.name = normalizeString(patch.name);
+  if (patch.slug !== undefined) updatePayload.slug = normalizeString(patch.slug);
+  if (patch.logo_url !== undefined) updatePayload.logo_url = patch.logo_url || null;
+  if (patch.location !== undefined) updatePayload.location = patch.location || null;
+  if (patch.responsible_user_id !== undefined) updatePayload.responsible_user_id = patch.responsible_user_id == null ? null : toId(patch.responsible_user_id);
+  if (patch.color !== undefined) updatePayload.color = patch.color || null;
+  if (patch.code_prefix !== undefined) updatePayload.code_prefix = patch.code_prefix || null;
+  if (patch.active !== undefined) updatePayload.active = patch.active ? 1 : 0;
+  if (patch.is_default !== undefined) updatePayload.is_default = patch.is_default ? 1 : 0;
+  updatePayload.updated_at = firestore.nowSql();
+
+  const db = firestore.getFirestore();
+  const companiesRef = db.collection('companies');
+  const docRef = companiesRef.doc(String(id));
+
+  const updated = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    if (!snap.exists) {
+      const err = new Error('Empresa no encontrada.');
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+    if (updatePayload.slug) {
+      const otherSnap = await tx.get(companiesRef.where('slug', '==', updatePayload.slug).limit(1));
+      const other = otherSnap.docs[0];
+      if (other && other.id !== String(id)) {
+        const err = new Error('Slug ya en uso por otra empresa.');
+        err.code = 'CONFLICT';
+        throw err;
+      }
+    }
+    if (updatePayload.code_prefix) {
+      const otherSnap = await tx.get(companiesRef.where('code_prefix', '==', updatePayload.code_prefix).limit(1));
+      const other = otherSnap.docs[0];
+      if (other && other.id !== String(id)) {
+        const err = new Error(`El prefijo "${updatePayload.code_prefix}" ya lo usa otra empresa.`);
+        err.code = 'CONFLICT';
+        throw err;
+      }
+    }
+    tx.update(docRef, updatePayload);
+    return { id: snap.id, ...snap.data(), ...updatePayload };
+  });
+  return normalizeCompany(updated);
+}
+
+async function softDeleteCompany(id) {
+  const existing = await getDoc('companies', id);
+  if (!existing) {
+    const err = new Error('Empresa no encontrada.');
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+  if (!existing.active) return normalizeCompany(existing);
+  const activeCount = await countCollection('companies', [['active', '==', 1]]);
+  if (activeCount <= 1) {
+    const err = new Error('No se puede desactivar la última empresa activa del sistema.');
+    err.code = 'CONFLICT';
+    throw err;
+  }
+  const updated = await updateDoc('companies', id, { active: 0, updated_at: firestore.nowSql() });
+  return normalizeCompany(updated);
 }
 
 module.exports = {
@@ -1154,4 +1715,11 @@ module.exports = {
   changeTicketStatus,
   getStats,
   getStatsForUser,
+  scopeByCompany,
+  scopeUsersByCompany,
+  listCompanies,
+  getCompanyById,
+  createCompany,
+  updateCompany,
+  softDeleteCompany,
 };

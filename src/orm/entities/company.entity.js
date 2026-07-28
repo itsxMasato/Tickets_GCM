@@ -12,6 +12,9 @@ const { bitBoolean } = require('../transformers');
  *   slug        NVARCHAR(50)  UNIQUE NOT NULL     -- "gcm-norte", "oficina-principal"
  *   logo_url    NVARCHAR(500) NULL                -- asset servido por /uploads o CDN
  *   color       NVARCHAR(20)  NULL                -- hex "#0F2A47" o token "navy" para fallback
+ *   code_prefix NVARCHAR(6)   NULL UNIQUE          -- prefijo de nomenclatura de tickets (ej "N7", "C1", "ESP")
+ *   location    NVARCHAR(200) NULL                -- dirección/ciudad de la empresa
+ *   responsible_user_id INT NULL REFERENCES users(id) -- encargado asignado
  *   active      BIT NOT NULL DEFAULT 1
  *   is_default  BIT NOT NULL DEFAULT 0            -- empresa asignada a registros legacy en la migración
  *   created_at  DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
@@ -37,6 +40,9 @@ module.exports = new EntitySchema({
     slug:       { type: 'varchar', length: 50,  unique: true, nullable: false },
     logo_url:   { type: 'varchar', length: 500, nullable: true },
     color:      { type: 'varchar', length: 20,  nullable: true },
+    code_prefix: { type: 'varchar', length: 6, unique: true, nullable: true },
+    location:   { type: 'varchar', length: 200, nullable: true },
+    responsible_user_id: { type: 'integer', nullable: true },
     active:     { type: 'integer', default: 1, nullable: false, transformer: bitBoolean() },
     is_default: { type: 'integer', default: 0, nullable: false, transformer: bitBoolean() },
     created_at: { type: 'datetime', default: require('../timestamp-default').timestampDefault, nullable: false },

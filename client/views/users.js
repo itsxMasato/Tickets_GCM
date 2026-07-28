@@ -1,14 +1,19 @@
 /* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 import { h, escapeHtml } from '../utils/dom.js';
-import { api } from '../api.js';
+import { api, assetUrl } from '../api.js';
 import { go } from '../router.js';
 import { toast } from '../utils/toast.js';
-import { openModal, confirmModal } from '../components/modal.js';
-import { AREA_LABEL } from '../utils/format.js';
+import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
+import { verifyCurrentPassword } from '../firebase.js';
+import { AREA_LABEL, relativeFromNow, formatDateTime } from '../utils/format.js';
 import { getRoleLabel } from '../utils/role-labels.js';
 import { ROLES, AREAS } from '../utils/permissions.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { mountDataList } from '../components/data-list.js';
+import { exportToExcel, exportListToPDF } from '../utils/exports.js';
+import { exportButton } from '../components/export-button.js';
+import { ICON, svg } from '../utils/icons.js';
+import { renderAvatar, avatarColor, initials } from '../utils/avatar.js';
 
 // Dominio sintético de los correos autogenerados al crear un usuario.
 // Espejo de src/utils/deriveAuthEmail.js → DOMAIN para que el email que
@@ -27,37 +32,125 @@ function usernameToLocalPart(username) {
 
 const TABLE_COLUMNS = [
   { key: 'username',   label: 'Usuario' },
-  { key: 'full_name',  label: 'Nombre' },
-  { key: 'role',       label: 'Rol' },
-  { key: 'area',       label: 'Área' },
-  { key: 'active',     label: 'Estado' },
+  { key: 'role',       label: 'Rol / Área' },
+  { key: 'created_at', label: 'Creado' },
+  { key: 'active',     label: 'Estado', align: 'center' },
   { key: 'actions',    label: '' },
 ];
+
+const PAGE_SIZE = 10;
+
+// Tono por rol para el badge de la tabla — mismo criterio de color que el
+// resto de la app (brand=SAC, ocean=admin de área, deep=jefe, slate=supervisor).
+const ROLE_BADGE_TONE = {
+  sac:              'bg-brand text-white',
+  admin_area:       'bg-brand-ocean/15 text-brand-ocean',
+  jefe_inmediato:   'bg-brand-deep/15 text-brand-deep',
+  supervisor_campo: 'bg-slate-100 text-slate-700',
+};
+const ROLE_DOT_COLOR = {
+  sac:              'bg-brand',
+  admin_area:       'bg-brand-ocean',
+  jefe_inmediato:   'bg-brand-deep',
+  supervisor_campo: 'bg-slate-400',
+};
 
 function isUserActive(value) {
   return value === 0 || value === false || value === '0' || value === 'false' ? false : true;
 }
 
+function kpiCard({ label, value, hint = '', icon = null, tone = '' }) {
+  const TONE = {
+    '':     { border: 'border-l-4 border-l-surface-border-strong', icon: 'bg-surface-alt text-brand' },
+    ocean:  { border: 'border-l-4 border-l-brand-ocean',           icon: 'bg-brand-ocean/10 text-brand-ocean' },
+    good:   { border: 'border-l-4 border-l-emerald-500',           icon: 'bg-emerald-100 text-emerald-700' },
+    warn:   { border: 'border-l-4 border-l-orange-500',            icon: 'bg-orange-100 text-orange-700' },
+    accent: { border: 'border-l-4 border-l-accent',                icon: 'bg-accent/10 text-accent' },
+  }[tone] || {};
+  return h('div.card.flex.flex-col.gap-3', { class: TONE.border }, [
+    icon ? h('div.w-9.h-9.rounded-lg.flex.items-center.justify-center', { class: TONE.icon }, [svg(h, icon, 'w-4 h-4')]) : null,
+    h('div', {}, [
+      h('div.text-2xl.font-bold.text-brand-ink', {}, String(value ?? 0)),
+      h('div.text-xs.uppercase.tracking-wider.text-slate-500.font-medium', {}, label),
+    ]),
+    hint ? h('div.text-xs.text-slate-500', {}, hint) : null,
+  ]);
+}
+
 export async function renderUsers({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
-  root.appendChild(h('div.flex.items-center.justify-between.flex-wrap.gap-3', {}, [
+  let exportBtn;
+  root.appendChild(h('div.flex.flex-col.justify-between.gap-4', { class: 'md:flex-row md:items-end' }, [
     h('div', {}, [
-      h('h1.text-2xl.font-bold.text-slate-800', {}, 'Usuarios'),
-      h('p.text-sm.text-slate-500', {}, 'Crea, edita y activa cuentas del sistema.'),
+      h('h1.text-2xl.font-bold.text-brand.tracking-tight', { class: 'md:text-3xl' }, 'Gestión de usuarios'),
+      h('p.text-sm.text-slate-500.mt-1', {}, 'Administra el personal, permisos de acceso y estados de servicio.'),
     ]),
     h('div.flex.items-center.gap-2', {}, [
-      h('button.btn.btn-primary', { onclick: () => openEditModal(null, reload, user) }, '+ Nuevo usuario'),
+      h('button.btn.btn-secondary', { onclick: () => filtersBar.classList.toggle('hidden') }, [svg(h, ICON.search, 'w-4 h-4'), h('span', {}, 'Filtrar')]),
+      exportBtn = exportButton({ label: 'Exportar', kind: 'secondary', onExport: (format) => doExportUsers(format) }),
+      h('button.btn.btn-primary', { onclick: () => openEditModal(null, reload, user) }, [svg(h, ICON.plus, 'w-4 h-4'), h('span', {}, 'Nuevo usuario')]),
     ]),
   ]));
 
-  // data-list: tabla en >=768px, card-list en mobile. El wrapper es un div
-  // neutro; el componente decide qué inyectar según matchMedia.
+  // KPIs — snapshot del personal completo (no reactivo a los filtros de la
+  // tabla, igual criterio que /reports y /tickets: son el estado global,
+  // no la vista filtrada).
+  const kpis = h('div.grid.grid-cols-2.gap-3', { class: 'md:grid-cols-4' });
+  root.appendChild(kpis);
+
+  // Panel de filtros — oculto por defecto, se muestra con el botón "Filtrar".
+  // Todo se aplica client-side: la lista completa ya está en memoria (el
+  // endpoint de usuarios no pagina), así que no hace falta ida y vuelta al
+  // servidor para filtrar/paginar.
+  const searchInput = h('input.input', { type: 'search', placeholder: 'Buscar por nombre, usuario o correo…' });
+  const roleSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los roles'), ...ROLES.map((r) => h('option', { value: r }, getRoleLabel(r)))]);
+  const areaSel = h('select.input', {}, [h('option', { value: '' }, 'Todas las áreas'), ...AREAS.map((a) => h('option', { value: a }, AREA_LABEL[a]))]);
+  const statusSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los estados'), h('option', { value: '1' }, 'Activo'), h('option', { value: '0' }, 'Inactivo')]);
+  const filtersBar = h('div.card.grid.grid-cols-1.gap-4.items-end.hidden', { class: 'sm:grid-cols-2 lg:grid-cols-5' }, [
+    h('div.space-y-1', { class: 'lg:col-span-2' }, [h('label.label', {}, 'Búsqueda'), searchInput]),
+    h('div.space-y-1', {}, [h('label.label', {}, 'Rol'), roleSel]),
+    h('div.space-y-1', {}, [h('label.label', {}, 'Área'), areaSel]),
+    h('div.space-y-1', {}, [h('label.label', {}, 'Estado'), statusSel]),
+  ]);
+  root.appendChild(filtersBar);
+  for (const el of [searchInput, roleSel, areaSel, statusSel]) {
+    el.addEventListener('input', () => { currentPage = 1; draw(); });
+  }
+
+  // Lista (tabla desktop / card-list mobile) + paginación numerada.
   const listWrap = h('div', {});
-  root.appendChild(listWrap);
+  const pagerInfo = h('div.text-xs.text-slate-500', {}, '');
+  const pagerPageLabel = h('div.text-xs.text-slate-500.font-medium', {}, '');
+  const prevBtn = h('button.btn-icon-sm', { 'aria-label': 'Página anterior', onclick: () => { if (currentPage > 1) { currentPage--; draw(); } } }, [svg(h, ICON.chevronL, 'w-4 h-4')]);
+  const nextBtn = h('button.btn-icon-sm', { 'aria-label': 'Página siguiente', onclick: () => { currentPage++; draw(); } }, [svg(h, ICON.chevronR, 'w-4 h-4')]);
+  const pager = h('div.px-4.py-3.bg-surface.flex.items-center.justify-between.gap-3.flex-wrap.rounded-b-xl', {}, [
+    pagerInfo,
+    h('div.flex.items-center.gap-2', {}, [prevBtn, pagerPageLabel, nextBtn]),
+  ]);
+  root.appendChild(h('div.card-tight.overflow-hidden', {}, [listWrap, pager]));
+
+  // Bento inferior: conteo real por rol (no plantillas ficticias) + panel
+  // informativo sobre la protección de roles base ya implementada.
+  const roleChipsWrap = h('div.flex.flex-wrap.gap-2.mt-1', {});
+  const bentoSection = h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-3' }, [
+    h('div.card.flex.flex-col.gap-3', { class: 'md:col-span-2' }, [
+      h('h3.font-bold.text-brand-ink', {}, 'Distribución por rol'),
+      h('p.text-sm.text-slate-500', {}, 'Cuántas cuentas tiene cada rol del sistema.'),
+      roleChipsWrap,
+    ]),
+    h('div.card.flex.flex-col.gap-3.bg-brand.text-white', {}, [
+      h('div.w-10.h-10.rounded-lg.flex.items-center.justify-center', { class: 'bg-white/15' }, [svg(h, ICON.shield, 'w-5 h-5')]),
+      h('h3.font-bold', {}, 'Roles protegidos'),
+      h('p.text-sm.leading-relaxed', { class: 'text-white/75' }, 'Los roles base del sistema no pueden reasignarse por accidente — el último usuario con rol SAC activo no se puede desactivar ni degradar.'),
+      h('button.mt-2.w-full.py-2.rounded-lg.font-medium.text-sm.transition', { class: 'bg-white/15 hover:bg-white/25', onclick: () => go('/roles') }, 'Revisar roles'),
+    ]),
+  ]);
+  root.appendChild(bentoSection);
 
   let dataList = null;
-  let currentUsers = [];
+  let allUsers = [];
+  let currentPage = 1;
 
   function ensureDataList() {
     if (dataList) return;
@@ -72,8 +165,6 @@ export async function renderUsers({ user }) {
   }
 
   // Re-engancha los listeners de las filas desktop tras cada repaint.
-  // Sólo aplica en >=768px; el data-list reemplaza el HTML al cruzar el
-  // breakpoint, así que los handlers deben re-vincularse.
   function wireTableRows() {
     const rows = listWrap.querySelectorAll('tr[data-id]');
     rows.forEach((tr) => {
@@ -86,6 +177,8 @@ export async function renderUsers({ user }) {
       if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); onEdit(+id); });
       const toggleBtn = tr.querySelector('[data-toggle]');
       if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); onToggle(+id); });
+      const rolesBtn = tr.querySelector('[data-roles]');
+      if (rolesBtn) rolesBtn.addEventListener('click', (e) => { e.stopPropagation(); go('/roles'); });
     });
   }
 
@@ -99,7 +192,7 @@ export async function renderUsers({ user }) {
   }
 
   function onToggle(id) {
-    const u = currentUsers.find((x) => x.id === id);
+    const u = allUsers.find((x) => x.id === id);
     if (!u) return;
     const isActive = isUserActive(u.active);
     confirmModal({
@@ -112,58 +205,157 @@ export async function renderUsers({ user }) {
     });
   }
 
-  // Card mobile por usuario. Toda la card es un <button> principal que
-  // abre el detalle; los botones de acción van como <button> hijos con
-  // stopPropagation para no disparar el click del card.
-  function renderMobileCard(u) {
-    const card = h('button.card.text-left.flex.flex-col.gap-2.p-3.hover\\:border-brand-ocean.hover\\:shadow-card.focus\\:outline-none.focus\\:ring-2.focus\\:ring-brand-ocean\\/60.transition', {
-      onclick: () => onEdit(u.id),
-      'aria-label': `Editar ${escapeHtml(u.full_name || u.username)}`,
-    }, [
-      h('div.flex.items-center.justify-between.gap-2', {}, [
-        h('div.min-w-0', {}, [
-          h('div.font-medium.text-brand-ink.truncate', {}, escapeHtml(u.full_name || '—')),
-          h('div.text-xs.font-mono.text-slate-500', {}, escapeHtml(u.username || '')),
-        ]),
-        isUserActive(u.active)
-          ? h('span.badge.bg-emerald-100.text-emerald-800', {}, 'Activo')
-          : h('span.badge.bg-slate-200.text-slate-700', {}, 'Inactivo'),
-      ]),
-      h('div.flex.flex-wrap.items-center.gap-2.text-xs.text-slate-500', {}, [
-        h('span.badge.bg-brand\\/10.text-brand', {}, escapeHtml(getRoleLabel(u.role))),
-        h('span', {}, '·'),
-        h('span', {}, escapeHtml(AREA_LABEL[u.area] || u.area || 'Sin área')),
-      ]),
-      // Acciones: stopPropagation para que no se abra el modal de edición.
-      h('div.flex.items-center.gap-2.mt-1', {}, [
-        h('button.btn.btn-secondary.btn-sm.flex-1', {
-          type: 'button',
-          onclick: (e) => { e.stopPropagation(); onEdit(u.id); },
-        }, 'Editar'),
-        h('button.btn.btn-ghost.btn-sm.flex-1', {
-          type: 'button',
-          class: isUserActive(u.active) ? 'text-accent hover:bg-accent/10' : '',
-          onclick: (e) => { e.stopPropagation(); onToggle(u.id); },
-        }, isUserActive(u.active) ? 'Desactivar' : 'Activar'),
-      ]),
-    ]);
-    return card;
+  // Toggle switch accesible — mismo patrón (button role=switch + track +
+  // thumb) que ya usa /roles, adaptado acá para activar/desactivar cuentas.
+  // El click sigue disparando el modal de confirmación (onToggle): no se
+  // salta esa guarda de seguridad sólo por el cambio visual.
+  function statusToggleHtml(u) {
+    const active = isUserActive(u.active);
+    return `
+      <div class="flex items-center justify-center gap-2">
+        <button type="button" data-toggle role="switch" aria-checked="${active}" aria-label="${active ? 'Desactivar' : 'Activar'} usuario"
+          class="relative inline-flex items-center w-9 h-5 rounded-full transition-colors flex-none ${active ? 'bg-brand' : 'bg-slate-300'}">
+          <span class="inline-block w-4 h-4 bg-white rounded-full shadow-sm transition-transform" style="transform: translateX(${active ? '18px' : '2px'})"></span>
+        </button>
+        <span class="text-xs font-bold ${active ? 'text-brand' : 'text-slate-400'}">${active ? 'ACTIVO' : 'INACTIVO'}</span>
+      </div>
+    `;
+  }
+
+  function personCellHtml(u) {
+    const avatarHtml = u.avatar_url
+      ? `<img class="w-10 h-10 rounded-full object-cover flex-none" src="${escapeHtml(assetUrl(u.avatar_url))}" alt="">`
+      : `<span class="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white flex-none" style="background-color:${avatarColor(u.id)}">${escapeHtml(initials(u.full_name))}</span>`;
+    return `
+      <div class="flex items-center gap-3">
+        ${avatarHtml}
+        <div class="min-w-0">
+          <div class="font-semibold text-brand-ink truncate">${escapeHtml(u.full_name || '—')}</div>
+          <div class="text-xs text-slate-500 truncate">${escapeHtml(u.email || `@${u.username}`)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function roleCellHtml(u) {
+    const tone = ROLE_BADGE_TONE[u.role] || 'bg-slate-100 text-slate-700';
+    return `
+      <div class="flex flex-col gap-1">
+        <span class="inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${tone}">${escapeHtml(getRoleLabel(u.role))}</span>
+        <span class="text-xs text-slate-500">${escapeHtml(AREA_LABEL[u.area] || 'Sin área')}</span>
+      </div>
+    `;
   }
 
   function tableRow(u) {
     return `
       <tr class="cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:ring-inset" data-id="${escapeHtml(String(u.id))}" tabindex="0" role="link" aria-label="Editar ${escapeHtml(u.full_name || u.username)}">
-        <td class="font-mono text-xs text-slate-500">${escapeHtml(u.username)}</td>
-        <td>${escapeHtml(u.full_name)}</td>
-        <td><span class="badge bg-brand/10 text-brand">${escapeHtml(getRoleLabel(u.role))}</span></td>
-        <td>${escapeHtml(AREA_LABEL[u.area] || u.area || '—')}</td>
-        <td>${isUserActive(u.active) ? '<span class="badge bg-emerald-100 text-emerald-800">Activo</span>' : '<span class="badge bg-slate-200 text-slate-800">Inactivo</span>'}</td>
-        <td class="text-right">
-          <button class="btn btn-ghost btn-sm" data-edit>Editar</button>
-          <button class="btn btn-ghost btn-sm ${isUserActive(u.active) ? 'text-accent hover:bg-accent/10' : ''}" data-toggle>${isUserActive(u.active) ? 'Desactivar' : 'Activar'}</button>
+        <td>${personCellHtml(u)}</td>
+        <td>${roleCellHtml(u)}</td>
+        <td class="text-xs text-slate-500 whitespace-nowrap" title="${escapeHtml(formatDateTime(u.created_at))}">${escapeHtml(relativeFromNow(u.created_at) || '—')}</td>
+        <td class="text-center">${statusToggleHtml(u)}</td>
+        <td class="text-right whitespace-nowrap">
+          <button class="btn-icon-sm" data-edit title="Editar" aria-label="Editar usuario">${svg(h, ICON.edit, 'w-4 h-4').outerHTML}</button>
+          <button class="btn-icon-sm" data-roles title="Ver roles y permisos" aria-label="Ver roles y permisos">${svg(h, ICON.shield, 'w-4 h-4').outerHTML}</button>
         </td>
       </tr>
     `;
+  }
+
+  function renderMobileCard(u) {
+    const active = isUserActive(u.active);
+    const tone = ROLE_BADGE_TONE[u.role] || 'bg-slate-100 text-slate-700';
+    return h('button.card.text-left.flex.flex-col.gap-3.p-3.transition', {
+      class: 'hover:border-brand-ocean hover:shadow-card focus:outline-none focus:ring-2 focus:ring-brand-ocean/60',
+      onclick: () => onEdit(u.id),
+      'aria-label': `Editar ${escapeHtml(u.full_name || u.username)}`,
+    }, [
+      h('div.flex.items-center.gap-3', {}, [
+        renderAvatar(u, { className: 'w-10 h-10 rounded-full' }),
+        h('div.min-w-0.flex-1', {}, [
+          h('div.font-semibold.text-brand-ink.truncate', {}, escapeHtml(u.full_name || '—')),
+          h('div.text-xs.text-slate-500.truncate', {}, escapeHtml(u.email || `@${u.username}`)),
+        ]),
+      ]),
+      h('div.flex.items-center.justify-between.gap-2', {}, [
+        h('span.px-2.rounded-full.font-bold.uppercase', { class: `py-0.5 text-[10px] ${tone}` }, escapeHtml(getRoleLabel(u.role))),
+        h('span.text-xs.text-slate-500', {}, escapeHtml(AREA_LABEL[u.area] || 'Sin área')),
+      ]),
+      h('div.flex.items-center.justify-between.text-xs.text-slate-500', {}, [
+        h('span', { title: escapeHtml(formatDateTime(u.created_at)) }, `Creado ${escapeHtml(relativeFromNow(u.created_at) || '—')}`),
+        h('span.font-bold', { class: active ? 'text-brand' : 'text-slate-400' }, active ? 'ACTIVO' : 'INACTIVO'),
+      ]),
+      h('div.flex.items-center.gap-2.pt-1.border-t.border-surface-border', {}, [
+        h('button.btn.btn-secondary.btn-sm.flex-1', { type: 'button', onclick: (e) => { e.stopPropagation(); onEdit(u.id); } }, 'Editar'),
+        h('button.btn.btn-ghost.btn-sm.flex-1', {
+          type: 'button',
+          class: active ? 'text-accent hover:bg-accent/10' : '',
+          onclick: (e) => { e.stopPropagation(); onToggle(u.id); },
+        }, active ? 'Desactivar' : 'Activar'),
+      ]),
+    ]);
+  }
+
+  function getFiltered() {
+    const q = searchInput.value.trim().toLowerCase();
+    const role = roleSel.value;
+    const area = areaSel.value;
+    const status = statusSel.value;
+    return allUsers.filter((u) => {
+      if (q && !`${u.full_name} ${u.username} ${u.email || ''}`.toLowerCase().includes(q)) return false;
+      if (role && u.role !== role) return false;
+      if (area && u.area !== area) return false;
+      if (status && String(isUserActive(u.active) ? 1 : 0) !== status) return false;
+      return true;
+    });
+  }
+
+  function drawKpis() {
+    const total = allUsers.length;
+    const active = allUsers.filter((u) => isUserActive(u.active)).length;
+    const inactive = total - active;
+    const sinArea = allUsers.filter((u) => !u.area).length;
+    kpis.innerHTML = '';
+    kpis.appendChild(kpiCard({ label: 'Total personal', value: total, icon: ICON.users, tone: '' }));
+    kpis.appendChild(kpiCard({ label: 'Activos', value: active, hint: 'Cuentas habilitadas', icon: ICON.check, tone: 'good' }));
+    kpis.appendChild(kpiCard({ label: 'Inactivos', value: inactive, hint: 'Cuentas deshabilitadas', icon: ICON.x, tone: 'accent' }));
+    kpis.appendChild(kpiCard({ label: 'Sin área', value: sinArea, hint: 'Requieren asignación', icon: ICON.tag, tone: 'warn' }));
+  }
+
+  function drawRoleChips() {
+    roleChipsWrap.innerHTML = '';
+    ROLES.forEach((r) => {
+      const count = allUsers.filter((u) => u.role === r).length;
+      const chip = h('div.bg-surface.px-3.py-2.rounded-lg.border.border-surface-border.flex.items-center.gap-2', {}, [
+        h('span.w-2.h-2.rounded-full.flex-none', { class: ROLE_DOT_COLOR[r] || 'bg-slate-400' }),
+        h('div', {}, [
+          h('div.text-sm.font-medium.text-brand-ink', {}, getRoleLabel(r)),
+          h('div.text-xs.text-slate-500', {}, `${count} usuario${count === 1 ? '' : 's'}`),
+        ]),
+      ]);
+      roleChipsWrap.appendChild(chip);
+    });
+  }
+
+  function draw() {
+    ensureDataList();
+    const filtered = getFiltered();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pageItems = filtered.slice(start, start + PAGE_SIZE);
+
+    dataList.update({ loading: false, items: pageItems });
+    if (typeof window !== 'undefined' && window.matchMedia && !window.matchMedia('(max-width: 767.95px)').matches) {
+      requestAnimationFrame(() => requestAnimationFrame(wireTableRows));
+    }
+
+    const startIdx = filtered.length ? start + 1 : 0;
+    const endIdx = Math.min(start + PAGE_SIZE, filtered.length);
+    pagerInfo.textContent = filtered.length ? `Mostrando ${startIdx}–${endIdx} de ${filtered.length} usuarios` : 'Sin resultados para estos filtros.';
+    pagerPageLabel.textContent = `Página ${currentPage} de ${totalPages}`;
+    prevBtn.disabled = currentPage <= 1;
+    nextBtn.disabled = currentPage >= totalPages;
   }
 
   async function reload() {
@@ -171,15 +363,72 @@ export async function renderUsers({ user }) {
     dataList.update({ loading: true, items: [] });
     try {
       const { users } = await api.users.list();
-      currentUsers = users || [];
-      dataList.update({ loading: false, items: currentUsers });
-      // Doble rAF: primero el repaint del data-list, luego enganchamos.
-      if (typeof window !== 'undefined' && window.matchMedia && !window.matchMedia('(max-width: 767.95px)').matches) {
-        requestAnimationFrame(() => requestAnimationFrame(wireTableRows));
-      }
+      allUsers = users || [];
+      currentPage = 1;
+      drawKpis();
+      drawRoleChips();
+      draw();
     } catch (e) {
       dataList.update({ loading: false, items: [] });
       listWrap.innerHTML = `<div class="card p-8 text-center text-sm text-red-600">${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  async function doExportUsers(format) {
+    const formatLabel = format === 'pdf' ? 'PDF' : 'Excel';
+    const setBusy = (busy, label = 'Exportar') => {
+      exportBtn.disabled = busy;
+      exportBtn.setLabel(label);
+    };
+    try {
+      setBusy(true, 'Verificando…');
+      await passwordConfirmModal({
+        title: 'Confirmar exportación',
+        message: `Ingresa tu contraseña para exportar el listado de usuarios a ${formatLabel}.`,
+        confirmText: 'Exportar',
+        onConfirm: async (password) => { await verifyCurrentPassword(password); },
+      });
+      setBusy(true, 'Exportando…');
+      const rows = getFiltered().map((u) => ({
+        username: u.username,
+        full_name: u.full_name,
+        email: u.email || '',
+        role: getRoleLabel(u.role),
+        area: AREA_LABEL[u.area] || 'Sin área',
+        active: isUserActive(u.active) ? 'Activo' : 'Inactivo',
+        created_at: formatDateTime(u.created_at),
+      }));
+      if (!rows.length) { toast('No hay usuarios para exportar con los filtros actuales.', 'info'); return; }
+      const columns = [
+        { key: 'username', label: 'Usuario' },
+        { key: 'full_name', label: 'Nombre' },
+        { key: 'email', label: 'Correo' },
+        { key: 'role', label: 'Rol' },
+        { key: 'area', label: 'Área' },
+        { key: 'active', label: 'Estado' },
+        { key: 'created_at', label: 'Creado' },
+      ];
+      const stamp = new Date().toISOString().slice(0, 10);
+      const exportOpts = {
+        columns,
+        title: 'Listado de usuarios',
+        subtitle: `${rows.length} usuario${rows.length === 1 ? '' : 's'} · filtros aplicados desde /users`,
+        sheetName: 'Usuarios',
+        summaryField: 'active',
+        summaryLabel: 'Estado más frecuente',
+        generatedByName: user.full_name || user.username,
+        generatedByRole: getRoleLabel(user.role) || user.role,
+      };
+      if (format === 'pdf') {
+        await exportListToPDF(rows, columns, `usuarios-${stamp}.pdf`, exportOpts);
+      } else {
+        await exportToExcel(rows, `usuarios-${stamp}.xlsx`, exportOpts);
+      }
+      toast(`Exportados ${rows.length} usuarios a ${formatLabel}.`, 'success');
+    } catch (e) {
+      if (e && e.message !== 'Modal closed') toast(e.message || 'Error al exportar', 'error');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -229,7 +478,7 @@ function clearFieldError(input, errorEl) {
   setFieldError(input, errorEl, null);
 }
 
-function openEditModal(u, onSaved, currentUser) {
+async function openEditModal(u, onSaved, currentUser) {
   const isEdit = !!u;
 
   const username = h('input.input', {
@@ -251,6 +500,37 @@ function openEditModal(u, onSaved, currentUser) {
     h('option', { value: '' }, '— Sin área —'),
     ...AREAS.map((a) => h('option', { value: a, selected: u?.area === a ? '' : null }, AREA_LABEL[a])),
   ]);
+  // Company select: obligatorio al crear. Al editar, precargamos la empresa
+  // actual del usuario (si tiene membresía) para poder asignarle una a los
+  // usuarios creados antes de la migración multi-tenant, que quedaron sin.
+  let company = h('select.input', {}, [h('option', { value: '' }, 'Cargando empresas…')]);
+  const companyErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-edit-company-err', role: 'alert' });
+  let currentCompanyId = null;
+  if (isEdit) {
+    try {
+      const memRes = await api.companies.members.userList(u.id);
+      const memberships = memRes.memberships || [];
+      const currentMembership = memberships.find((m) => m.active) || memberships[0] || null;
+      currentCompanyId = currentMembership ? currentMembership.company_id : null;
+    } catch (e) {
+      currentCompanyId = null;
+    }
+  }
+  try {
+    const res = await api.companies.list();
+    // Mostrar solo empresas activas en el selector.
+    const comps = (res.companies || []).filter((c) => c.active);
+    const opts = [h('option', { value: '' }, isEdit
+      ? (currentCompanyId ? '— Sin cambios —' : '— Sin empresa asignada —')
+      : '— Selecciona empresa —')];
+    for (const c of comps) {
+      const selected = currentCompanyId != null && String(currentCompanyId) === String(c.id);
+      opts.push(h('option', { value: String(c.id), selected: selected ? '' : null }, c.name));
+    }
+    company = h('select.input', {}, opts);
+  } catch (e) {
+    company = h('select.input', {}, [h('option', { value: '' }, 'Error cargando empresas')]);
+  }
   if (u?.area) area.value = u.area;
   // Toggle de visibilidad de la contraseña. Devuelve el contenedor (input
   // + botón), no el input solo, para que el caller pueda meterlo en un
@@ -360,6 +640,12 @@ function openEditModal(u, onSaved, currentUser) {
     fullnameField,
     isEdit ? null : emailField,
     h('div.grid.grid-cols-2.gap-3', {}, [roleField, areaField]),
+    h('div', {}, [
+      h('label.label', {}, isEdit ? 'Empresa' : 'Empresa *'),
+      company,
+      companyErr,
+      isEdit ? h('p.text-xs.text-slate-500.mt-1', {}, 'Dejalo en "Sin cambios" si no querés modificarla. Útil para asignar empresa a usuarios creados antes de este cambio.') : null,
+    ]),
     passwordField,
     banner,
   ]);
@@ -373,6 +659,7 @@ function openEditModal(u, onSaved, currentUser) {
   wireClear(username, usernameErr);
   wireClear(fullname, fullnameErr);
   wireClear(role, roleErr);
+  if (company) wireClear(company, companyErr);
   wireClear(password, passwordErr);
 
   // Autogenerar email = `${username}@gcm.com` cada vez que cambia el
@@ -436,6 +723,14 @@ function openEditModal(u, onSaved, currentUser) {
       firstInvalid = firstInvalid || password;
     }
 
+    // Empresa: obligatoria al crear un usuario.
+    if (!isEdit) {
+      if (!company || !company.value) {
+        setFieldError(company, companyErr, 'Selecciona una empresa.');
+        firstInvalid = firstInvalid || company;
+      }
+    }
+
     // Email: siempre se autogenera a partir del username con la nomenclatura
     // ${username}@gcm.com (espejo de deriveAuthEmail en backend). El campo
     // es visible pero no editable en el modal de creación, así que nunca
@@ -450,7 +745,12 @@ function openEditModal(u, onSaved, currentUser) {
     if (firstInvalid) return { ok: false, firstInvalid };
 
     const payload = isEdit
-      ? { full_name: fullnameVal, role: roleVal, area: area.value || null }
+      ? {
+          full_name: fullnameVal,
+          role: roleVal,
+          area: area.value || null,
+          ...(company && company.value ? { company_id: Number(company.value) } : {}),
+        }
       : {
           username: username.value.trim(),
           full_name: fullnameVal,
@@ -458,6 +758,7 @@ function openEditModal(u, onSaved, currentUser) {
           area: area.value || null,
           password: passwordVal,
           email: emailVal,
+          company_id: company ? (company.value ? Number(company.value) : null) : null,
         };
     if (isEdit && passwordVal) payload.password = passwordVal;
     return { ok: true, payload };
@@ -488,6 +789,7 @@ function openEditModal(u, onSaved, currentUser) {
           await api.users.update(u.id, v.payload);
           toast('Usuario actualizado', 'success');
         } else {
+          // Incluir company_id al crear (requerido en UX).
           await api.users.create(v.payload);
           toast('Usuario creado', 'success');
         }

@@ -88,4 +88,11 @@ export function canViewAllTickets(user) { return isSAC(user) || isJefe(user); }
 // (hoy solo Miguel Flores). La guarda es defensiva: el backend vuelve a
 // validar con `requirePlatformAdmin` en cada router de /api/companies/*.
 export function isPlatformAdmin(user) { return user?.isPlatformAdmin === true; }
-export function canManageCompanies(user) { return isPlatformAdmin(user); }
+// El management de empresas lo puede hacer el platform admin o el SAC.
+export function canManageCompanies(user) { return isPlatformAdmin(user) || isSAC(user); }
+
+// Selector de empresa activa en el topbar: solo tiene sentido mostrarlo
+// cuando el user tiene más de una membresía entre las que elegir.
+export function hasMultipleCompanies(user) {
+  return Array.isArray(user?.memberships) && user.memberships.length > 1;
+}

@@ -36,7 +36,7 @@ function svgIcon(name, cls = 'w-3.5 h-3.5') {
 
 function eventNode({ icon, text, when }) {
   const wrap = h('div.chat-event', {}, [
-    h('span.inline-flex.items-center.gap-1\\.5.px-2\\.5.py-0\\.5.bg-white.border.border-surface-border.rounded-full.text-xs.text-slate-600.shadow-soft', {}, [
+    h('span.inline-flex.items-center.bg-white.border.border-surface-border.rounded-full.text-xs.text-slate-600.shadow-soft', { class: 'gap-1.5 px-2.5 py-0.5' }, [
       svgIcon(icon),
       // text-slate-500 — WCAG AA: el timestamp relativo en eventos de chat es texto.
       h('span', { html: `${escapeHtml(text)} · <span class="text-slate-500">${escapeHtml(relativeFromNow(when))}</span>` }),
@@ -98,10 +98,10 @@ export function renderChat({ ticket, user, onRefresh }) {
       const author = c.user_name || 'Usuario';
       const wrap = h('div.flex.items-start.gap-2', { class: mine ? 'flex-row-reverse' : '' }, [
         avatarOf({ id: c.user_id, full_name: author }),
-        h('div.flex.flex-col.gap-1.max-w-\\[80%\\]', { class: mine ? 'items-end' : '' }, [
+        h('div.flex.flex-col.gap-1', { class: mine ? 'items-end max-w-[80%]' : 'max-w-[80%]' }, [
           h('div.flex.items-center.gap-2.text-xs.text-slate-500', { class: mine ? 'flex-row-reverse' : '' }, [
             h('span.font-medium.text-slate-700', {}, author),
-            h('span.px-1\\.5.py-0\\.5.bg-slate-100.rounded.text-\\[10px\\].text-slate-600', {}, ROLE_LABEL[c.user_role] || c.user_role),
+            h('span.bg-slate-100.rounded.text-slate-600', { class: 'px-1.5 py-0.5 text-[10px]' }, ROLE_LABEL[c.user_role] || c.user_role),
             h('span', { title: formatDateTime(c.created_at) }, relativeFromNow(c.created_at)),
           ]),
           h('div.chat-bubble', { class: mine ? 'chat-bubble-me' : 'chat-bubble-other' }, c.comment),

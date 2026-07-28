@@ -81,6 +81,14 @@ const PERMISSION_GROUPS = [
   },
 ];
 
+// Ícono por grupo — el "Otros" (huérfanos) no está listado a propósito,
+// usa el fallback ICON.tag en renderPermissionGroups.
+const GROUP_ICON = {
+  Tickets: ICON.ticket,
+  Administración: ICON.users,
+  Reportes: ICON.report,
+};
+
 // ── Estado interno del módulo ──────────────────────────────────────────────
 // Permisos efectivos leídos del backend (fuente de verdad).
 let current = null;
@@ -192,7 +200,7 @@ export async function renderRoles({ user }) {
   ]));
 
   // Contenedor principal: card del rol activo + panel lateral
-  const main = h('div.grid.grid-cols-1.lg\\:grid-cols-[1fr_360px].gap-4', {});
+  const main = h('div.grid.grid-cols-1.gap-4', { class: 'lg:grid-cols-[1fr_360px]' });
   root.appendChild(main);
 
   // Columna principal: tabs + card del rol activo
@@ -200,7 +208,7 @@ export async function renderRoles({ user }) {
   main.appendChild(primary);
 
   // Tabs de roles (se llena tras la carga)
-  const tabsBar = h('div.flex.gap-1.border-b.border-surface-border.overflow-x-auto', {
+  const tabsBar = h('div.flex.gap-2.overflow-x-auto.pb-1', {
     role: 'tablist',
     'aria-label': 'Roles',
   });
@@ -242,8 +250,8 @@ export async function renderRoles({ user }) {
           h('div.text-amber-700', {}, `${who} cambió el nombre a «${newLabel}» mientras editabas. Recarga para ver el cambio o descarta tu edición.`),
         ]));
         conflictBanner.appendChild(h('div.flex.gap-2.flex-none', {}, [
-          h('button.btn.btn-ghost.btn-sm.py-2.min-h-\\[36px\\]', { onclick: () => cancelEditLabel(role) }, 'Descartar'),
-          h('button.btn.btn-primary.btn-sm.py-2.min-h-\\[36px\\]', { onclick: refresh }, 'Recargar'),
+          h('button.btn.btn-ghost.btn-sm.py-2', { class: 'min-h-[36px]', onclick: () => cancelEditLabel(role) }, 'Descartar'),
+          h('button.btn.btn-primary.btn-sm.py-2', { class: 'min-h-[36px]', onclick: refresh }, 'Recargar'),
         ]));
       }
       return;
@@ -274,8 +282,8 @@ export async function renderRoles({ user }) {
         h('div.text-amber-700', {}, `${who} actualizó los permisos del sistema mientras editabas. Recarga para ver los cambios actuales o descarta los tuyos.`),
       ]));
       conflictBanner.appendChild(h('div.flex.gap-2.flex-none', {}, [
-        h('button.btn.btn-ghost.btn-sm.py-2.min-h-\\[36px\\]', { onclick: discard }, 'Descartar'),
-        h('button.btn.btn-primary.btn-sm.py-2.min-h-\\[36px\\]', { onclick: refresh }, 'Recargar'),
+        h('button.btn.btn-ghost.btn-sm.py-2', { class: 'min-h-[36px]', onclick: discard }, 'Descartar'),
+        h('button.btn.btn-primary.btn-sm.py-2', { class: 'min-h-[36px]', onclick: refresh }, 'Recargar'),
       ]));
     }
   };
@@ -347,7 +355,8 @@ export async function renderRoles({ user }) {
   };
   document.addEventListener('keydown', onKey);
 
-  // ── Render: tabs ────────────────────────────────────────────────────────
+  // ── Render: tabs (píldoras, no se puede "agregar rol" — los 4 roles son
+  // un enum fijo del backend, no entidades creables por el usuario) ───────
   function renderTabs() {
     tabsBar.innerHTML = '';
     const usersLoaded = usersCache.isLoaded();
@@ -360,10 +369,10 @@ export async function renderRoles({ user }) {
         'aria-selected': String(isActive),
         'data-tab-role': role,
         class: [
-          'flex items-center gap-2 px-4 py-2.5 -mb-px border-b-2 text-sm font-medium transition whitespace-nowrap',
+          'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm transition whitespace-nowrap flex-none',
           isActive
-            ? 'border-brand-ocean text-brand-ink font-semibold'
-            : 'border-transparent text-slate-500 hover:text-brand-ink hover:border-surface-border',
+            ? 'bg-brand text-white font-bold shadow-card'
+            : 'bg-surface-alt text-slate-600 font-medium hover:bg-surface-border',
         ],
         onclick: () => {
           if (editingLabels.has(role)) return; // no cambiar de tab mientras edita un label
@@ -373,9 +382,11 @@ export async function renderRoles({ user }) {
         },
       }, [
         h('span', {}, getRoleLabel(role)),
-        h('span.badge.bg-surface-alt.text-brand-ink.text-\\[11px\\]', { 'data-role-count': '', title: usersLoaded
-            ? `${count} ${count === 1 ? 'usuario' : 'usuarios'} con este rol`
-            : 'Cargando usuarios…' }, usersLoaded ? String(count) : '…'),
+        h('span.rounded-full.px-2', {
+          class: `py-0.5 text-[11px] ${isActive ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`,
+          'data-role-count': '',
+          title: usersLoaded ? `${count} ${count === 1 ? 'usuario' : 'usuarios'} con este rol` : 'Cargando usuarios…',
+        }, usersLoaded ? String(count) : '…'),
       ]);
       tabsBar.appendChild(tab);
     }
@@ -397,7 +408,7 @@ export async function renderRoles({ user }) {
 
     const card = h('div.card.p-0.overflow-hidden', {}, [
       // Cabecera: label editable + descripción + acciones del rol
-      h('div.px-5.py-4.border-b.border-surface-border.bg-surface\\/40', {}, [
+      h('div.px-5.py-4.border-b.border-surface-border', { class: 'bg-surface/40' }, [
         h('div.flex.items-start.justify-between.gap-3', {}, [
           h('div.min-w-0.flex-1', {}, [
             h('div.flex.items-center.gap-2.flex-wrap', {}, [
@@ -409,15 +420,16 @@ export async function renderRoles({ user }) {
                   ? count === 1 ? 'usuario' : 'usuarios'
                   : 'usuarios',
               ]),
-              h('span.badge.bg-brand-ocean\\/10.text-brand-ocean', {}, [
+              h('span.badge', { class: 'bg-brand-ocean/10 text-brand-ocean' }, [
                 `${enabledCount}/${PERMISSION_KEYS.length} permisos`,
               ]),
             ]),
             h('p.text-xs.text-slate-500.mt-1', {}, ROLE_DESCRIPTIONS[role] || ''),
           ]),
         ]),
-        h('div.flex.items-center.gap-2.mt-3.flex-wrap', {}, [
-          h('button.btn.btn-ghost.btn-sm', {
+        h('div.flex.items-center.gap-1.mt-3.flex-wrap', {}, [
+          h('button.flex.items-center.rounded-lg.text-sm.font-medium.text-brand-ocean.transition', {
+            class: 'gap-1.5 px-3 py-1.5 hover:bg-brand-ocean/10',
             type: 'button',
             onclick: () => disableRole(role),
             title: 'Apagar todos los permisos de este rol — cambio sin guardar',
@@ -425,21 +437,14 @@ export async function renderRoles({ user }) {
             svg(h, ICON.alert, 'w-4 h-4'),
             h('span', {}, 'Apagar todo'),
           ]),
-          h('button.btn.btn-ghost.btn-sm', {
+          h('button.flex.items-center.rounded-lg.text-sm.font-medium.text-brand-ocean.transition', {
+            class: 'gap-1.5 px-3 py-1.5 hover:bg-brand-ocean/10',
             type: 'button',
             onclick: () => resetRole(role),
             title: 'Restaurar los permisos al estado actual del servidor',
           }, [
             svg(h, ICON.refresh, 'w-4 h-4'),
             h('span', {}, 'Restaurar'),
-          ]),
-          h('button.btn.btn-ghost.btn-sm.text-accent.hover\\:bg-accent\\/10', {
-            type: 'button',
-            onclick: () => openReassignWizard({ type: 'role', target: role }),
-            title: 'Eliminar este rol y reasignar sus usuarios',
-          }, [
-            svg(h, ICON.trash, 'w-4 h-4'),
-            h('span', {}, 'Eliminar rol…'),
           ]),
         ]),
       ]),
@@ -460,11 +465,12 @@ export async function renderRoles({ user }) {
       groups.push({ title: 'Otros', description: 'Permisos sin categoría asignada.', perms: orphans });
     }
     return groups.map((g) => h('div', {}, [
-      h('div.flex.items-baseline.gap-2.mb-2', {}, [
-        h('h3.text-\\[11px\\].font-semibold.text-brand-ink.uppercase.tracking-wider', {}, g.title),
-        h('span.text-\\[11px\\].text-slate-500', {}, g.description),
+      h('div.flex.items-center.gap-2.pb-2.mb-2.border-b.border-surface-border', {}, [
+        svg(h, GROUP_ICON[g.title] || ICON.tag, 'w-5 h-5 text-brand flex-none'),
+        h('h3.font-bold.text-brand-ink', {}, g.title),
       ]),
-      h('div.flex.flex-col.gap-2', {},
+      h('p.text-xs.text-slate-500.mb-2.-mt-1', {}, g.description),
+      h('div.flex.flex-col.gap-1.role-perm-zebra', {},
         g.perms.map((p) => renderPermRow({ role, perm: p, perms, currentPerms })),
       ),
     ]));
@@ -480,7 +486,8 @@ export async function renderRoles({ user }) {
     if (!edit) {
       return h('div.flex.items-center.gap-1', {}, [
         h('h2.text-base.font-semibold.text-brand-ink', { 'data-role-label': role }, getRoleLabel(role)),
-        h('button.btn.btn-ghost.btn-sm.p-1.min-h-\\[36px\\].min-w-\\[36px\\]', {
+        h('button.btn.btn-ghost.btn-sm.p-1', {
+          class: 'min-h-[36px] min-w-[36px]',
           type: 'button',
           'aria-label': `Editar nombre del rol ${getRoleLabel(role)}`,
           title: 'Editar nombre del rol',
@@ -504,7 +511,8 @@ export async function renderRoles({ user }) {
             else if (e.key === 'Escape') { e.preventDefault(); cancelEditLabel(role); }
           },
         }),
-        h('button.btn.btn-primary.btn-sm.py-2.min-h-\\[36px\\]', {
+        h('button.btn.btn-primary.btn-sm.py-2', {
+          class: 'min-h-[36px]',
           type: 'button',
           'aria-label': 'Guardar nombre del rol',
           disabled: edit.saving,
@@ -512,7 +520,8 @@ export async function renderRoles({ user }) {
         }, edit.saving
           ? [svg(h, ICON.spinner, 'w-4 h-4 animate-spin')]
           : [svg(h, ICON.check, 'w-4 h-4')]),
-        h('button.btn.btn-ghost.btn-sm.py-2.min-h-\\[36px\\]', {
+        h('button.btn.btn-ghost.btn-sm.py-2', {
+          class: 'min-h-[36px]',
           type: 'button',
           'aria-label': 'Cancelar edición',
           disabled: edit.saving,
@@ -604,7 +613,7 @@ export async function renderRoles({ user }) {
     const label = PERMISSION_LABELS[perm] || perm;
     const desc = PERMISSION_DESCRIPTIONS[perm] || '';
 
-    return h('div.flex.items-start.gap-3.px-3.py-3.rounded-md.border.border-surface-border\\/70.bg-white', {
+    return h('div.flex.items-start.gap-3.px-3.py-3.rounded-md.transition-colors', {
       class: changed ? 'ring-2 ring-amber-200' : '',
       'data-perm-row': perm,
     }, [
@@ -612,16 +621,17 @@ export async function renderRoles({ user }) {
       h('div.flex-1.min-w-0', {}, [
         h('div.flex.items-center.gap-2.flex-wrap', {}, [
           h('div.text-sm.font-semibold.text-brand-ink', {}, label),
-          isCritical ? h('span.badge.bg-accent\\/10.text-accent.text-\\[10px\\]', {}, 'Crítico') : null,
-          changed ? h('span.badge.bg-amber-100.text-amber-800.text-\\[10px\\]', {}, wasOn ? 'Se desactiva' : 'Se activa') : null,
+          isCritical ? h('span.badge.font-bold', { class: 'bg-accent/10 text-accent text-[10px]' }, [svg(h, ICON.alert, 'w-3 h-3'), h('span', {}, 'Crítico')]) : null,
+          changed ? h('span.badge', { class: 'bg-amber-100 text-amber-800 text-[10px]' }, wasOn ? 'Se desactiva' : 'Se activa') : null,
         ]),
         h('p.text-xs.text-slate-500.mt-1', {}, desc),
       ]),
       // Col der: toggle + delete
       h('div.flex.items-center.gap-2.flex-none', {}, [
-        h('div.text-\\[11px\\].text-slate-500.w-20.text-right', {}, isOn ? 'Permiso activo' : 'Inactivo'),
+        h('div.text-slate-500.w-20.text-right', { class: 'text-[11px]' }, isOn ? 'Permiso activo' : 'Inactivo'),
         renderToggle({ role, perm, isOn, changed, wasOn }),
-        h('button.btn-icon-sm.text-slate-400.hover\\:text-accent.hover\\:bg-accent\\/10', {
+        h('button.btn-icon-sm.text-slate-400', {
+          class: 'hover:text-accent hover:bg-accent/10',
           type: 'button',
           'aria-label': `Eliminar permiso ${label}`,
           title: 'Eliminar este permiso y reemplazarlo en los roles que lo usan',
@@ -636,7 +646,7 @@ export async function renderRoles({ user }) {
   // para cumplir WCAG 2.5.5 (44×44) sin alterar el visual.
   function renderToggle({ role, perm, isOn, changed, wasOn }) {
     const bgClass = isOn ? 'bg-brand-navy' : 'bg-slate-300';
-    return h('button.relative.inline-flex.items-center.w-9.h-5.rounded-full.transition-colors.focus\\:outline-none.focus\\:ring-2.focus\\:ring-brand-ocean\\/60.focus\\:ring-offset-1.before\\:absolute.before\\:inset-y-0.before\\:-inset-x-2.before\\:content-[""]', {
+    return h('button.relative.inline-flex.items-center.w-9.h-5.rounded-full.transition-colors', {
       role: 'switch',
       type: 'button',
       'aria-checked': String(isOn),
@@ -644,7 +654,12 @@ export async function renderRoles({ user }) {
       title: changed
         ? `${PERMISSION_LABELS[perm]}: ${wasOn ? 'sí' : 'no'} → ${isOn ? 'sí' : 'no'} — cambio sin guardar`
         : `${PERMISSION_LABELS[perm]}: ${isOn ? 'sí' : 'no'}`,
-      class: [bgClass, changed ? 'ring-2 ring-amber-400 ring-offset-1' : ''],
+      class: [
+        bgClass,
+        changed ? 'ring-2 ring-amber-400 ring-offset-1' : '',
+        'focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:ring-offset-1',
+        "before:absolute before:inset-y-0 before:-inset-x-2 before:content-['']",
+      ],
       onclick: () => togglePerm(role, perm),
     }, [
       h('span.inline-block.w-4.h-4.bg-white.rounded-full.shadow-soft.transform.transition-transform', {
@@ -702,14 +717,19 @@ export async function renderRoles({ user }) {
     const affected = totalAffected();
 
     pendingCard.appendChild(h('div.p-4.border-b.border-surface-border', {}, [
-      h('div.flex.items-center.justify-between', {}, [
-        h('div', {}, [
-          h('div.label.text-slate-500', {}, 'Cambios pendientes'),
-          h('div.text-base.font-semibold.text-brand-ink', {}, dirty
-            ? `${changes.length} ${changes.length === 1 ? 'cambio' : 'cambios'} · ${affected} ${affected === 1 ? 'persona afectada' : 'personas afectadas'}`
-            : 'Sin cambios pendientes'),
+      h('div.flex.items-center.gap-2.mb-3', {}, [
+        svg(h, ICON.clock, 'w-5 h-5 text-brand'),
+        h('h4.font-bold.text-brand-ink', {}, 'Cambios pendientes'),
+      ]),
+      h('div.rounded-lg.p-3.border', { class: 'bg-brand/5 border-brand/10' }, [
+        h('div.flex.justify-between.items-center.mb-1', {}, [
+          h('span.text-sm.font-medium.text-slate-500', {}, 'Usuarios afectados'),
+          h('span.font-bold.text-brand-ink', {}, String(affected)),
         ]),
-        dirty ? h('span.badge.bg-amber-100.text-amber-800', {}, 'Sin guardar') : h('span.badge.bg-emerald-100.text-emerald-800', {}, 'Sincronizado'),
+        h('div.flex.justify-between.items-center', {}, [
+          h('span.text-sm.font-medium.text-slate-500', {}, 'Total cambios'),
+          h('span.font-bold.text-brand-ink', {}, String(changes.length)),
+        ]),
       ]),
     ]));
 
@@ -724,28 +744,28 @@ export async function renderRoles({ user }) {
         if (!byRole.has(c.role)) byRole.set(c.role, []);
         byRole.get(c.role).push(c);
       }
+      let firstGroup = true;
       for (const role of ROLE_ORDER) {
         const list_ = byRole.get(role);
         if (!list_) continue;
-        list.appendChild(h('div.mb-3.last\\:mb-0', {}, [
-          h('div.text-\\[11px\\].uppercase.tracking-wider.text-slate-500.font-semibold.mb-1.5', {}, getRoleLabel(role)),
+        list.appendChild(h('div.mb-3', {
+          class: firstGroup ? '' : 'pt-3 border-t border-surface-border/50',
+        }, [
+          h('p.font-bold.uppercase.tracking-wider.text-slate-500', { class: 'text-[11px] mb-1.5' }, `Rol: ${getRoleLabel(role)}`),
           ...list_.map((c) => {
             const isCritical = CRITICAL_PERMS.has(c.perm);
-            return h('div.flex.items-start.gap-2.py-1.text-sm', {}, [
-              h('span', { class: `mt-1 w-1.5 h-1.5 rounded-full flex-none ${c.to ? 'bg-emerald-500' : isCritical ? 'bg-accent' : 'bg-slate-400'}` }),
-              h('div.flex-1.min-w-0', {}, [
-                h('div.text-brand-ink', {}, [
-                  h('span', {}, c.to ? 'Activar' : 'Desactivar'),
-                  h('span.text-slate-500', {}, ' · '),
-                  h('span.font-medium', {}, PERMISSION_LABELS[c.perm]),
-                ]),
-                h('div.text-\\[11px\\].text-slate-500', {}, c.affectedUsers === 0
-                  ? 'Aplica al definir; aún no hay usuarios con este rol.'
+            return h('div.bg-white.p-2.rounded-lg.border.border-surface-border.shadow-soft.flex.items-start.gap-2', { class: 'mt-1.5' }, [
+              svg(h, c.to ? ICON.check : ICON.x, `w-4 h-4 flex-none mt-0.5 ${c.to ? 'text-emerald-600' : isCritical ? 'text-accent' : 'text-slate-400'}`),
+              h('div.min-w-0', {}, [
+                h('p.font-bold.text-sm.text-brand-ink', {}, `${c.to ? 'Activar' : 'Desactivar'} ${PERMISSION_LABELS[c.perm]}`),
+                h('p.text-slate-500', { class: 'text-[11px]' }, c.affectedUsers === 0
+                  ? 'Aún no hay usuarios con este rol.'
                   : `Afecta a ${c.affectedUsers} ${c.affectedUsers === 1 ? 'persona' : 'personas'}.`),
               ]),
             ]);
           }),
         ]));
+        firstGroup = false;
       }
     }
     pendingCard.appendChild(list);
@@ -755,7 +775,7 @@ export async function renderRoles({ user }) {
     const discardBtn = h('button.btn.btn-ghost.flex-1', {
       onclick: discard,
       disabled: !dirty,
-    }, 'Descartar');
+    }, 'Descartar todo');
     const saveBtn = h('button.btn.flex-1', {
       class: [dirty ? 'btn-accent' : 'btn-primary', 'opacity-100'],
       onclick: save,
@@ -770,6 +790,16 @@ export async function renderRoles({ user }) {
     if (!errEl.classList.contains('hidden')) {
       pendingCard.appendChild(errEl);
     }
+
+    // Nota informativa — real: los cambios guardados se aplican al toggle
+    // (PATCH inmediato) y se notifican por socket a otras sesiones abiertas
+    // (ver onRealtime → 'role:permissions_updated' arriba).
+    pendingCard.appendChild(h('div.rounded-xl.border.p-3.mt-3', { class: 'bg-brand-ocean/10 border-brand-ocean/20' }, [
+      h('div.flex.gap-2', {}, [
+        svg(h, ICON.help, 'w-4 h-4 text-brand-ocean flex-none mt-0.5'),
+        h('p.text-xs.text-brand-ink', {}, 'Los cambios guardados se aplican de inmediato para todos los usuarios del rol. Se recomienda avisar antes de aplicar cambios críticos.'),
+      ]),
+    ]));
   }
 
   // ── Render: footer ─────────────────────────────────────────────────────
@@ -938,7 +968,7 @@ function openReassignWizard({ type, target }) {
   let chosen = null; // alternativa elegida en paso 1
 
   // ── Render del paso ────────────────────────────────────────────────────
-  const stepIndicator = (n) => h('span.font-mono.text-\\[10px\\].text-slate-500.tabular-nums', {}, `0${n}`);
+  const stepIndicator = (n) => h('span.font-mono.text-slate-500.tabular-nums', { class: 'text-[10px]' }, `0${n}`);
   const step1 = h('div', {});
   const step2 = h('div.hidden', {});
 

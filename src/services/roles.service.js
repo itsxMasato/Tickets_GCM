@@ -274,8 +274,13 @@ async function deleteRole(role, body, user) {
     await Promise.all(affectedUsers.map((u) => firestoreData.updateUser(u.id, { role: reassignTo })));
   }
 
-  // Borrar el doc de permisos del rol.
-  await db.collection('role_permissions').doc(role).delete();
+  // Regla de negocio: nada se elimina de verdad, todo se deshabilita.
+  // En la practica este punto es inalcanzable hoy (assertRoleDeletable
+  // bloquea los 4 roles reales mas arriba), pero si en el futuro se
+  // habilitara un rol no protegido, esto no debe borrar el documento —
+  // solo lo vacia (el rol vuelve a resolver contra los permisos por
+  // defecto, sin perder el documento en si).
+  await db.collection('role_permissions').doc(role).set({});
 
   // Audit log.
   await auditService.logAsync({

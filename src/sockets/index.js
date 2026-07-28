@@ -24,6 +24,14 @@ function setup(httpServer, sessionMiddleware) {
       socket.join('sac');
     }
     socket.join(`user:${session.userId}`);
+    // Empresa activa: hasta ahora se emitía a `company:{id}` (ver
+    // memberships.service.js) pero nadie se unía a esa sala — los eventos
+    // se perdían en silencio. Un usuario reconecta el socket al cambiar de
+    // empresa activa (ver client/components/company-switcher.js), así que
+    // esta sala siempre refleja la sesión vigente.
+    if (session.activeCompanyId) {
+      socket.join(`company:${session.activeCompanyId}`);
+    }
 
     socket.on('disconnect', () => {});
   });

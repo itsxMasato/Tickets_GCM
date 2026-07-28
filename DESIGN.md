@@ -195,7 +195,7 @@ The project uses a documented three-step radius scale. Pick the right one by sur
 | Buttons, inputs, chips, sidebar links | 8px | `rounded-md` | Tight enough to feel operational, soft enough to avoid 2003-era sharp corners. |
 | Standard cards, KPI cards, table wrappers, modals | 12px | `rounded-xl` | Default for any surface that holds content. Reads as "container, not button." |
 | Login card, feature surfaces that frame the product | 16px | `rounded-2xl` | Reserved for the cinematic moment (login) and any "this is the product" hero surface. |
-| Login card (current implementation) | 32px | `rounded-[2rem]` | One documented exception. The login card sits alone on a hero, so a softer radius reinforces the "moment" read. If a second card ever uses this radius, promote it to `rounded-3xl` in the token map. |
+| Login glass panel (current implementation) | 0 (edge-to-edge) | none | Documented exception. The panel is the entire left column of the login screen, flush with the viewport on every side it touches — a floating rounded card would fight that full-bleed read. The right border against the context panel is the only seam. |
 
 **The Consistency Rule.** Never mix radii inside one component. A button sitting on a 32px card is still 8px; a card inside a 16px surface is still 12px. Mixed-radius compositions are an AI-tell.
 
@@ -241,10 +241,10 @@ The project uses a documented three-step radius scale. Pick the right one by sur
 ### Don't:
 - **Don't** use side-stripe borders (`border-left` > 1px as a colored accent) on cards, list items, or alerts. Rewrite with full borders, background tints, or leading numbers.
 - **Don't** use gradient text. `background-clip: text` is decorative, never meaningful. Use a single solid color.
-- **Don't** use glassmorphism as a default. Glass is reserved for the login card and nowhere else.
-  - **Scope rule:** the `.login-card` translucent surface is the **only** sanctioned glass surface in the project. If a new surface needs the same treatment (a "premium" modal, a settings drawer), it does not get glass — it gets a solid surface with the same brand palette.
-  - **Honesty rule:** the login card's `backdrop-filter` is a **web approximation of glassmorphism**, not Apple Liquid Glass. Apple documents Liquid Glass for Apple platforms only. Comments in `styles.css` already call this out.
-  - **Accessibility rule:** any glass surface must provide a `prefers-reduced-transparency: reduce` fallback to a solid surface with the same contrast budget. The login card falls back to `rgba(7, 29, 76, 0.88)` (brand-navy at 88% alpha) when the user reduces transparency.
+- **Don't** use glassmorphism as a default. Glass is reserved for the login screen and nowhere else.
+  - **Scope rule:** the `.login-glass-panel` translucent surface (the full left column of the login screen — brand, form, and legal footer share one continuous pane, not a floating card) is the **only** sanctioned glass surface in the project. If a new surface needs the same treatment (a "premium" modal, a settings drawer), it does not get glass — it gets a solid surface with the same brand palette. Form fields inside the glass panel are the exception to the exception: they use the same opaque white `.input` as the rest of the app, because a translucent field loses legibility exactly where legibility matters most.
+  - **Honesty rule:** the login panel's `backdrop-filter` is a **web approximation of glassmorphism**, not Apple Liquid Glass. Apple documents Liquid Glass for Apple platforms only. Comments in `styles.css` already call this out.
+  - **Accessibility rule:** any glass surface must provide a `prefers-reduced-transparency: reduce` fallback to a solid surface with the same contrast budget. The login panel falls back to `rgba(7, 29, 76, 0.94)` (brand-navy) when the user reduces transparency.
 - **Don't** ship a hero-metric template (big number + small label + supporting stats + gradient accent) on every screen. KPIs belong on the dashboard, not on every page.
 - **Don't** use the same dashboard layout for all four roles. Triage, execution, audit, and capture are different jobs.
 - **Don't** use celebratory copy ("🎉 Ticket cerrado!") or friendly exclamation marks. This is an internal tool.

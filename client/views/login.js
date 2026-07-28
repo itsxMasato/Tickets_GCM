@@ -77,7 +77,9 @@ export async function renderLogin({ params, query, onLogin }) {
   const grid = h('div.login-grid', {});
 
   // ── Panel de tarea (60% en desktop) ─────────────────────────────────
-  const aside = h('div.login-aside', {});
+  // El aside ES el panel de vidrio completo (de canto a canto, sin card
+  // anidado) — el video respira detrás de la marca, el form y el pie por igual.
+  const aside = h('div.login-aside.login-glass-panel', {});
   const asideInner = h('div.login-aside-inner', {});
 
   // Brand arriba — sin ubicación específica.
@@ -87,14 +89,15 @@ export async function renderLogin({ params, query, onLogin }) {
     location: 'Acceso corporativo seguro',
   }));
 
-  // Card glass con el form
-  const card = h('div.login-card.p-7.sm\\:p-9', {});
-  const cardHead = h('div.login-card-head', {}, [
+  // Grupo del form — agrupa cabecera + campos para la distribución
+  // justify-between del aside; no lleva fondo propio (lo da el panel).
+  const formGroup = h('div.flex.flex-col.gap-6.max-w-md', {});
+  const cardHead = h('div.login-form-head', {}, [
     h('div.eyebrow', {}, 'Acceso corporativo'),
     h('h2', {}, 'Iniciar sesión'),
     h('p', {}, 'Ingresa con tus credenciales corporativas para gestionar tickets, reportes y asignaciones.'),
   ]);
-  card.appendChild(cardHead);
+  formGroup.appendChild(cardHead);
 
   const state = { attempts: 0, busy: false };
 
@@ -147,8 +150,8 @@ export async function renderLogin({ params, query, onLogin }) {
   const submit = PrimaryButton({ label: 'Ingresar', loadingLabel: 'Verificando…' });
   form.appendChild(submit);
 
-  // Foot del card: cifrado + caducidad + términos
-  const foot = h('div.login-card-foot', {}, [
+  // Foot del form: cifrado + caducidad + términos
+  const foot = h('div.login-form-foot', {}, [
     h('span.lock-dot', { 'aria-hidden': 'true' }),
     h('span', {}, [
       'Conexión cifrada TLS · La sesión caduca a los 7 días. ',
@@ -160,8 +163,12 @@ export async function renderLogin({ params, query, onLogin }) {
   ]);
   form.appendChild(foot);
 
-  card.appendChild(form);
-  asideInner.appendChild(card);
+  formGroup.appendChild(form);
+  // El form se centra en el espacio libre entre la marca y el pie, en vez
+  // de que justify-between lo separe a golpes de "espacio muerto" repartido.
+  const formCenter = h('div.flex-1.flex.flex-col.justify-center.min-h-0', {});
+  formCenter.appendChild(formGroup);
+  asideInner.appendChild(formCenter);
 
   // Pie del aside: status del sistema + atajo al centro de ayuda.
   // Sin teléfono ni correo: el usuario ya está en una sesión autenticable,
@@ -182,27 +189,31 @@ export async function renderLogin({ params, query, onLogin }) {
 
   const sideHead = h('div', {}, [
     h('span.login-side-eyebrow', {}, 'Operación'),
-    h('h2', {}, 'Una vista del ciclo completo de tickets.'),
-    h('p.login-side-lede', {}, 'Tiempos claros, flujo visible y trazabilidad por ticket. Diseñado para que cada rol vea solo lo que le corresponde.'),
+    h('h2', {}, 'Del reporte en planta al cierre, sin perder el hilo.'),
+    h('p.login-side-lede', {}, 'Reporta, asigna y da seguimiento a cada solicitud con el respaldo del historial completo. Nada se resuelve a ciegas.'),
   ]);
   sideInner.appendChild(sideHead);
 
   const capList = h('div.flex.flex-col.gap-1.max-w-md', {}, [
     Capability({
-      title: 'Cuatro roles con vistas dedicadas',
-      subtitle: 'Triage, ejecución, auditoría y captura. Cada equipo ve solo lo que le corresponde.',
+      icon: 'pin',
+      title: 'Reporta en segundos, incluso sin señal',
+      subtitle: 'Levanta una incidencia desde el campo y queda lista para asignarse en cuanto haya conexión.',
     }),
     Capability({
-      title: 'Trazabilidad completa del ciclo',
-      subtitle: 'Estados, comentarios y adjuntos quedan registrados en el historial del ticket.',
+      icon: 'send',
+      title: 'Llega a quien debe resolverla',
+      subtitle: 'Cada solicitud se dirige directo al área responsable, sin cadenas de correos ni llamadas cruzadas.',
     }),
     Capability({
-      title: 'Reportes y exportación',
-      subtitle: 'Excel y PDF con los datos vivos al momento del cierre.',
+      icon: 'link',
+      title: 'Nada se pierde en el camino',
+      subtitle: 'Cada cambio, comentario y archivo queda ligado a su ticket, del primer reporte al cierre.',
     }),
     Capability({
-      title: 'Respaldo y cifrado',
-      subtitle: 'Conexión cifrada TLS y caducidad de sesión a los 7 días.',
+      icon: 'report',
+      title: 'Datos listos para decidir',
+      subtitle: 'Exporta reportes en Excel o PDF con la información real al momento del cierre.',
     }),
   ]);
   sideInner.appendChild(capList);
@@ -211,8 +222,8 @@ export async function renderLogin({ params, query, onLogin }) {
   // (filtrarían entorno y zona); sin nombre de equipo interno.
   const sideFoot = h('div.login-side-foot', {}, [
     h('div.flex.items-center.gap-2.normal-case.tracking-normal', {}, [
-      svg(h, 'shield', 'w-3.5 h-3.5 text-white\\/40'),
-      h('span.normal-case.tracking-normal.text-\\[11px\\].text-white\\/65', {}, 'Plataforma de tickets · v1'),
+      svg(h, 'shield', 'w-3.5 h-3.5 text-white/40'),
+      h('span.normal-case.tracking-normal', { class: 'text-[11px] text-white/65' }, 'Plataforma de tickets · v1'),
     ]),
   ]);
   sideInner.appendChild(sideFoot);
@@ -326,7 +337,7 @@ export async function renderLogin({ params, query, onLogin }) {
       s.appendChild(p);
       submit.appendChild(s);
     }
-    const text = h('span.tracking-\\[0\\.005em\\]', {}, b ? 'Verificando…' : 'Ingresar');
+    const text = h('span', { class: 'tracking-[0.005em]' }, b ? 'Verificando…' : 'Ingresar');
     submit.appendChild(text);
   }
 

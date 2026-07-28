@@ -98,6 +98,7 @@ async function dashboard() {
       id: Number(id) || id,
       full_name: users[id]?.full_name || null,
       area: users[id]?.area || '',
+      avatar_url: users[id]?.avatar_url || null,
       c,
     }))
     .sort((a, b) => b.c - a.c);

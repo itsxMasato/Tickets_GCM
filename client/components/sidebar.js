@@ -18,7 +18,8 @@ function icon(path, cls = 'sidebar-icon') {
 
 function sectionIcon(path) {
   // Icono más pequeño y de menor opacidad para headers de sección.
-  return h('svg.w-3.5.h-3.5.flex-none.opacity-70', {
+  return h('svg.flex-none.opacity-70', {
+    class: 'w-3.5 h-3.5',
     xmlns: 'http://www.w3.org/2000/svg',
     fill: 'none', stroke: 'currentColor', 'stroke-width': '2',
     viewBox: '0 0 24 24',
@@ -161,7 +162,7 @@ export function renderSidebar({ user, onClose }) {
       ]),
       h('div.sidebar-brand-meta.min-w-0', {}, [
         h('div.font-bold.leading-tight.truncate', {}, 'GCM Tickets'),
-        h('div.text-[11px].text-white/60.leading-tight.truncate', {}, 'Servicio al cliente'),
+        h('div.leading-tight.truncate', { class: 'text-[11px] text-white/60' }, 'Servicio al cliente'),
       ]),
     ]),
 
@@ -175,7 +176,7 @@ export function renderSidebar({ user, onClose }) {
           sectionIconPath ? sectionIcon(sectionIconPath) : null,
           h('span', {}, section.title),
         ]),
-        h('div.flex.flex-col.gap-0.5.px-2', {}, items.map((item) => {
+        h('div.flex.flex-col.px-2', { class: 'gap-0.5' }, items.map((item) => {
           const active = item.match(p);
           return h('button', {
             class: ['sidebar-link', active ? 'active' : ''],
@@ -190,7 +191,6 @@ export function renderSidebar({ user, onClose }) {
           }, [
             icon(item.icon),
             h('span', {}, item.label),
-            active ? h('span.sidebar-active-dot.ml-auto.w-1.5.h-1.5.rounded-full.bg-brand-ocean') : null,
           ]);
         })),
       ]);

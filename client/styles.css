@@ -119,6 +119,14 @@
   .table tbody tr:hover { @apply bg-surface/60; }
   .table tbody tr:last-child td { @apply border-b-0; }
 
+  /* === Tabla zebra (alta densidad) ===
+     Modificador opcional para tablas de alto volumen (ej. listado de
+     tickets): franjas alternas + leve desplazamiento al hover para reforzar
+     la fila activa. No toca `.table` base para no afectar el resto de vistas. */
+  .table-zebra tbody tr:nth-child(even) { @apply bg-surface; }
+  .table-zebra tbody tr { @apply transition-transform; }
+  .table-zebra tbody tr:hover { @apply translate-x-1; }
+
   /* === Gantt semanal === */
   .gantt-board-shell {
     border: 1px solid #e2e8f0;
@@ -167,17 +175,6 @@
     display: flex;
     gap: 0.75rem;
     align-items: center;
-    color: #475569;
-    font-size: 0.95rem;
-  }
-  .gantt-board-range span {
-    display: inline-flex;
-    gap: 0.35rem;
-    align-items: center;
-    padding: 0.45rem 0.75rem;
-    border-radius: 9999px;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
   }
   .gantt-board-legend {
     display: flex;
@@ -197,16 +194,30 @@
     height: 0.8rem;
     border-radius: 9999px;
   }
+  /* === Grid semanal ===
+     Estructura en 2 niveles (no un único grid con todo adentro):
+       1. .gantt-board-header-row — grid propio, sólo la fila de días.
+       2. .gantt-hour-grid-wrap (position:relative) contiene:
+          a. .gantt-board-grid — grid propio con las 14 filas de hora ×
+             7 días (celdas invisibles: sólo dibujan la grilla y capturan
+             el drop del drag&drop).
+          b. .gantt-event-overlay (position:absolute) — los bloques de
+             evento, posicionados por coordenadas reales (hora/minuto de
+             inicio y duración), no acotados a la celda de su hora de
+             inicio. Mismo look que el mock (bloques que atraviesan varias
+             horas), pero como capa aparte para no mezclar posicionamiento
+             explícito con el auto-placement del grid de celdas — mezclar
+             ambos en un solo grid rompe el auto-flow de CSS Grid. */
+  .gantt-board-header-row,
   .gantt-board-grid {
     display: grid;
     grid-template-columns: 100px repeat(7, minmax(0, 1fr));
-    gap: 0;
-    background: white;
     min-width: 100%;
   }
+  .gantt-board-grid { grid-auto-rows: var(--gantt-row-h, 56px); background: white; }
   .gantt-board-time-head,
   .gantt-board-time-label {
-    padding: 1rem 1rem;
+    padding: 0.5rem 1rem;
     font-size: 0.82rem;
     font-weight: 700;
     color: #334155;
@@ -214,7 +225,6 @@
     border-bottom: 1px solid #e2e8f0;
     border-right: 1px solid #e2e8f0;
     background: #f8fafc;
-    min-height: 5rem;
     display: flex;
     align-items: center;
   }
@@ -227,55 +237,33 @@
     border-bottom: 1px solid #e2e8f0;
     border-right: 1px solid #e2e8f0;
     background: #f8fafc;
-    min-height: 5rem;
+    min-height: 4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .gantt-board-column-head:last-child {
     border-right: 0;
   }
-  .gantt-board-row {
-    display: contents;
-  }
-  .gantt-board-row-label {
-    padding: 1rem 1rem;
-    border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    min-height: 96px;
-    background: #f8fafc;
-    color: #334155;
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
+  .gantt-hour-grid-wrap { position: relative; }
   .gantt-board-cell {
-    padding: 0.75rem 0.75rem;
     border-bottom: 1px solid #e2e8f0;
     border-right: 1px solid #e2e8f0;
-    min-height: 120px;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
     background: #ffffff;
-    position: relative;
+    transition: background-color 120ms ease;
   }
   .gantt-board-cell:last-child {
     border-right: 0;
   }
-  .gantt-hour-cell {
-    min-height: 96px;
+  /* Feedback visual del drag&drop — se agrega/quita por JS en dragover/dragleave. */
+  .gantt-board-cell.gantt-day-over {
+    background: rgba(22, 172, 228, 0.08);
   }
-  .gantt-day-stamp {
-    font-size: 0.75rem;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-  }
-  .gantt-hour-cell-label {
-    font-size: 0.7rem;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+  .gantt-event-overlay {
+    position: absolute;
+    inset: 0;
+    left: 100px;
+    pointer-events: none;
   }
   .gantt-task-bar {
     display: flex;
@@ -294,20 +282,31 @@
     text-transform: uppercase;
     letter-spacing: 0.12em;
   }
+  /* position:absolute — top/left/width/height se calculan por JS a partir
+     del horario real del evento (ver renderEventBlock en calendar.js), no
+     quedan acotados a la celda de su hora de inicio como antes. */
   .gantt-task-bar {
+    position: absolute;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-    width: 100%;
-    padding: 0.85rem 0.95rem;
-    border-radius: 1rem;
-    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    justify-content: space-between;
+    gap: 0.25rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1);
     cursor: pointer;
-    transition: transform 160ms ease, box-shadow 160ms ease;
+    overflow: hidden;
+    transition: transform 160ms ease, box-shadow 160ms ease, z-index 0ms;
+    z-index: 2;
+    /* .gantt-event-overlay (el padre) tiene pointer-events:none para dejar
+       pasar el drag&drop hacia las celdas de abajo — sin este override el
+       bloque entero (y el botón de eliminar) queda inerte a los clicks. */
+    pointer-events: auto;
   }
   .gantt-task-bar:hover {
     transform: translateY(-1px);
-    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+    z-index: 3;
   }
   .gantt-task-label {
     display: flex;
@@ -376,25 +375,48 @@
     font-size: 0.85rem;
   }
   .gantt-fab {
-    position: sticky;
-    bottom: 1.25rem;
-    margin-left: auto;
-    align-self: flex-end;
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
     display: inline-flex;
-    width: 3rem;
-    height: 3rem;
+    width: 3.5rem;
+    height: 3.5rem;
     border-radius: 9999px;
     background-color: var(--color-brand-ocean);
     color: white;
     border: none;
     justify-content: center;
     align-items: center;
-    box-shadow: 0 18px 40px rgba(22, 172, 228, 0.18);
+    box-shadow: 0 18px 40px rgba(22, 172, 228, 0.28);
     cursor: pointer;
     transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+    z-index: 40;
+  }
+  /* Tooltip a la izquierda del FAB — mismo patrón "aparece al hover" del mock. */
+  .gantt-fab-tooltip {
+    position: absolute;
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-right: 0.75rem;
+    background: var(--color-brand-navy);
+    color: white;
+    padding: 0.5rem 0.85rem;
+    border-radius: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+  }
+  .gantt-fab:hover .gantt-fab-tooltip,
+  .gantt-fab:focus-visible .gantt-fab-tooltip {
+    opacity: 1;
   }
   .gantt-fab:hover {
-    transform: translateY(-2px);
+    transform: translateY(-2px) scale(1.06);
     background-color: rgb(14, 117, 175);
   }
 
@@ -430,14 +452,6 @@
     body.gcm-sidebar-collapsed .sidebar-link > span { display: none; }
     body.gcm-sidebar-collapsed .sidebar-brand { @apply justify-center px-2; }
     body.gcm-sidebar-collapsed .sidebar-link { @apply justify-center px-2 gap-0; }
-    /* En colapsado: cada link se centra y el dot activo se posiciona a la
-       izquierda (en lugar de a la derecha) para no romper la simetría. */
-    body.gcm-sidebar-collapsed .sidebar-link.active::before {
-      content: '';
-      @apply absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-brand-ocean;
-    }
-    body.gcm-sidebar-collapsed .sidebar-link { position: relative; }
-    body.gcm-sidebar-collapsed .sidebar-link .sidebar-active-dot { display: none; }
   }
 
   /* Contenedor del sidebar: en desktop sticky/columna, en mobile overlay fijo
@@ -446,6 +460,9 @@
   .gcm-sidebar {
     @apply md:flex md:flex-none md:sticky md:top-0 md:h-screen overflow-hidden;
     transition: transform 220ms ease-out, width 220ms ease-out;
+    /* Asegurar stacking correcto: el drawer mobile y su scrim deben
+       mostrarse por encima del topbar en pantallas pequeñas. */
+    z-index: 60;
   }
   @media (max-width: 767.95px) {
     .gcm-sidebar {
@@ -476,7 +493,7 @@
   .gcm-sidebar-scrim {
     position: fixed;
     inset: 0;
-    z-index: 30;
+    z-index: 50;
     background-color: rgb(15 23 42 / 0.5); /* slate-900/50 */
     opacity: 0;
     pointer-events: none;
@@ -497,14 +514,17 @@
   }
 
   .sidebar-link {
-    @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium
            text-white/80 hover:bg-white/10 hover:text-white
            /* brand-ocean/60 — focus ring consistente con el sistema; sin él,
               el link de navegación queda invisible al tabular. */
            focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 transition;
   }
+  /* Activo: chip sólido en brand-ocean (en vez del overlay translúcido
+     anterior) — mismo acento que el resto del sistema usa para "esto es lo
+     importante ahora mismo" (kpi-card tone=ocean, dot activo, focus ring). */
   .sidebar-link.active {
-    @apply bg-white/15 text-white shadow-soft;
+    @apply bg-brand-ocean text-white shadow-soft;
   }
   .sidebar-icon { @apply w-5 h-5 flex-none text-white; }
   /* Header de sección: ícono pequeño + label en mayúsculas tracking-wider.
@@ -539,14 +559,10 @@
 
   /* === Topbar === */
   .topbar {
-    @apply h-16 bg-white border-b border-surface-border flex items-center
-           justify-between px-4 md:px-6 gap-4;
-  }
-  .topbar-search {
-    @apply flex items-center gap-2 bg-surface rounded-md px-3 h-11 w-full
-           max-w-md border border-transparent
-           focus-within:bg-white focus-within:border-surface-border
-           focus-within:ring-2 focus-within:ring-brand-ocean/30 transition;
+      @apply h-16 bg-white border-b border-surface-border flex items-center
+        justify-between px-4 md:px-6 gap-4;
+      position: relative;
+      z-index: 20;
   }
 
   /* === Chat === */
@@ -581,9 +597,21 @@
   }
   .dot { @apply w-2 h-2 rounded-full inline-block; }
 
-  /* === KPI cards === */
+  /* === KPI cards ===
+     Acento lateral + chip de ícono + badge contextual (CRÍTICO/ACTIVO/META…).
+     El color del acento (border-l, ícono, badge) viene del `tone` de cada
+     KPI — mismo mapa que ya teñía el valor, ahora aplicado de forma
+     consistente vía la prop `class` (no interpolado en el selector, que es
+     lo que rompía el tono del valor antes de este cambio). */
   .kpi-card {
-    @apply card flex flex-col gap-1.5 hover:shadow-pop transition;
+    @apply card flex flex-col gap-3 hover:shadow-pop transition border-l-4 border-l-surface-border-strong;
+  }
+  .kpi-card-top { @apply flex items-start justify-between gap-2; }
+  .kpi-icon {
+    @apply w-9 h-9 rounded-lg flex items-center justify-center flex-none bg-surface-alt text-brand;
+  }
+  .kpi-badge {
+    @apply text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide bg-surface-alt text-brand-ink flex-none;
   }
   .kpi-label { @apply text-xs uppercase tracking-wider text-slate-500 font-medium; }
   .kpi-value { @apply text-2xl font-bold text-brand-ink; }
@@ -655,21 +683,20 @@
 
   .login-bg-video {
     @apply absolute inset-0 w-full h-full object-cover;
-    /* oscuro pero presente: el navy manda, el footage respira. */
-    filter: saturate(0.85) brightness(0.62) contrast(1.08);
+    /* casi a color real: toda la responsabilidad de contraste vive en el
+       panel de vidrio (tinte + text-shadow), no en oscurecer el footage. */
+    filter: saturate(1) brightness(0.94) contrast(1.02);
     transform: scale(1.08);
   }
 
   .login-video-overlay {
     position: absolute;
     inset: 0;
-    /* overlay liviano: dos viñetas + degradado vertical navy. La capa es
-       lo bastante delgada para que el footage se vea, lo bastante opaca
-       para que el card glass tenga contraste consistente. */
+    /* solo una viñeta mínima en los bordes — ya no un degradado plano que
+       lava el video. El contraste del texto lo da el panel, no esta capa. */
     background:
-      radial-gradient(ellipse at top left, rgba(22, 172, 228, 0.06), transparent 38%),
-      radial-gradient(ellipse at bottom right, rgba(7, 29, 76, 0.30), transparent 45%),
-      linear-gradient(180deg, rgba(7, 29, 76, 0.32) 0%, rgba(5, 15, 44, 0.62) 100%);
+      radial-gradient(ellipse at bottom right, rgba(7, 29, 76, 0.10), transparent 50%),
+      linear-gradient(180deg, rgba(7, 29, 76, 0.04) 0%, rgba(5, 15, 44, 0.14) 100%);
   }
 
   /* grain muy sutil sobre el overlay — rompe el banding del degradado */
@@ -683,23 +710,25 @@
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
 
-  /* ── Card glass ──────────────────────────────────────────────────── */
+  /* ── Panel de vidrio (todo el aside, no un card flotante) ─────────── */
   /* Aproximación web de glassmorphism navy-tinted: la translucidez lleva el
-     azul marino de marca, no blanco lechoso. El card queda anclado al sistema
-     visual y respeta "The Glass Scope Rule" del DESIGN_SYSTEM.md §7. */
-  .login-card {
-    @apply backdrop-blur-2xl rounded-[28px] border;
-    background: linear-gradient(180deg, rgba(7, 29, 76, 0.32), rgba(7, 29, 76, 0.18));
+     azul marino de marca, no blanco lechoso. El panel es todo el aside —
+     de canto a canto, sin bordes redondeados — para que el video respire
+     detrás de la marca, el form y el pie por igual. Respeta "The Glass
+     Scope Rule" del DESIGN.md (única superficie de vidrio del proyecto). */
+  .login-glass-panel {
+    /* blur-sm y tinte muy ligero: el video debe reconocerse con claridad
+       detrás del panel, no leerse como una lámina navy. El contraste del
+       texto lo sostiene el text-shadow de .login-aside-inner, no esta capa. */
+    @apply backdrop-blur-sm border;
+    background: linear-gradient(180deg, rgba(7, 29, 76, 0.14), rgba(7, 29, 76, 0.07));
     border: 1px solid rgba(255, 255, 255, 0.22);
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.10) inset,        /* highlight superior */
-      0 30px 60px -20px rgba(5, 12, 30, 0.55),       /* sombra de marca */
-      0 12px 30px -12px rgba(5, 12, 30, 0.45);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset; /* highlight superior */
   }
 
   /* Variante opaca para prefers-reduced-transparency */
   @media (prefers-reduced-transparency: reduce) {
-    .login-card {
+    .login-glass-panel {
       background: linear-gradient(180deg, rgba(7, 29, 76, 0.94), rgba(68, 73, 123, 0.92));
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
@@ -710,64 +739,79 @@
   [data-video-failed='true'] .login-bg-video { display: none; }
   [data-video-failed='true'] .login-video-overlay { display: none; }
 
-  /* ── Estados de campo: estados tipográficos finos ────────────────── */
-  .login-card .input {
-    @apply bg-white/[0.06] border border-white/15 text-white shadow-none;
-    transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+  /* ── Campos: opacos y de alto contraste (heredan .input base) ────── */
+  /* Sobre vidrio, un input translúcido pierde legibilidad. Se usa el
+     mismo .input blanco/ink del resto de la app — converge con el resto
+     del sistema en vez de inventar una variante "glass" para el form. */
+  .login-glass-panel .input {
     height: 46px;
-  }
-  .login-card .input::placeholder {
-    color: rgba(226, 232, 240, 0.55); /* slate-200/55: secundario honesto */
-  }
-  .login-card .input:hover:not(:focus) {
-    background-color: rgba(255, 255, 255, 0.09);
-    border-color: rgba(255, 255, 255, 0.22);
-  }
-  .login-card .input:focus {
-    background-color: rgba(255, 255, 255, 0.10);
-    border-color: var(--color-brand-ocean);
-    box-shadow: 0 0 0 4px rgba(22, 172, 228, 0.18);
-  }
-  .login-card .input[aria-invalid="true"] {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 4px rgba(207, 48, 29, 0.18);
   }
 
   /* Botón submit: el navy manda (no el negro azulado). Estado loading visible. */
-  .login-card .btn-primary.login-submit {
+  .login-glass-panel .btn-primary.login-submit {
     @apply bg-brand text-white shadow-none;
     height: 46px;
     letter-spacing: 0.005em;
   }
-  .login-card .btn-primary.login-submit:hover:not(:disabled) {
+  .login-glass-panel .btn-primary.login-submit:hover:not(:disabled) {
     background-color: var(--color-brand-deep);
   }
-  .login-card .btn-primary.login-submit:focus-visible {
+  .login-glass-panel .btn-primary.login-submit:focus-visible {
     box-shadow: 0 0 0 4px rgba(22, 172, 228, 0.30);
     outline: none;
   }
-  .login-card .btn-primary.login-submit:disabled {
+  .login-glass-panel .btn-primary.login-submit:disabled {
     opacity: 0.7;
   }
 
   /* ── Distribución y layout ───────────────────────────────────────── */
   .login-grid   { @apply relative z-10 flex-1 flex flex-col lg:flex-row min-h-0; }
   .login-aside  { @apply flex flex-[3] flex-col relative min-h-0; }
-  .login-side   { @apply hidden lg:flex flex-[2] flex-col min-h-0; }
-
-  /* Bordes verticales sutiles para anclar los dos paneles en desktop */
-  @media (min-width: 1024px) {
-    .login-aside { border-right: 1px solid rgba(255, 255, 255, 0.06); }
+  .login-side   {
+    @apply hidden lg:flex flex-[2] flex-col relative min-h-0 overflow-hidden;
+    background: linear-gradient(160deg, var(--color-brand-navy) 0%, color-mix(in srgb, var(--color-brand-navy) 85%, #000) 100%);
   }
 
-  /* Bloques internos del panel — padding generoso y consistente */
+  /* Blobs decorativos del panel de contexto — ocean arriba-derecha,
+     camarón abajo-izquierda, ambos muy tenues. Puramente atmosféricos. */
+  .login-side::before,
+  .login-side::after {
+    content: '';
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+  }
+  .login-side::before {
+    top: -90px; right: -90px; width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(22, 172, 228, 0.35), transparent 70%);
+    filter: blur(60px);
+  }
+  .login-side::after {
+    bottom: -110px; left: -110px; width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(207, 48, 29, 0.16), transparent 70%);
+    filter: blur(70px);
+  }
+
+  /* Bloques internos del panel — padding generoso y consistente.
+     Sin justify-between: eso repartía el espacio libre en dos huecos
+     grandes (marca↔form, form↔pie) que leían como "espacio muerto". El
+     form ahora se centra en su propio wrapper flex-1 (ver login.js);
+     aquí solo queda el flujo normal de tres bloques. */
   .login-aside-inner {
-    @apply flex flex-col justify-between flex-1 min-h-0;
+    @apply flex flex-col flex-1 min-h-0;
     padding: clamp(24px, 4vw, 56px);
-    gap: 32px;
+    gap: 20px;
+    /* Con el video casi a color real y el panel casi transparente, todo el
+       contraste del texto vive en esta sombra — no en oscurecer el panel.
+       Se anula sobre el input opaco, donde no hace falta (ver abajo). */
+    text-shadow: 0 1px 3px rgba(5, 12, 30, 0.6), 0 2px 18px rgba(5, 12, 30, 0.45);
   }
+  .login-aside-inner .input { text-shadow: none; }
   .login-side-inner {
-    @apply flex flex-col justify-between flex-1 min-h-0;
+    /* relative + z-index: los blobs decorativos de .login-side son
+       absolutely-positioned con z-index:auto; sin esto pintarían encima
+       del contenido en vez de detrás (orden de pintado CSS2.1 §E). */
+    @apply flex flex-col justify-between flex-1 min-h-0 relative z-10;
     padding: clamp(32px, 4vw, 64px);
     gap: 32px;
   }
@@ -795,15 +839,15 @@
     @apply text-[11px] text-white/55 mt-0.5;
   }
 
-  /* ── Card head (h2 + sub) ────────────────────────────────────────── */
-  .login-card-head { @apply mb-2; }
-  .login-card-head .eyebrow {
+  /* ── Cabecera del form (h2 + sub) ─────────────────────────────────── */
+  .login-form-head { @apply mb-2; }
+  .login-form-head .eyebrow {
     @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-ocean/90 mb-2;
   }
-  .login-card-head h2 {
+  .login-form-head h2 {
     @apply text-[22px] sm:text-[24px] font-semibold tracking-tight text-white leading-tight;
   }
-  .login-card-head p {
+  .login-form-head p {
     @apply text-[13.5px] text-white/65 leading-relaxed mt-1.5;
   }
 
@@ -822,11 +866,14 @@
   }
 
   /* ── Inputs: iconos y validación ─────────────────────────────────── */
+  /* Los inputs ahora son opacos (blanco/ink), así que los iconos pasan de
+     blanco-sobre-vidrio a slate-sobre-blanco. Activo usa brand-deep, no
+     brand-ocean: ocean puro sobre blanco no alcanza 3:1 non-text (WCAG 1.4.11). */
   .login-input-wrap { @apply relative; }
   .login-input-icon {
-    @apply absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 transition-colors duration-200 pointer-events-none;
+    @apply absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors duration-200 pointer-events-none;
   }
-  .login-input-icon-active { @apply text-brand-ocean; }
+  .login-input-icon-active { @apply text-brand-deep; }
 
   .login-input-helper {
     @apply mt-1.5 text-[11.5px] text-white/55 leading-snug;
@@ -835,11 +882,12 @@
     @apply mt-1.5 text-[11.5px] text-red-200/95 leading-snug flex items-center gap-1.5;
   }
 
-  /* Toggle de visibilidad: discreto, área click 44x44 */
+  /* Toggle de visibilidad: discreto, área click 44x44. Vive dentro del
+     input opaco ahora, así que usa la paleta slate-sobre-blanco. */
   .login-toggle {
     @apply absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 rounded-md
            inline-flex items-center justify-center
-           text-white/55 hover:text-white hover:bg-white/10 transition;
+           text-slate-400 hover:text-brand hover:bg-surface transition;
   }
   .login-toggle:focus-visible {
     outline: none;
@@ -900,14 +948,14 @@
   .login-banner-warning .login-banner-icon { @apply text-amber-300; }
   .login-banner-info .login-banner-icon { @apply text-brand-ocean; }
 
-  /* ── Foot del card (legal / cifrado) ─────────────────────────────── */
-  .login-card-foot {
+  /* ── Foot del form (legal / cifrado) ──────────────────────────────── */
+  .login-form-foot {
     @apply mt-5 flex items-center gap-3 text-[11.5px] text-white/55 leading-snug;
   }
-  .login-card-foot .lock-dot {
+  .login-form-foot .lock-dot {
     @apply w-1.5 h-1.5 rounded-full bg-brand-ocean/70 flex-none;
   }
-  .login-card-foot a {
+  .login-form-foot a {
     @apply text-white/70 hover:text-white underline underline-offset-2 decoration-white/20;
   }
 
@@ -976,7 +1024,7 @@
 
   /* ── Animación de entrada (sutil, < 200ms) ──────────────────────── */
   @media (prefers-reduced-motion: no-preference) {
-    .login-card { animation: login-card-in 220ms cubic-bezier(.2,.7,.2,1) both; }
+    .login-glass-panel { animation: login-card-in 220ms cubic-bezier(.2,.7,.2,1) both; }
     @keyframes login-card-in {
       from { opacity: 0; transform: translateY(6px); }
       to   { opacity: 1; transform: none; }
@@ -994,31 +1042,57 @@
   }
 
   /* === Dashboard primitives (módulo /dashboard) ============================
-     Primitivas exclusivas del módulo Inicio. Encapsulan la jerarquía
-     "welcome → hero → kpi → chart → listas → quick actions" sin
-     contaminar el resto del sistema. El acento rojo camarón sólo aparece
-     en el CTA del hero (regla The One Voice del design system). */
+     Primitivas exclusivas del módulo Inicio. Rediseño inspirado en un
+     lenguaje "panel de control" (banner sólido, KPIs con acento lateral,
+     chips de categoría, ranking con avatar) — colores 100% marca GCM
+     (navy/ocean/accent), sin paleta nueva. El acento rojo camarón sólo
+     aparece en el CTA del hero y en KPIs/urgencias reales (The One Voice). */
   .dash-welcome {
-    @apply flex items-center flex-wrap gap-x-2 gap-y-1 text-sm text-brand-ink;
+    @apply flex items-center flex-wrap justify-between gap-3;
   }
+  .dash-welcome-left { @apply flex items-center flex-wrap gap-x-2 gap-y-1 text-sm text-brand-ink; }
   .dash-welcome-name { @apply font-semibold text-brand-ink; }
   .dash-welcome-meta { @apply text-xs text-slate-500; }
   .dash-welcome-role { @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-ocean; }
   .dash-welcome-dot  { @apply w-1 h-1 rounded-full bg-surface-border-strong flex-none; }
   .dash-welcome-time { @apply text-xs text-slate-500 tabular-nums; }
+  .dash-welcome-status {
+    @apply flex items-center gap-2 pl-3 pr-2.5 py-1.5 rounded-full bg-surface-alt
+           text-xs font-semibold text-brand-ink flex-none;
+  }
+  .dash-welcome-status-dot {
+    @apply w-2 h-2 rounded-full bg-emerald-500 flex-none;
+    animation: dash-pulse-dot 2.2s ease-in-out infinite;
+  }
+  @keyframes dash-pulse-dot {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.45; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-welcome-status-dot { animation: none; }
+  }
 
+  /* Hero: banner sólido navy (antes era una card clara con acento suave).
+     Es la única superficie de color pleno del dashboard — concentra la
+     atención en la acción más importante del rol. */
   .dash-hero {
-    @apply card flex flex-col md:flex-row md:items-center md:justify-between gap-4
-           bg-brand-ocean/[0.04] border-brand-ocean/30;
+    @apply relative overflow-hidden rounded-[1.25rem] bg-brand text-white p-5 md:p-6
+           flex flex-col md:flex-row md:items-center justify-between gap-5;
+  }
+  /* Glow diagonal sutil — la única decoración no funcional del hero, apaga
+     el lado derecho del banner sin restar legibilidad al texto (izquierda). */
+  .dash-hero::after {
+    content: '';
+    @apply absolute right-0 top-0 h-full w-1/3 pointer-events-none;
+    background: linear-gradient(to left, rgba(255,255,255,0.06), transparent);
   }
   .dash-hero-eyebrow {
-    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-ocean mb-1.5;
+    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75 mb-1.5;
   }
-  .dash-hero-title { @apply text-base font-semibold text-brand-ink leading-snug; }
-  /* Tinte del propio ink (#243447) al 60% — no slate genérico: sobre
-     tinte ocean-4% el gris frío se ve lavado, mientras que un navy
-     translúcido armoniza con la paleta y mantiene contraste WCAG AA. */
-  .dash-hero-sub   { @apply text-xs text-brand-ink/60 mt-0.5; }
+  .dash-hero-title { @apply text-xl md:text-2xl font-bold leading-tight tracking-tight; }
+  .dash-hero-sub   { @apply text-sm text-white/70 mt-1.5 max-w-md; }
+  .dash-hero-icon {
+    @apply w-14 h-14 rounded-2xl flex items-center justify-center flex-none bg-white/15 text-white;
+  }
   .dash-hero-quiet {
     @apply card flex items-center gap-3 bg-emerald-50/60 border-emerald-200;
   }
@@ -1049,35 +1123,98 @@
   .dash-list-meta  { @apply text-xs text-slate-500 hidden sm:inline; }
   .dash-list-count { @apply badge bg-surface-alt text-brand-ink tabular-nums flex-none; }
 
-  .dash-chart { @apply relative flex items-end gap-1 h-32 md:h-40; }
-  .dash-chart-avg {
-    @apply absolute left-0 right-0 border-t border-dashed border-slate-300 pointer-events-none;
+  /* Top categorías: chip de ícono + nombre + badge de conteo. El color del
+     chip rota de forma determinística (mismo índice → mismo color) sobre
+     una paleta corta con buen contraste — igual criterio que avatarColor. */
+  .dash-cat-row {
+    @apply flex items-center justify-between gap-3 py-2.5 px-1 border-t border-surface-border/60
+           first:border-t-0 transition-colors;
   }
-  .dash-chart-avg-label {
+  .dash-cat-row:hover { @apply bg-surface/40; }
+  .dash-cat-icon {
+    @apply w-8 h-8 rounded-lg flex items-center justify-center flex-none;
+  }
+  .dash-cat-name { @apply flex-1 min-w-0 text-sm font-medium text-brand-ink truncate; }
+  .dash-cat-count { @apply badge tabular-nums flex-none; }
+
+  /* Ranking por encargado: avatar real (foto o iniciales) + puesto. El
+     primer puesto se resalta con anillo ocean; el resto queda neutro. */
+  .dash-rank-row {
+    @apply flex items-center gap-3 py-2.5 border-t border-surface-border/60 first:border-t-0;
+  }
+  .dash-rank-avatar { @apply w-9 h-9 rounded-full text-xs font-semibold text-white flex items-center justify-center flex-none; }
+  .dash-rank-avatar.is-first { @apply ring-2 ring-brand-ocean ring-offset-2 ring-offset-white; }
+  .dash-rank-body { @apply flex-1 min-w-0; }
+  .dash-rank-top { @apply flex items-center justify-between gap-2; }
+  .dash-rank-name { @apply text-sm font-semibold text-brand-ink truncate; }
+  .dash-rank-place { @apply text-[11px] font-semibold text-brand-ocean flex-none; }
+  .dash-rank-place.is-muted { @apply text-slate-400; }
+  .dash-rank-meta { @apply text-xs text-slate-500 mt-0.5; }
+
+  /* === Trend chart (línea + área, 30 días) ===
+     Una sola serie = un solo hue (brand-ocean), sequential por trabajo
+     ("magnitud a lo largo del tiempo"), no categórico. Línea de promedio
+     sólida (nunca punteada — ver dataviz skill, el punteado se lee como
+     grid/eje). Marks: línea 2px, área ~10% opacity, end-dot con anillo de
+     superficie, hairlines sólidas y recesivas para baseline/grid. */
+  .dash-trend-wrap { @apply relative; }
+  .dash-trend-svg { @apply block w-full h-32 md:h-40 overflow-visible; }
+  .dash-trend-area { fill: rgba(22, 172, 228, 0.1); }
+  .dash-trend-line {
+    fill: none;
+    stroke: rgb(22, 172, 228);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .dash-trend-baseline { stroke: var(--color-surface-border); stroke-width: 1; }
+  .dash-trend-avg-line { stroke: #94a3b8 /* slate-400 */; stroke-width: 1; }
+  .dash-trend-end-dot {
+    fill: rgb(22, 172, 228);
+    stroke: white;
+    stroke-width: 2;
+  }
+  .dash-trend-crosshair {
+    stroke: var(--color-surface-border-strong);
+    stroke-width: 1;
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+  }
+  .dash-trend-crosshair.is-active { opacity: 1; }
+  .dash-trend-hover-dot {
+    fill: rgb(22, 172, 228);
+    stroke: white;
+    stroke-width: 2;
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+  }
+  .dash-trend-hover-dot.is-active { opacity: 1; }
+  .dash-trend-avg-label {
     @apply absolute right-0 text-[10px] text-slate-500 bg-white px-1.5 rounded
-           border border-surface-border;
+           border border-surface-border pointer-events-none;
     transform: translate(0, -50%);
   }
-  .dash-chart-bar {
-    @apply flex-1 flex flex-col items-center justify-end cursor-default;
+  .dash-trend-tooltip {
+    @apply absolute top-0 -translate-x-1/2 -translate-y-full bg-brand text-white
+           rounded-lg px-2.5 py-1.5 text-xs shadow-pop pointer-events-none whitespace-nowrap;
+    opacity: 0;
+    transition: opacity 120ms ease-out;
   }
-  .dash-chart-bar-fill {
-    @apply w-full rounded-t transition-all duration-300 ease-out
-           group-hover:bg-brand-deep group-focus-visible:ring-2
-           group-focus-visible:ring-brand-ocean/40;
-    min-height: 16px;
-    background-color: rgb(22 172 228);
-  }
-  .dash-chart-bar-label {
-    @apply text-[10px] text-slate-300 mt-1 transition-colors
-           group-hover:text-slate-900 group-hover:font-semibold;
+  .dash-trend-tooltip.is-active { opacity: 1; }
+  .dash-trend-tooltip-date { @apply text-[10px] text-white/70 uppercase tracking-wide; }
+  .dash-trend-tooltip-value { @apply font-semibold; }
+  .dash-trend-axis { @apply flex mt-1; }
+  /* Sin `truncate`: cada slot es angosto (30 días/fila), pero sólo 1 de
+     cada 5 tiene texto — dejamos que se desborde sobre los vecinos vacíos
+     en vez de recortarlo con ellipsis (mismo criterio que evitó el
+     desborde a 2 líneas: menos texto en pantalla, no texto cortado). */
+  .dash-trend-axis-label {
+    @apply flex-1 text-[10px] text-slate-500 text-center whitespace-nowrap;
+    overflow: visible;
     font-variant-numeric: tabular-nums;
   }
-  .dash-chart-bar-label.is-major { @apply text-slate-600; }
-  .dash-chart-bar-value {
-    @apply text-[10px] font-medium text-slate-600 mb-0.5
-           opacity-0 group-hover:opacity-100 transition-opacity;
-    font-variant-numeric: tabular-nums;
+  @media (prefers-reduced-motion: reduce) {
+    .dash-trend-crosshair, .dash-trend-hover-dot, .dash-trend-tooltip { transition: none; }
   }
 
   .dash-section-head {
@@ -1096,15 +1233,28 @@
   .dash-prio-dot-default { @apply w-1.5 h-1.5 rounded-full bg-surface-border-strong flex-none; }
 
   .dash-quick {
-    @apply card-tight flex items-start gap-3 p-3 hover:border-brand-ocean
+    @apply card-tight flex items-center gap-3 p-4 hover:border-brand-ocean
            hover:shadow-card transition cursor-pointer text-left w-full
            /* brand-ocean/60 — focus ring en quick actions; antes era invisible
               al tabular y dependía del outline default del navegador. */
            focus:outline-none focus:ring-2 focus:ring-brand-ocean/60;
   }
   .dash-quick-icon {
-    @apply w-9 h-9 rounded-md flex items-center justify-center flex-none
-           bg-brand-ocean/10 text-brand-ocean;
+    @apply w-11 h-11 rounded-xl flex items-center justify-center flex-none
+           bg-brand-ocean/10 text-brand-ocean transition-colors;
+  }
+  .dash-quick:hover .dash-quick-icon {
+    @apply bg-brand-ocean text-white;
+    transform: scale(1.08);
+  }
+  .dash-quick-icon.is-brand  { @apply bg-brand/10 text-brand; }
+  .dash-quick:hover .dash-quick-icon.is-brand  { @apply bg-brand text-white; }
+  .dash-quick-icon.is-accent { @apply bg-accent/10 text-accent; }
+  .dash-quick:hover .dash-quick-icon.is-accent { @apply bg-accent text-white; }
+  .dash-quick-icon.is-emerald { @apply bg-emerald-100 text-emerald-700; }
+  .dash-quick:hover .dash-quick-icon.is-emerald { background-color: #059669; @apply text-white; }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-quick:hover .dash-quick-icon { transform: none; }
   }
 
   /* === Attachments dropzone (ticket-new + reutilizable) ===

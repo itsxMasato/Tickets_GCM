@@ -42,12 +42,6 @@ function relativeFromNow(iso) {
   return formatDateTime(iso);
 }
 
-function ticketCodeFor(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  return `TKT-${year}${month}-`;
-}
-
 function hoursBetween(a, b) {
   if (!a || !b) return null;
   const da = new Date(a.replace(' ', 'T') + (a.includes('T') ? '' : 'Z'));
@@ -55,4 +49,4 @@ function hoursBetween(a, b) {
   return (db2 - da) / 36e5;
 }
 
-module.exports = { now, nowSql, formatDateTime, relativeFromNow, ticketCodeFor, hoursBetween };
+module.exports = { now, nowSql, formatDateTime, relativeFromNow, hoursBetween };

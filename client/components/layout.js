@@ -99,7 +99,7 @@ export function renderLayout({ content, user, onLogout }) {
     h('div.gcm-main.flex-1.flex.flex-col.min-w-0', {}, [
       renderTopbar({ user, onLogout }),
       h('main.flex-1.overflow-y-auto', {}, [
-        h('div.max-w-7xl.mx-auto.w-full.p-4.md\\:p-6', {}, [content]),
+        h('div.max-w-7xl.mx-auto.w-full.p-4', { class: 'md:p-6' }, [content]),
       ]),
     ]),
   ]);

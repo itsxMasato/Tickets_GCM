@@ -8,6 +8,7 @@ function serialize(row) {
   return {
     id: row.id,
     name: row.name,
+    company_id: row.company_id ?? null,
     active: row.active ? 1 : 0,
     created_at: row.created_at,
   };
@@ -26,14 +27,14 @@ function emitCategory(event, category, opts = {}) {
   }
 }
 
-async function list({ activeOnly = true } = {}) {
-  const rows = await firestoreData.listCategories(activeOnly);
+async function list({ activeOnly = true } = {}, user = null) {
+  const rows = await firestoreData.listCategories(activeOnly, user);
   return rows.map(serialize);
 }
 
-async function create(name) {
+async function create(name, user = null) {
   if (!name || !name.trim()) throw validationError('El nombre de la categoría es obligatorio.');
-  const row = await firestoreData.createCategory(name);
+  const row = await firestoreData.createCategory(name, user);
   const created = serialize(row);
   emitCategory('category:created', created);
   return created;
@@ -55,6 +56,11 @@ async function update(id, { name, active } = {}) {
   return after;
 }
 
+// remove — regla de negocio del sistema: nada se elimina de verdad, todo
+// se deshabilita. firestoreData.deleteCategory ya es un alias de
+// "desactivar" (active: 0); no hay nada que bloquear por tickets en uso
+// porque no se pierde ningun dato (mismo comportamiento que el toggle
+// Desactivar/Activar del listado).
 async function remove(id) {
   const before = await firestoreData.getCategoryById(id);
   if (!before) {
@@ -62,9 +68,9 @@ async function remove(id) {
     err.code = 'NOT_FOUND';
     throw err;
   }
-  await firestoreData.deleteCategory(id);
-  emitCategory('category:deleted', { id: before.id, name: before.name });
-  return before;
+  const after = await firestoreData.deleteCategory(id);
+  emitCategory('category:updated', after, { changes: { active: { from: !!before.active, to: false } } });
+  return after;
 }
 
 module.exports = { list, create, update, remove };

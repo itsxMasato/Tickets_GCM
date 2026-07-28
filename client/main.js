@@ -6,7 +6,7 @@ import { api } from './api.js';
 import { connectSocket, on as onSocket } from './socket.js';
 import { toast } from './utils/toast.js';
 import { renderLayout } from './components/layout.js';
-import { initializeFirebase } from './firebase.js';
+import { initializeFirebase, signOutFirebase } from './firebase.js';
 import { init as initRoleLabels, applyRoleLabel } from './utils/role-labels.js';
 
 // Vistas
@@ -23,6 +23,7 @@ import { renderAudit } from './views/audit.js';
 import { renderRoles } from './views/roles.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderCompanies } from './views/companies.js';
+import { renderProfile } from './views/profile.js';
 
 // Registro de rutas (devuelven un { view, cleanup } o un HTMLElement)
 const handlers = {
@@ -39,6 +40,7 @@ const handlers = {
   '/roles':         ({ params, query, user }) => ({ view: renderRoles({ params, query, user }) }),
   '/calendar':      ({ params, query, user }) => ({ view: renderCalendar({ params, query, user }) }),
   '/companies':     ({ params, query, user }) => ({ view: renderCompanies({ params, query, user }) }),
+  '/profile':       ({ params, query, user }) => ({ view: renderProfile({ params, query, user }) }),
 };
 
 const app = document.getElementById('app');
@@ -132,6 +134,7 @@ async function onLogin(user) {
 
 async function onLogout() {
   try { await api.auth.logout(); } catch {}
+  await signOutFirebase();
   setState({ user: null, notifications: [], unreadCount: 0 });
   go('/login');
 }
@@ -304,7 +307,8 @@ async function dispatch(rawPath, query) {
   // a platform admin, se mueven a este set. Backend lo vuelve a validar
   // con requirePlatformAdmin, así que esto es solo UX (evita el 403 visible).
   const PLATFORM_ADMIN_ONLY = new Set(['/companies']);
-  if (PLATFORM_ADMIN_ONLY.has(path) && getState().user?.isPlatformAdmin !== true) {
+  // Permitir acceso a /companies para `sac` además de platform admin.
+  if (PLATFORM_ADMIN_ONLY.has(path) && !(getState().user?.isPlatformAdmin === true || getState().user?.role === 'sac')) {
     toast('No tienes permiso para acceder a esa sección.', 'error');
     go('/dashboard');
     showAppWhenReady();
@@ -344,37 +348,38 @@ function onHashChange() {
   dispatch(path, query);
 }
 
+// El selector de empresa (topbar) dispara esto tras cambiar la empresa
+// activa: re-despacha la ruta actual (mismo path, re-monta la vista) para
+// que listas/dashboard refresquen con el nuevo scope — sin reload de
+// página ni perder la sesión. Mismo patrón que gcm:help/gcm:refresh.
+window.addEventListener('gcm:company-switched', () => onHashChange());
+
+// Interceptor global de 401: si CUALQUIER llamada a la API devuelve 401
+// (sesión expirada, cookie perdida, servidor reiniciado) después del login
+// inicial, la app quedaba en la página actual con requests fallando en
+// silencio — nada le avisaba al usuario que ya no estaba autenticado hasta
+// que intentaba algo y veía un error suelto. api.js dispara este evento en
+// cualquier 401 fuera de los endpoints de login/logout. getState().user
+// como guarda evita reaccionar más de una vez si llegan varios 401 en
+// ráfaga (peticiones en paralelo ya en vuelo).
+window.addEventListener('gcm:unauthorized', () => {
+  if (!getState().user) return;
+  setState({ user: null, notifications: [], unreadCount: 0 });
+  toast('Tu sesión expiró. Iniciá sesión de nuevo.', 'warn');
+  go('/login');
+});
+
 async function bootstrap() {
   void initializeFirebase().catch((error) => {
     console.warn('[firebase] No se pudo inicializar Firestore:', error);
   });
 
-  // Rehidratar sesión
-  try {
-    const me = await api.auth.me();
-    setState({ user: me.user });
-  } catch {
-    setState({ user: null });
-  }
-
-  if (!location.hash) location.hash = '#/login';
+  // Cada apertura del sitio exige login explícito: no restauramos sesión
+  // desde una cookie/token existente, sin importar el hash previo.
+  setState({ user: null });
+  location.hash = '#/login';
   onHashChange();
   window.addEventListener('hashchange', onHashChange);
-
-  if (getState().user) {
-    void (async () => {
-      try {
-        await initRoleLabels();
-      } catch {}
-      try {
-        await connectSocket();
-        wireRealtime();
-      } catch {}
-      try {
-        await refreshBell();
-      } catch {}
-    })();
-  }
 }
 
 bootstrap();

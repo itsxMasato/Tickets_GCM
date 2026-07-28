@@ -4,6 +4,7 @@ const firestoreData = require('../firestoreData');
 const { verifyPassword, hashPassword } = require('../utils/password');
 const { syncFirebaseAuthUser } = require('../utils/firebase-auth-sync');
 const { deriveAuthEmail } = require('../utils/deriveAuthEmail');
+const auditService = require('./audit.service');
 const {
   validationError,
   notFoundError,
@@ -18,6 +19,7 @@ const {
 // exporta ROLES — eso provocaba `Cannot read properties of undefined
 // (reading 'includes')` al editar un usuario.
 const { ROLE_VALUES } = require('../orm/enums');
+const membershipsService = require('./memberships.service');
 
 // Límites duros. Más allá de esto, el sistema rechaza la entrada.
 const LIMITS = {
@@ -64,6 +66,8 @@ function serialize(row) {
     full_name: row.full_name,
     role: row.role,
     area: row.area || null,
+    email: row.email || null,
+    avatar_url: row.avatar_url || null,
     active: isUserActive(row.active) ? 1 : 0,
     created_at: row.created_at instanceof Date
       ? row.created_at.toISOString().replace('T', ' ').slice(0, 19)
@@ -72,13 +76,18 @@ function serialize(row) {
 }
 
 function sanitize(user) {
+  const isPlatformAdmin = user && (user.isPlatformAdmin === true || user.is_platform_admin === true || user.is_platform_admin === 1 || user.isPlatformAdmin === 1 || user.isPlatformAdmin === '1' || user.is_platform_admin === '1');
   return {
     id: user.id,
     username: user.username,
     full_name: user.full_name,
     role: user.role,
     area: user.area || null,
+    email: user.email || null,
+    avatar_url: user.avatar_url || null,
     active: isUserActive(user.active),
+    is_platform_admin: isPlatformAdmin,
+    isPlatformAdmin: isPlatformAdmin,
   };
 }
 
@@ -118,7 +127,7 @@ async function getById(id) {
   return serialize(user);
 }
 
-async function createUser({ username, password, full_name, role, area, email }) {
+async function createUser({ username, password, full_name, role, area, email, company_id } = {}, requester) {
   // Validación dura. Cada campo se sanitiza ANTES de tocar Firestore:
   //  - username: regex estricto (sólo letras, dígitos, . _ -) + longitudes.
   //  - full_name: requerido, max 255, trim.
@@ -180,9 +189,39 @@ async function createUser({ username, password, full_name, role, area, email }) 
       password,
     }).catch((syncErr) => {
       console.warn('[auth.service] firebase auth sync failed on create', syncErr.stack || syncErr.message);
+      // Antes esto solo quedaba en el log del servidor, que nadie del
+      // equipo revisa — si Firebase Auth queda desincronizado (ej. no se
+      // creo la cuenta), el usuario no puede loguearse via el fallback de
+      // Firebase y no hay ningun rastro visible en la app para un SAC/admin
+      // que investigue. Lo dejamos en /audit para que sea descubrible.
+      auditService.logAsync({
+        user_id: null,
+        action_type: 'firebase_auth_sync_failed',
+        target_type: 'user',
+        target_id: created.id,
+        target_code: cleanUsername,
+        description: `No se pudo sincronizar la cuenta de Firebase Auth de "${cleanUsername}" al crearla: ${syncErr.message}`,
+        new_value: { username: cleanUsername, context: 'create' },
+      }).catch(() => {});
     });
 
     const row = await getById(created.id);
+    // Si vino company_id en el payload, intentamos crear la membresía
+    // asociada para que el usuario quede ligado a una empresa desde
+    // el momento de su creación. El service de membresías valida
+    // unicidad y áreas; permitimos explícitamente que un SAC cree la
+    // membresía pasando allowSACCreate = true.
+    if (company_id) {
+      try {
+        await membershipsService.create(created.id, { company_id: Number(company_id), role }, requester, { allowSACCreate: true });
+      } catch (memErr) {
+        // No revertimos la creación del user (no hay deleteUser helper).
+        // Informar y propagar el error para que el caller lo pueda manejar.
+        console.warn('[auth.service] membership creation failed during user create:', memErr.stack || memErr.message);
+        throw memErr;
+      }
+    }
+
     emitUser('user:created', row);
     return row;
   } catch (err) {
@@ -193,7 +232,7 @@ async function createUser({ username, password, full_name, role, area, email }) 
   }
 }
 
-async function updateUser(id, { full_name, role, area, active, password, email, username } = {}, currentUser) {
+async function updateUser(id, { full_name, role, area, active, password, email, username, company_id } = {}, currentUser) {
   // currentUser viene de req.user (seteado por requireAuth). Se usa para
   // anti-self-demote: un SAC no puede desactivarse ni perder el rol 'sac'.
   if (currentUser && Number(currentUser.id) === Number(id)) {
@@ -280,18 +319,43 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
     patch.password_hash = await hashPassword(password);
   }
 
-  if (Object.keys(patch).length === 0) {
+  if (Object.keys(patch).length === 0 && company_id === undefined) {
     return before;
   }
 
-  let row;
-  try {
-    row = await firestoreData.updateUser(id, patch);
-  } catch (err) {
-    if (err.code === 'NOT_FOUND') {
-      throw notFoundError('Usuario no encontrado.');
+  let row = before;
+  if (Object.keys(patch).length > 0) {
+    try {
+      row = await firestoreData.updateUser(id, patch);
+    } catch (err) {
+      if (err.code === 'NOT_FOUND') {
+        throw notFoundError('Usuario no encontrado.');
+      }
+      if (err.code === 'CONFLICT') {
+        throw conflictError(err.message);
+      }
+      throw err;
     }
-    throw err;
+  }
+
+  // Asignar empresa a un usuario existente (para altas hechas antes de la
+  // migración multi-tenant, que quedaron sin membresía). Si ya tiene una
+  // membresía en esa empresa, no hacemos nada (idempotente); cualquier otro
+  // error se propaga.
+  if (company_id) {
+    try {
+      await membershipsService.create(
+        id,
+        { company_id: Number(company_id), role: patch.role || before.role },
+        currentUser,
+        { allowSACCreate: true },
+      );
+    } catch (memErr) {
+      if (memErr.code !== 'CONFLICT') {
+        console.warn('[auth.service] membership creation failed during user update:', memErr.stack || memErr.message);
+        throw memErr;
+      }
+    }
   }
 
   const shouldSyncFirebase = password || patch.email !== undefined || patch.username !== undefined || patch.full_name !== undefined;
@@ -313,6 +377,19 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
       password,
     }).catch((syncErr) => {
       console.warn('[auth.service] firebase auth sync failed on update', syncErr.stack || syncErr.message);
+      // Ver comentario equivalente en create(): sin esto, un cambio de
+      // password/email/username que falla al sincronizar con Firebase Auth
+      // queda desincronizado en silencio (Firestore actualizado, Firebase
+      // Auth con las credenciales viejas) sin ningun rastro visible.
+      auditService.logAsync({
+        user_id: null,
+        action_type: 'firebase_auth_sync_failed',
+        target_type: 'user',
+        target_id: id,
+        target_code: patch.username !== undefined ? patch.username : before.username,
+        description: `No se pudo sincronizar la cuenta de Firebase Auth de "${before.username}" al actualizarla: ${syncErr.message}`,
+        new_value: { fields_changed: Object.keys(patch), context: 'update' },
+      }).catch(() => {});
     });
   }
   const after = await getById(id);
@@ -335,9 +412,23 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
   return after;
 }
 
-async function listUsers({ role, active, area } = {}) {
-  const rows = await firestoreData.listUsers({ role, active, area });
+/**
+ * updateAvatar — autoservicio: cualquier usuario autenticado puede cambiar
+ * SU PROPIA foto de perfil (a diferencia de updateUser, que solo puede
+ * llamar SAC). El caller (auth.routes.js) ya se aseguró de borrar el
+ * archivo físico anterior antes de llamar esto.
+ */
+async function updateAvatar(userId, avatarUrl) {
+  const before = await getById(userId);
+  const row = await firestoreData.updateUser(userId, { avatar_url: avatarUrl });
+  const after = serialize(row);
+  emitUser('user:updated', after, { changes: { avatar_url: { from: before.avatar_url ?? null, to: after.avatar_url } } });
+  return after;
+}
+
+async function listUsers({ role, active, area } = {}, requester = null) {
+  const rows = await firestoreData.listUsers({ role, active, area }, requester);
   return rows.map(serialize);
 }
 
-module.exports = { login, verifyPasswordForUser, getById, sanitize, createUser, updateUser, listUsers };
+module.exports = { login, verifyPasswordForUser, getById, sanitize, createUser, updateUser, updateAvatar, listUsers };

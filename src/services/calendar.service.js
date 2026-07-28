@@ -118,6 +118,10 @@ async function listEvents({ user, from, to }) {
   );
 
   return rows
+    // active === 0 → deshabilitado ("eliminado" por el usuario, ver
+    // deleteEvent). Docs viejos sin el campo `active` se tratan como
+    // activos para no ocultar eventos creados antes de este cambio.
+    .filter((row) => row.active !== 0 && row.active !== false)
     .filter((row) => row.start_at <= toSql && row.end_at >= fromSql)
     .sort((a, b) => {
       if (a.start_at === b.start_at) return 0;
@@ -148,6 +152,7 @@ async function createEvent(payload, user) {
     end_at: data.end_at,
     color: data.color || 'ocean',
     type: data.type || (data.ticket_id ? 'ticket_linked' : 'personal'),
+    active: 1,
     created_at: now,
     updated_at: now,
   });
@@ -217,14 +222,16 @@ async function updateEvent(id, payload, user) {
 }
 
 // ── Borrar ───────────────────────────────────────────────────────────────────
+// Regla de negocio: nada se elimina de verdad, todo se deshabilita. En vez
+// de borrar el documento, lo marcamos active:0 — listEvents ya lo filtra,
+// asi que desaparece del calendario del usuario sin perder el registro.
 async function deleteEvent(id, user) {
   const existing = decorate(await firestore.getById('calendar_events', id));
   if (!existing) throw notFoundError('Evento de calendario no encontrado.');
   if (toId(existing.user_id) !== toId(user.id)) {
     throw forbiddenError('No puedes eliminar eventos de otro usuario.');
   }
-  const db = firestore.getFirestore();
-  await db.collection('calendar_events').doc(String(id)).delete();
+  await firestore.updateDoc('calendar_events', id, { active: 0, updated_at: firestore.nowSql() });
 
   await auditService.logAsync({
     user_id: user.id,
@@ -248,7 +255,7 @@ async function listSchedulableTickets(user, { limit = 30 } = {}) {
   // `status: '!cerrado'`, por lo que traemos los tickets visibles al usuario
   // y filtramos por los estados permitidos en memoria.
   const allowedStatuses = new Set(['recibido', 'asignado', 'en_proceso']);
-  const result = await firestoreData.listTickets({}, user, 1, Math.max(limit * 5, 100));
+  const result = await firestoreData.listTickets({}, user, { limit: Math.max(limit * 5, 100) });
   return (result.tickets || [])
     .filter((t) => allowedStatuses.has(t.status))
     .slice(0, limit);

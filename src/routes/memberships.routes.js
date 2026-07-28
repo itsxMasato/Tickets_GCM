@@ -22,7 +22,7 @@ const membershipsService = require('../services/memberships.service');
  * `buildRequester(req)` es el helper inline estándar de Fase 2 que
  * setea `isPlatformAdmin` desde la sesión. Se elimina en Fase 3.
  *
- * POST recibe en el body: { company_id, role, area_key?, is_default? }.
+ * POST recibe en el body: { company_id, role, is_default? }.
  * El `:userId` de la URL es load-bearing (el service lo usa para crear).
  */
 

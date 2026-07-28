@@ -39,7 +39,8 @@ export function attachmentThumb(att, ticketId) {
       title: att.original_name,
       'aria-label': `Ver ${att.original_name}`,
     }, [
-      h('img.w-32.h-32.object-cover.group-hover\\:opacity-90.group-hover\\:scale-105.transition', {
+      h('img.w-32.h-32.object-cover.transition', {
+        class: 'group-hover:opacity-90 group-hover:scale-105',
         src: api.tickets.downloadUrl(ticketId, att.id),
         alt: att.original_name,
         loading: 'lazy',
@@ -48,7 +49,8 @@ export function attachmentThumb(att, ticketId) {
     ]);
   }
   const ic = iconFor(att.mime_type);
-  return h('a.flex.items-center.gap-2\\.5.px-3.py-2.rounded-md.border.border-slate-200.bg-white.hover\\:bg-slate-50.hover\\:border-surface-border.max-w-xs.transition', {
+  return h('a.flex.items-center.px-3.py-2.rounded-md.border.border-slate-200.bg-white.max-w-xs.transition', {
+    class: 'gap-2.5 hover:bg-slate-50 hover:border-surface-border',
     href: api.tickets.downloadUrl(ticketId, att.id),
     target: '_blank',
     rel: 'noopener',

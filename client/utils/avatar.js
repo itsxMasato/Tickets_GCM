@@ -5,6 +5,9 @@
 // en cualquier parte de la UI. Antes cada componente tenía su propia
 // copia de `avatarColor` y `initials`; centralizado aquí.
 
+import { h } from './dom.js';
+import { assetUrl } from '../api.js';
+
 // Paleta de avatares — colores saturados con buen contraste contra
 // brand-navy (#071D4C) y ring-white, y con texto blanco. 10 entradas
 // para tener repetición poco frecuente sin necesidad de hash.
@@ -25,6 +28,29 @@ export function avatarColor(seed) {
   return PALETTE[(seed || 0) % PALETTE.length];
 }
 
-export function initials(name = '') {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
+export function initials(name) {
+  // El default de parámetro (`= ''`) solo cubre `undefined`, no `null` —
+  // y `full_name` puede llegar `null` (p.ej. un ranking con un usuario ya
+  // borrado). Normalizamos acá para no reventar en `.split`.
+  const safe = name || '';
+  return safe.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
+}
+
+/**
+ * renderAvatar — foto de perfil si el user tiene `avatar_url`, si no las
+ * iniciales sobre color determinístico (mismo criterio de siempre). Un solo
+ * punto de decisión para que topbar y /profile no dupliquen la lógica.
+ * `className` va sin punto inicial, separado por espacios (como Tailwind).
+ */
+export function renderAvatar(user, { className = 'avatar' } = {}) {
+  const classSelector = className.trim().split(/\s+/).join('.');
+  if (user?.avatar_url) {
+    return h(`img.${classSelector}.object-cover`, {
+      src: assetUrl(user.avatar_url),
+      alt: '',
+    });
+  }
+  return h(`span.${classSelector}`, {
+    style: { backgroundColor: avatarColor(user?.id) },
+  }, initials(user?.full_name));
 }

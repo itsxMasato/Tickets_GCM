@@ -5,9 +5,9 @@
  * src/db/seed-multitenant.js
  *
  * Seed multi-tenant para MSSQL (vía TypeORM). Crea la empresa default,
- * siembra las 5 áreas operativas, migra role/area de users a
- * user_company_memberships, y rellena company_id en las tablas que
- * lo requieren. Termina aplicando los NOT NULL y los índices.
+ * migra role/area de users a user_company_memberships, y rellena
+ * company_id en las tablas que lo requieren. Termina aplicando los
+ * NOT NULL y los índices.
  *
  * Idempotente: si la empresa default ya existe, no hace nada destructivo.
  *
@@ -31,14 +31,6 @@ const DEFAULT_COMPANY = {
   active: true,
 };
 
-const DEFAULT_AREAS = [
-  { key: 'operaciones',    name: 'Operaciones',    active: true },
-  { key: 'logistica',      name: 'Logística',      active: true },
-  { key: 'mantenimiento',  name: 'Mantenimiento',  active: true },
-  { key: 'sistemas',       name: 'Sistemas',       active: true },
-  { key: 'otro',           name: 'Otro',           active: true },
-];
-
 function log(msg) {
   process.stdout.write(`[seed-multitenant] ${msg}\n`);
 }
@@ -53,16 +45,6 @@ async function ensureDefaultCompany(Company) {
   company = await repo.save(repo.create(DEFAULT_COMPANY));
   log(`Empresa default creada: id=${company.id} slug=${company.slug}`);
   return company;
-}
-
-async function ensureAreas(CompanyArea, companyId) {
-  const repo = CompanyArea;
-  for (const area of DEFAULT_AREAS) {
-    const existing = await repo.findOne({ where: { companyId, key: area.key } });
-    if (existing) continue;
-    await repo.save(repo.create({ ...area, companyId }));
-    log(`Área creada: ${area.key}`);
-  }
 }
 
 async function migrateUsers(User, UserCompanyMembership, companyId) {
@@ -86,11 +68,10 @@ async function migrateUsers(User, UserCompanyMembership, companyId) {
       userId: u.id,
       companyId,
       role: u.role,
-      areaKey: u.area,
       active: true,
       isDefault: true,
     }));
-    log(`Membresía default creada para user ${u.username} (rol=${u.role}, area=${u.area}).`);
+    log(`Membresía default creada para user ${u.username} (rol=${u.role}).`);
   }
 }
 
@@ -142,11 +123,10 @@ async function main() {
 
   const {
     User, Ticket, Category, CalendarEvent, Notification, AuditLog,
-    Company, CompanyArea, UserCompanyMembership,
+    Company, UserCompanyMembership,
   } = orm.Entities || require('../orm/entities');
 
   const company = await ensureDefaultCompany(Company);
-  await ensureAreas(CompanyArea, company.id);
   await migrateUsers(User, UserCompanyMembership, company.id);
 
   await backfillCompanyId('tickets', Ticket, company.id);
@@ -174,4 +154,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main, ensureDefaultCompany, ensureAreas, migrateUsers };
+module.exports = { main, ensureDefaultCompany, migrateUsers };

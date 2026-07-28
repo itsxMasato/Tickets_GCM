@@ -46,4 +46,38 @@ const upload = multer({
   limits: { fileSize: config.maxUploadMb * 1024 * 1024 },
 });
 
-module.exports = { upload, ALLOWED_MIMES };
+// ── Avatares de perfil ──────────────────────────────────────────────────────
+// Carpeta separada de los adjuntos de tickets (se sirve pública y
+// directamente vía /uploads/avatars — ver src/app.js — porque las fotos de
+// perfil se muestran en <img> por toda la UI sin poder mandar cookies de
+// sesión en cada request como sí hacen los adjuntos autenticados).
+const avatarDir = path.join(config.uploadDir, 'avatars');
+if (!fs.existsSync(avatarDir)) {
+  fs.mkdirSync(avatarDir, { recursive: true });
+}
+
+const AVATAR_MIMES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp']);
+
+const avatarStorage = multer.diskStorage({
+  destination(req, file, cb) { cb(null, avatarDir); },
+  filename(req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '') || '.jpg';
+    cb(null, `${uuid()}${ext}`);
+  },
+});
+
+function avatarFileFilter(req, file, cb) {
+  if (AVATAR_MIMES.has(file.mimetype)) return cb(null, true);
+  const err = new Error('La foto de perfil debe ser una imagen (PNG, JPG, GIF o WEBP).');
+  err.statusCode = 400;
+  err.code = 'UNSUPPORTED_MEDIA';
+  cb(err);
+}
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  fileFilter: avatarFileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB alcanza de sobra para una foto de perfil.
+});
+
+module.exports = { upload, ALLOWED_MIMES, avatarUpload, avatarDir };
