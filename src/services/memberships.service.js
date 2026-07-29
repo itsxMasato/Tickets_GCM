@@ -315,8 +315,14 @@ async function update(membershipId, input, requester, options = {}) {
   await assertCompanyKeepsCoverage(before, { becomesInactive: wantsActive === false, newRole: patch.role });
   if (wantsActive !== null) {
     if (!wantsActive) {
-      const others = await firestoreData.countCollection('user_company_memberships', [['user_id', '==', before.user_id], ['active', '==', 1]]);
-      if (before.active && others <= 1) throw conflictError('No se puede desactivar la última membresía activa del usuario.');
+      // Mismo criterio que softDelete(): el piso de "al menos una membresía
+      // activa" no aplica a un platform admin, que no depende de ninguna
+      // membresía para operar.
+      const targetUser = await firestoreData.getUserById(before.user_id);
+      if (!(targetUser && targetUser.is_platform_admin)) {
+        const others = await firestoreData.countCollection('user_company_memberships', [['user_id', '==', before.user_id], ['active', '==', 1]]);
+        if (before.active && others <= 1) throw conflictError('No se puede desactivar la última membresía activa del usuario.');
+      }
     }
     patch.active = wantsActive ? 1 : 0;
   }
@@ -355,8 +361,16 @@ async function softDelete(membershipId, requester) {
   const before = await firestoreData.getDoc('user_company_memberships', Number(membershipId));
   if (!before) throw notFoundError('Membresía no encontrada.');
   if (!before.active) return serialize(before);
-  const others = await firestoreData.countCollection('user_company_memberships', [['user_id', '==', before.user_id], ['active', '==', 1]]);
-  if (others <= 1) throw conflictError('No se puede eliminar la última membresía activa del usuario.');
+  // El piso de "al menos una membresía activa" protege a un usuario común de
+  // quedar sin ninguna empresa (sin tenant no puede hacer nada). Un platform
+  // admin no depende de ninguna membresía para operar (bypassea el requisito
+  // de empresa activa, ver tickets.service.js createTicket) — bloquearlo acá
+  // le impediría deshacer una membresía asignada por error.
+  const targetUser = await firestoreData.getUserById(before.user_id);
+  if (!(targetUser && targetUser.is_platform_admin)) {
+    const others = await firestoreData.countCollection('user_company_memberships', [['user_id', '==', before.user_id], ['active', '==', 1]]);
+    if (others <= 1) throw conflictError('No se puede eliminar la última membresía activa del usuario.');
+  }
   await assertCompanyKeepsCoverage(before, { becomesInactive: true });
   await firestoreData.updateDoc('user_company_memberships', before.id, { active: 0 });
   const afterDoc = await firestoreData.getDoc('user_company_memberships', before.id);

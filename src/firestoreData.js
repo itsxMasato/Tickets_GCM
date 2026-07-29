@@ -58,6 +58,11 @@ function normalizeUser(row) {
     created_at: toLegacyDate(row.created_at),
     email: row.email || null,
     avatar_url: row.avatar_url || null,
+    // Sin esto, getUserById() (usado por /api/auth/me y por cualquier
+    // "refresh" de datos frescos) perdía el flag de platform admin aunque
+    // la sesión sí lo tuviera correcto — el bypass funcionaba, pero /me
+    // mentía y podía esconder UI que sí debía verse.
+    is_platform_admin: row.is_platform_admin === true || row.is_platform_admin === 1 || row.is_platform_admin === '1',
   };
 }
 
@@ -504,6 +509,7 @@ async function updateUser(id, patch) {
   const updatePayload = {};
   if (patch.full_name !== undefined) updatePayload.full_name = normalizeString(patch.full_name);
   if (patch.role !== undefined) updatePayload.role = normalizeString(patch.role);
+  if (patch.is_platform_admin !== undefined) updatePayload.is_platform_admin = !!patch.is_platform_admin;
   if (patch.area !== undefined) updatePayload.area = normalizeString(patch.area) || null;
   if (patch.email !== undefined) {
     const normalizedEmail = normalizeString(patch.email);

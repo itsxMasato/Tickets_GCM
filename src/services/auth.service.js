@@ -60,6 +60,11 @@ function isUserActive(value) {
 
 function serialize(row) {
   if (!row) return null;
+  // is_platform_admin/isPlatformAdmin: sin esto, getById() (usado por
+  // /api/auth/me vía buildSessionUser) no reflejaba el flag aunque la
+  // sesión sí lo tuviera correcto desde el login — mismo gap que sanitize()
+  // ya resolvía para login/firebase, ahora también para el "refresh" de /me.
+  const isPlatformAdmin = row.isPlatformAdmin === true || row.is_platform_admin === true || row.is_platform_admin === 1 || row.isPlatformAdmin === 1 || row.isPlatformAdmin === '1' || row.is_platform_admin === '1';
   return {
     id: row.id,
     username: row.username,
@@ -69,6 +74,8 @@ function serialize(row) {
     email: row.email || null,
     avatar_url: row.avatar_url || null,
     active: isUserActive(row.active) ? 1 : 0,
+    is_platform_admin: isPlatformAdmin,
+    isPlatformAdmin: isPlatformAdmin,
     created_at: row.created_at instanceof Date
       ? row.created_at.toISOString().replace('T', ' ').slice(0, 19)
       : row.created_at,
@@ -232,7 +239,7 @@ async function createUser({ username, password, full_name, role, area, email, co
   }
 }
 
-async function updateUser(id, { full_name, role, area, active, password, email, username, company_id } = {}, currentUser) {
+async function updateUser(id, { full_name, role, area, active, password, email, username, company_id, is_platform_admin } = {}, currentUser) {
   // currentUser viene de req.user (seteado por requireAuth). Se usa para
   // anti-self-demote: un SAC no puede desactivarse ni perder el rol 'sac'.
   if (currentUser && Number(currentUser.id) === Number(id)) {
@@ -259,6 +266,40 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
         }
       }
     }
+    // Misma protección que el "último SAC", pero para platform admin: sin
+    // esto, alguien podía saltarse el chequeo de is_platform_admin de abajo
+    // simplemente desactivando la cuenta en vez de tocar el flag directo.
+    if (active !== undefined && (active === 0 || active === false)) {
+      const target = await getById(id);
+      if (target.is_platform_admin) {
+        const activeUsers = await firestoreData.listUsers({ active: true });
+        const otherAdmins = (activeUsers || []).filter((u) => u.is_platform_admin && Number(u.id) !== Number(id));
+        if (otherAdmins.length === 0) {
+          throw forbiddenError('No se puede desactivar al único administrador de plataforma. Asigná otro primero.');
+        }
+      }
+    }
+
+  // Platform admin: es un flag por usuario, no un privilegio permanente de
+  // una persona — así se puede transferir sin depender de acceso al
+  // servidor. Solo alguien que YA es platform admin puede otorgarlo o
+  // revocarlo (nunca un SAC común), y no se puede dejar al sistema sin
+  // ninguno activo (mismo criterio que el "último SAC" de arriba, pero
+  // para este flag).
+  if (is_platform_admin !== undefined) {
+    if (!currentUser || !currentUser.isPlatformAdmin) {
+      throw forbiddenError('Solo un administrador de plataforma puede otorgar o revocar ese permiso.');
+    }
+    const wantsPlatformAdmin = !!is_platform_admin;
+    if (!wantsPlatformAdmin && before.is_platform_admin) {
+      const activeUsers = await firestoreData.listUsers({ active: true });
+      const otherAdmins = (activeUsers || []).filter((u) => u.is_platform_admin && Number(u.id) !== Number(id));
+      if (otherAdmins.length === 0) {
+        throw forbiddenError('No se puede quitar el permiso al único administrador de plataforma. Asigná otro primero.');
+      }
+    }
+    patch.is_platform_admin = wantsPlatformAdmin;
+  }
 
   if (full_name !== undefined) {
     patch.full_name = requireString(full_name, 'Nombre completo', LIMITS.fullName.max);

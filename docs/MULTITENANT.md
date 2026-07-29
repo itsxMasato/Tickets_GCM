@@ -2,9 +2,9 @@
 
 # Multi-tenant — Planeación de grupo empresarial
 
-> **Propósito de este documento.** Dejar por escrito, en un solo lugar, la decisión de negocio y la arquitectura técnica para que el sistema pase de "una empresa con un SAC" a "un grupo empresarial con N empresas, cada una con sus propios roles, y un Miguel Flores que ve y administra todas". Si los tokens se acaban, este archivo es la fuente de verdad para retomar el trabajo sin pérdida de contexto.
+> **Propósito de este documento.** Dejar por escrito, en un solo lugar, la decisión de negocio y la arquitectura técnica para que el sistema pase de "una empresa con un SAC" a "un grupo empresarial con N empresas, cada una con sus propios roles, y un Platform Admin que ve y administra todas". Si los tokens se acaban, este archivo es la fuente de verdad para retomar el trabajo sin pérdida de contexto.
 >
-> **Audiencia.** Miguel Flores (autor del sistema), como recordatorio ejecutivo. Cualquier desarrollador o auditor externo que se sume al proyecto.
+> **Audiencia.** Quien administre el sistema (hoy Miguel Flores, su autor), como recordatorio ejecutivo. Cualquier desarrollador o auditor externo que se sume al proyecto.
 >
 > **Estado.** Aprobado por Miguel el 2026-07-21. Fases 0, 1 y 2 (services + smoke) implementadas. Fases 3 a 11 pendientes. Bug BIT↔boolean resuelto (ver §9.1).
 
@@ -19,21 +19,21 @@ Hoy el sistema modela "una organización". Mañana debe modelar "un **grupo empr
 | Concepto | Hoy | Mañana |
 |---|---|---|
 | Unidad organizativa | "GCM" (implícito) | Empresa (explícita, configurable) |
-| Quién es el SAC | Un solo Miguel | **Un SAC por empresa** + un **Platform Admin** (Miguel) que ve todo |
+| Quién es el SAC | Un solo SAC global (hoy Miguel) | **Un SAC por empresa** + un **Platform Admin** que ve todo |
 | Quién asigna tickets | El SAC global | El SAC de esa empresa |
 | Visibilidad de datos | Global | **Aislamiento total por empresa**, bypass solo para platform admin |
 | Cantidad de tickets previstos | Cientos/día | Miles/día, con N empresas emitiendo en paralelo |
 
 ### 1.2 La regla de oro
 
-> **Cada empresa es una burbuja. Nadie la atraviesa salvo el platform admin (Miguel).**
+> **Cada empresa es una burbuja. Nadie la atraviesa salvo quien tenga el rol de platform admin.**
 
 Esto vale para: tickets, categorías, usuarios, comentarios, asignaciones, attachments, notificaciones, calendar, reportes, auditoría. Todo se filtra por `company_id` antes de cualquier otra regla.
 
 ### 1.3 Decisiones cerradas (no se reabren sin conversación)
 
 - ✅ **Aislamiento total por defecto.** Un usuario de la empresa A jamás ve un ticket de la empresa B. Ni siquiera ve que existe.
-- ✅ **SAC por empresa + platform admin (Miguel).** Cada empresa tiene su SAC local. Miguel es el único que cruza.
+- ✅ **SAC por empresa + platform admin.** Cada empresa tiene su SAC local. El platform admin es el único que cruza. **No es una identidad fija de una persona** — es el flag `users.is_platform_admin`, transferible desde Usuarios → Editar usuario por quien ya tenga el flag (ver §5.4). Si la persona a cargo hoy deja el puesto, se le otorga el flag a quien la reemplace y luego se le revoca a la saliente; el sistema bloquea quedarse sin ningún platform admin activo.
 - ✅ **Multi-membresía.** Un usuario puede pertenecer a varias empresas con roles distintos en cada una. Ejemplo: un jefe puede ser `jefe_inmediato` en GCM Norte y `admin_area` en GCM Sur.
 - ✅ **Membresía default.** Si el usuario pertenece a varias, una queda marcada como default y el login va directo a esa (sin selector). Si tiene varias y ninguna es default, el login muestra un selector.
 - ✅ **Stack técnico.** TypeORM + SQL Server. La capa de Firestore queda solo si Firebase Auth se usa; el resto de la data migra a MSSQL.
@@ -47,7 +47,7 @@ Esto vale para: tickets, categorías, usuarios, comentarios, asignaciones, attac
 |---|---|
 | **Empresa (Company)** | Una organización del grupo. Tiene nombre, slug, color de marca, logo. ID interno autogenerado. |
 | **Membresía (Membership)** | El "pase" de un usuario a una empresa, con un rol y un área dentro de ella. Una persona con N membresías = un usuario con N roles en N empresas. |
-| **Platform Admin** | Usuario con `is_platform_admin = 1`. Bypass total: ve todas las empresas, todos los tickets, todos los reportes. En este sistema **es Miguel Flores**. |
+| **Platform Admin** | Usuario con `is_platform_admin = 1`. Bypass total: ve todas las empresas, todos los tickets, todos los reportes. Es un flag transferible (hoy lo tiene Miguel Flores, autor del sistema), no una identidad fija — ver §5.4. |
 | **Tenant scope** | El `company_id` activo en una sesión. Todas las queries del backend se filtran por ese valor. |
 | **Área de empresa** | Subdivisión operativa: operaciones, logística, mantenimiento, sistemas, otro. Cada empresa define las suyas. |
 | **Permiso por empresa** | Override de un permiso para un rol dentro de una empresa específica. Si no hay override, se usa el default global. |
@@ -189,6 +189,23 @@ req.user = {
 - **`requireCompany`** (NUEVO, Fase 3) — Asegura que hay un tenant activo. Si no, 403 `TENANT_REQUIRED`.
 - **`requirePermission(key)`** (NUEVO, Fase 7) — Lee el rol activo + override de empresa para `key`. Si no, 403.
 - **Platform admin bypass** — `requirePermission` retorna `true` si `req.user.isPlatformAdmin` (excepto para `manageCompanies`, que también puede).
+
+### 5.4 Transferencia del rol de platform admin (continuidad del negocio)
+
+El platform admin **no es una identidad fija de una persona** — es el flag `users.is_platform_admin`, y cualquier usuario puede tenerlo. Esto es deliberado: si quien lo tiene hoy deja el puesto, el acceso al sistema no debe depender de que esa persona siga disponible.
+
+**Cómo transferirlo:**
+
+1. Quien ya es platform admin va a Usuarios → Editar usuario de la persona que va a asumir, y marca el checkbox **"Administrador de plataforma"**. Guardar.
+2. Confirmar que la nueva persona puede operar (crear tickets sin empresa activa, gestionar todas las empresas, etc.).
+3. Editar a la persona saliente y desmarcar el checkbox (o desactivar su cuenta directamente).
+
+**Protecciones ya implementadas** (`auth.service.js:updateUser`):
+
+- Solo alguien que **ya** es platform admin puede otorgar o revocar el flag — un SAC común no puede.
+- No se puede revocar el flag al **único** platform admin activo (`403 FORBIDDEN`), ni tampoco desactivar esa cuenta como atajo para saltarse la protección — ambos caminos se validan.
+
+**Vía de emergencia (sin acceso a la UI):** `node scripts/set-platform-admin.js <id> [true|false]` contra el Firestore del proyecto — requiere acceso al `service-account.json` / consola de Firebase, no a una cuenta de usuario específica de la app. Documentar quién en la organización tiene ese acceso (además de quien hoy es platform admin) es la única pieza que sigue dependiendo de coordinación humana, no de código.
 
 ---
 
@@ -451,7 +468,7 @@ PRODUCT.md                         — actualizar register=multi-tenant
 
 ## 13. Cierre
 
-Cuando las 11 fases estén verdes, el sistema pasa de "una empresa con un SAC" a "un grupo empresarial con N empresas, cada una con su propio SAC, y un Miguel Flores que ve y administra todas". El precio: ~10 sesiones de trabajo. El beneficio: la plataforma escala a "miles de tickets por día" sin reescritura, y Miguel puede vender el sistema a otras empresas del grupo sin tocar código de permisos.
+Cuando las 11 fases estén verdes, el sistema pasa de "una empresa con un SAC" a "un grupo empresarial con N empresas, cada una con su propio SAC, y un platform admin que ve y administra todas". El precio: ~10 sesiones de trabajo. El beneficio: la plataforma escala a "miles de tickets por día" sin reescritura, y quien tenga el rol de platform admin puede vender el sistema a otras empresas del grupo sin tocar código de permisos — y ese rol se transfiere sin depender de que sea siempre la misma persona (§5.4).
 
 **Documentación detallada de la vista de empresas**: `docs/module-companies.md` (creada al cerrar Fase 9 — explica el view `/companies`, sus 3 modales, contratos HTTP y eventos realtime).
 

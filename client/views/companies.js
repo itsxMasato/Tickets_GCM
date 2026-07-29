@@ -561,13 +561,16 @@ export async function renderCompanies({ user }) {
 
     if (canManage) {
       wrap.querySelectorAll('[data-edit-member]').forEach((b) => b.addEventListener('click', () => {
-        const id = Number(b.dataset.editMember);
-        const m = members.find((x) => x.id === id);
+        // String(): m.id llega como string desde Firestore (p.ej. "11"), el
+        // dataset también es string — comparar contra Number(dataset) nunca
+        // hacía match y el botón quedaba mudo (sin request, sin error).
+        const id = b.dataset.editMember;
+        const m = members.find((x) => String(x.id) === String(id));
         if (m) openMembershipModal(company.id, async () => { await loadMembers(company.id); drawGrid(); refreshDetailModal(); }, m);
       }));
       wrap.querySelectorAll('[data-remove-member]').forEach((b) => b.addEventListener('click', () => {
-        const id = Number(b.dataset.removeMember);
-        const m = members.find((x) => x.id === id);
+        const id = b.dataset.removeMember;
+        const m = members.find((x) => String(x.id) === String(id));
         if (!m) return;
         confirmModal({
           title: m.active ? 'Desactivar membresía' : 'Activar membresía',

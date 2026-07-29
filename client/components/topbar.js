@@ -3,7 +3,7 @@ import { h, escapeHtml } from '../utils/dom.js';
 import { go } from '../router.js';
 import { subscribe, getState, setState } from '../store.js';
 import { ROLE_LABEL, AREA_LABEL, relativeFromNow, formatDateTime } from '../utils/format.js';
-import { ICON } from '../utils/icons.js';
+import { ICON, svg } from '../utils/icons.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
 import { subscribeToRealtimeEvents } from '../utils/realtime.js';
@@ -114,7 +114,7 @@ function bellPill(type) {
   return h(`span.badge.${cls}.inline-flex.items-center`, { html: `${iconHtml}${escapeHtml(BELL_TYPE_LABEL[type] || type)}` });
 }
 function bellCheckIcon() {
-  return h('svg', { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.check}" />` });
+  return h('svg.text-slate-400.transition-colors', { class: 'w-3.5 h-3.5 group-hover:text-accent', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.check}" />` });
 }
 
 function renderBell() {
@@ -122,18 +122,18 @@ function renderBell() {
   const hasUnread = unreadCount > 0;
 
   // ── Dropdown (panel) ────────────────────────────────────────────────────
-  const listEl = h('div.max-h-96.overflow-y-auto', {});
+  const listEl = h('div.max-h-96.overflow-y-auto.py-1', {});
   const emptyEl = h('div.px-4.py-8.text-center.text-sm.text-slate-500', {}, 'Sin notificaciones pendientes');
 
   const dropdown = h('div.absolute.right-0.top-full.mt-2.w-80.bg-white.rounded-xl.shadow-pop.border.border-surface-border.z-40.hidden.origin-top-right.overflow-hidden', {
     role: 'menu',
     'aria-label': 'Notificaciones',
   }, [
-    h('div.flex.items-center.justify-between.px-4.py-3.border-b.border-surface-border', {}, [
-      h('div.text-sm.font-semibold.text-brand-ink', {}, 'Notificaciones'),
+    h('div.flex.items-center.justify-between.px-4.py-3.border-b.border-surface-border.bg-surface-alt', {}, [
+      h('div.text-sm.font-bold.text-brand-ink', {}, 'Notificaciones'),
       hasUnread
-        ? h('button.text-xs.font-medium.text-brand-ocean', {
-            class: 'hover:text-brand-deep',
+        ? h('button.font-semibold.text-brand-ocean.transition-colors', {
+            class: 'text-xs hover:text-brand-deep',
             role: 'menuitem',
             onclick: () => markAll(),
           }, 'Marcar todas')
@@ -141,11 +141,11 @@ function renderBell() {
     ]),
     listEl,
     h('div.border-t.border-surface-border', {}, [
-      h('button.flex.items-center.justify-center.w-full.px-4.text-sm.font-medium.text-brand-ocean.transition', {
-        class: 'hover:bg-surface py-2.5',
+      h('button.flex.items-center.justify-center.gap-1.5.w-full.px-4.font-semibold.text-brand-ocean.transition-colors', {
+        class: 'hover:bg-surface hover:text-brand-deep py-2.5 text-sm',
         role: 'menuitem',
         onclick: () => { closeDropdown(); go('/notifications'); },
-      }, 'Ver todas las notificaciones →'),
+      }, [h('span', {}, 'Ver todas las notificaciones'), svg(h, ICON.arrowR, 'w-3.5 h-3.5')]),
     ]),
   ]);
 
@@ -220,27 +220,35 @@ function renderBell() {
       return;
     }
     for (const n of items) {
-      const checkBtn = h('button.flex-none.w-7.h-7.rounded-full.border.border-surface-border-strong.text-white.bg-white.transition.flex.items-center.justify-center', {
-        class: 'hover:bg-accent/10 hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/60',
+      const unread = !n.read;
+      const checkBtn = h('button.group.flex-none.w-7.h-7.rounded-full.border.transition.flex.items-center.justify-center', {
+        class: unread
+          ? 'border-accent/30 bg-white hover:bg-accent/10 hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/60'
+          : 'border-surface-border bg-white hover:bg-surface focus:outline-none focus:ring-2 focus:ring-accent/60',
         role: 'menuitem',
         'aria-label': 'Marcar como leída',
         title: 'Marcar como leída',
         onclick: (e) => { e.stopPropagation(); markOne(n); },
       }, [bellCheckIcon()]);
 
-      const item = h('button.flex.items-start.gap-3.w-full.px-4.py-3.text-left.transition.border-b', {
-        class: 'hover:bg-surface border-surface-border/60 last:border-b-0',
+      const item = h('button.group.relative.flex.items-start.gap-3.w-full.text-left.transition.rounded-lg', {
+        class: unread
+          ? 'bg-accent/[0.04] hover:bg-accent/[0.07] mx-2 my-1 p-3'
+          : 'hover:bg-surface mx-2 my-1 p-3',
         role: 'menuitem',
         onclick: () => onItemClick(n),
       }, [
         checkBtn,
         h('div.flex-1.min-w-0', {}, [
-          h('div.flex.items-center.gap-2.mb-1', {}, [bellPill(n.type)]),
-          h('div.text-sm.font-semibold.text-brand-ink.truncate', {}, n.title || BELL_TYPE_LABEL[n.type] || n.type),
-          n.body ? h('div.text-xs.text-slate-600.line-clamp-2', {}, n.body) : null,
-          h('div.flex.items-center.gap-2.mt-1.text-slate-500', { class: 'text-[11px]' }, [
-            n.ticket_id ? h('span', {}, `Ticket #${n.ticket_id}`) : null,
-            h('span', { title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
+          h('div.flex.items-center.gap-2.mb-1', {}, [
+            bellPill(n.type),
+            unread ? h('span.flex-none.rounded-full.bg-accent', { class: 'w-1.5 h-1.5' }) : null,
+          ]),
+          h('div.text-sm.text-brand-ink.truncate', { class: unread ? 'font-bold' : 'font-semibold' }, n.title || BELL_TYPE_LABEL[n.type] || n.type),
+          n.body ? h('div.text-xs.text-slate-600.line-clamp-2.mt-0.5', {}, n.body) : null,
+          h('div.flex.items-center.gap-2.mt-1.5', {}, [
+            n.ticket_id ? h('span.font-mono.text-slate-500.bg-surface.px-1.5.rounded', { class: 'text-[11px] py-0.5' }, `#${n.ticket_id}`) : null,
+            h('span.text-slate-500', { class: 'text-[11px]', title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
           ]),
         ]),
       ]);

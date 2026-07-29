@@ -3,6 +3,8 @@
   "version": "0.2.0",
   "private": true,
   "description": "Sistema de tickets interno GCM con flujo por áreas (supervisor_campo → SAC → admin_area → jefe_inmediato)",
+  "author": "Miguel Flores",
+  "license": "UNLICENSED",
   "type": "commonjs",
   "main": "src/server.js",
   "scripts": {

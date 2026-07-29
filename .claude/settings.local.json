@@ -36,7 +36,10 @@
       "Bash(grep -n 'shadow-black\\\\\\\\\\\\\\\\/20\\\\|h-7\\\\.w-1\\\\\\\\\\\\\\\\/2\\\\|text-brand-ink\\\\\\\\\\\\\\\\/70' client/views/dashboard.js)",
       "Bash(npx vite *)",
       "Bash(grep -n '\\\\\\\\\\\\\\\\:' client/components/topbar.js)",
-      "Skill(impeccable)"
+      "Skill(impeccable)",
+      "Artifact",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"exit=$?\")"
     ]
   },
   "hooks": {

@@ -67,7 +67,11 @@ async function createTicket(payload, user) {
   // sin empresa activa se colaba con el mismo criterio y filtraba datos
   // entre tenants). Bloqueamos la creacion en el origen en vez de tocar
   // ese passthrough, que sigue siendo necesario para los registros legacy.
-  if (user.activeCompanyId == null) {
+  // Excepción: el platform admin (docs/MULTITENANT.md §4.3 "Crear ticket:
+  // platform_admin ✅ cualquiera") sí puede crear sin empresa activa — el
+  // passthrough de company_id null es exactamente el comportamiento
+  // documentado para ese caso, no un bug.
+  if (user.activeCompanyId == null && !user.isPlatformAdmin) {
     throw validationError('Tu usuario no tiene una empresa activa asignada. Contactá al administrador antes de crear un ticket.');
   }
   const title = requireString(payload.title, 'título', 200);

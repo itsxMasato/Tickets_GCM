@@ -225,7 +225,7 @@ function wireRealtime() {
 let gcmHelpHandler = null;
 if (typeof window !== 'undefined') {
   gcmHelpHandler = () => {
-    toast('Ayuda: todavía no hay documentación publicada. Contacta a SAC para soporte.', 'info', 4000);
+    window.open('/manual/index.html', '_blank', 'noopener');
   };
   window.addEventListener('gcm:help', gcmHelpHandler);
 }

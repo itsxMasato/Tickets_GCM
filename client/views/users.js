@@ -621,6 +621,25 @@ async function openEditModal(u, onSaved, currentUser) {
     h('label.label', {}, 'Área'),
     area,
   ]);
+
+  // Administrador de plataforma: bypass total cross-empresa (ver
+  // docs/MULTITENANT.md). Es un flag por usuario, no un privilegio atado a
+  // una persona — así se puede transferir el día que quien lo tenga hoy deje
+  // el puesto. Solo se muestra si quien edita YA es platform admin; el
+  // backend además bloquea dejar el sistema sin ninguno.
+  const canTogglePlatformAdmin = isEdit && currentUser?.isPlatformAdmin;
+  const platformAdminCheckbox = canTogglePlatformAdmin
+    ? h('input', { type: 'checkbox', checked: !!u?.is_platform_admin || undefined, class: 'w-4 h-4 rounded border-slate-300' })
+    : null;
+  const platformAdminField = canTogglePlatformAdmin
+    ? h('div', {}, [
+        h('label.flex.items-center.gap-2.text-sm.font-medium.text-brand-ink', {}, [
+          platformAdminCheckbox,
+          'Administrador de plataforma',
+        ]),
+        h('p.text-xs.text-slate-500.mt-1', {}, 'Ve y administra todas las empresas, sin importar su rol. No se puede quitar al único administrador de plataforma activo.'),
+      ])
+    : null;
   const passwordField = h('div', {}, [
     h('label.label', {}, isEdit ? 'Nueva contraseña — opcional' : 'Contraseña *'),
     passwordWithToggle,
@@ -640,6 +659,7 @@ async function openEditModal(u, onSaved, currentUser) {
     fullnameField,
     isEdit ? null : emailField,
     h('div.grid.grid-cols-2.gap-3', {}, [roleField, areaField]),
+    platformAdminField,
     h('div', {}, [
       h('label.label', {}, isEdit ? 'Empresa' : 'Empresa *'),
       company,
@@ -750,6 +770,7 @@ async function openEditModal(u, onSaved, currentUser) {
           role: roleVal,
           area: area.value || null,
           ...(company && company.value ? { company_id: Number(company.value) } : {}),
+          ...(platformAdminCheckbox ? { is_platform_admin: platformAdminCheckbox.checked } : {}),
         }
       : {
           username: username.value.trim(),

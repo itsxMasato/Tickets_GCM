@@ -42,7 +42,13 @@ export function h(selector, props = {}, children = []) {
       } else if (k === 'value' && (tag === 'input' || tag === 'textarea' || tag === 'select')) {
         el.value = v;
       } else if (k === 'checked' || k === 'disabled' || k === 'selected' || k === 'autofocus') {
-        if (v) el.setAttribute(k, '');
+        // v === '' cuenta como "presente" (selected="" es válido en HTML) — todo
+        // el código que arma <option selected={cond ? '' : null}> (ticket-new,
+        // ticket-detail, users, companies, reports, tickets-list) depende de esto;
+        // con `if (v)` a secas, '' es falsy en JS y el atributo nunca se aplicaba,
+        // así que el <select> siempre mostraba la primera opción del DOM en vez
+        // del valor real (prioridad/categoría/rol actuales al editar, por ejemplo).
+        if (v || v === '') el.setAttribute(k, '');
       } else {
         el.setAttribute(k, v);
       }
