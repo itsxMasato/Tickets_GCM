@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-﻿'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
@@ -9,16 +9,18 @@ const { canViewTicket } = require('../utils/ticket-access');
 
 async function getAttachment(id) {
   const row = await firestoreData.getAttachment(id);
-  if (!row) throw notFoundError('Adjunto no encontrado.');
-  const ticket = await firestoreData.getTicketById(row.ticket_id);
+  if (!row)
+    throw notFoundError('Adjunto no encontrado.');
+  const ticket = await firestoreData.getTicketWithArea(row.ticket_id);
   return {
     ...row,
     assigned_to: ticket?.assigned_to || null,
     created_by: ticket?.created_by || null,
-    // canViewTicket() (ticket-access.js) necesita el status real del ticket
-    // para el chequeo de jefe_inmediato (solo ve solucionado); sin esto
-    // quedaba undefined y jefe_inmediato nunca podia ver ningun adjunto.
     status: ticket?.status || null,
+    company_id: ticket?.company_id ?? null,
+    area: ticket?.area || null,
+    assigned_to_area: ticket?.assigned_to_area || null,
+    created_by_area: ticket?.created_by_area || null,
   };
 }
 
@@ -66,3 +68,4 @@ module.exports = {
   createAsync,
   createWithJoin,
 };
+

@@ -1,9 +1,8 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { isImage, fileSize } from '../utils/format.js';
 import { api } from '../api.js';
 
-// Iconos SVG por tipo de archivo (16px, currentColor, stroke 1.8)
 const FILE_ICON = {
   image: 'M3 5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5zM8 11a2 2 0 100-4 2 2 0 000 4zM21 15l-5-5L5 21',
   pdf:   'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM9 13h6M9 17h6M14 2v6h6',
@@ -64,3 +63,4 @@ export function attachmentThumb(att, ticketId) {
     ]),
   ]);
 }
+

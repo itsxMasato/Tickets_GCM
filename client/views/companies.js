@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
@@ -13,33 +13,23 @@ import { avatarColor, initials } from '../utils/avatar.js';
 import { exportButton } from '../components/export-button.js';
 import { exportToExcel, exportListToPDF } from '../utils/exports.js';
 
-// ── Límites espejo del backend (services/companies + memberships) ──
-// El cliente valida para feedback inmediato, pero el backend es la fuente de verdad.
 const LIMITS = {
   company: { name: { max: 200 }, slug: { max: 50 }, logo: { max: 500 }, color: { max: 20 }, codePrefix: { max: 6 } },
 };
 
-// Espejo de CODE_PREFIX_RE en services/companies.service.js
 const CODE_PREFIX_RE = /^[A-Z0-9]{1,6}$/;
 
-// Roles canónicos: misma fuente que el resto de las vistas
-// (users.js, roles.js, dashboard.js). Defensa: si por error de import ROLES
-// viniera vacío, caemos a la lista cruda que coincide con validators.ROLES.
 const ROLES_FALLBACK = (Array.isArray(ROLES) && ROLES.length)
   ? ROLES
   : ['supervisor_campo', 'sac', 'admin_area', 'jefe_inmediato'];
 
-// ── Estado interno ──────────────────────────────────────────────────────────
-// Empresas cargadas del backend (lo que ve el requester — ya filtrado por
-// membresía si no es platform admin en companies.service.js:list).
 let companies = [];
-let selectedId = null;           // empresa seleccionada para abrir el modal
-let activeDetailModal = null;    // instancia activa del modal de detalle
-let membersByCompany = new Map(); // companyId -> [membresías]
+let selectedId = null;
+let activeDetailModal = null;
+let membersByCompany = new Map();
 let loadedAt = null;
 let loading = false;
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 function setFieldError(input, errorEl, message) {
   if (message) {
     errorEl.textContent = message;
@@ -54,8 +44,6 @@ function setFieldError(input, errorEl, message) {
 }
 function clearFieldError(input, errorEl) { setFieldError(input, errorEl, null); }
 
-// Convierte un color hex "#0F2A47" en un dot con ese color. Si es null,
-// usa el fallback del brand.
 function colorDot(color) {
   const safe = (color && /^#[0-9A-Fa-f]{3,8}$/.test(color)) ? color : '#0b1e3a';
   return h('span.inline-block.w-3.h-3.rounded-full.flex-none', {
@@ -64,12 +52,10 @@ function colorDot(color) {
   });
 }
 
-// ── Carga ──────────────────────────────────────────────────────────────────
 async function loadCompanies() {
   const res = await api.companies.list({ all: true });
   companies = res.companies || [];
   loadedAt = new Date();
-  // Limpiar caches de detalle: si una empresa fue eliminada, soltar su sub-data.
   const liveIds = new Set(companies.map((c) => c.id));
   for (const id of [...membersByCompany.keys()]) {
     if (!liveIds.has(id)) membersByCompany.delete(id);
@@ -86,22 +72,17 @@ async function ensureDetail(companyId) {
   if (!membersByCompany.has(companyId)) await loadMembers(companyId);
 }
 
-// Encargado de cuenta (responsible_user_id) resuelto contra el cache de
-// usuarios ya cargado — no es un objeto embebido en la respuesta de
-// companies.list(), sólo el FK.
 function responsibleUser(company) {
   if (!company?.responsible_user_id) return null;
   return usersCache.get().find((u) => String(u.id) === String(company.responsible_user_id)) || null;
 }
 
-// ── Render principal ───────────────────────────────────────────────────────
 export async function renderCompanies({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
   const canManage = canManageCompanies(user);
   let exportBtn;
 
-  // Header
   const headerRight = canManage
     ? h('button.btn.btn-primary', {
         type: 'button',
@@ -141,22 +122,17 @@ export async function renderCompanies({ user }) {
   const grid = h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-2 xl:grid-cols-3' });
   root.appendChild(grid);
 
-  // Loading inicial
   grid.appendChild(renderLoading('Cargando empresas…'));
 
-  // Realtime: refresca la lista cuando otro platform admin o sesión del
-  // propio Miguel en otra pestaña crea/edita empresas o membresías.
   const onRealtime = (e) => {
     const t = e.detail?.event;
     if (!t) return;
     const relevant = t.startsWith('company:') || t.startsWith('membership:');
-    if (!relevant) return;
-    // Invalida caches para que el siguiente draw() haga fetch fresco.
+    if (!relevant)
+      return;
     if (t === 'company:created' || t === 'company:updated' || t === 'company:deleted') {
       reloadAll();
     } else if (t.startsWith('membership:')) {
-      // No tenemos el companyId en el payload para saber a quién refrescar;
-      // recargamos todo (es barato: 1 GET por recurso).
       membersByCompany.clear();
       drawGrid();
       if (selectedId) refreshDetailModal();
@@ -164,14 +140,10 @@ export async function renderCompanies({ user }) {
   };
   window.addEventListener('gcm:realtime', onRealtime);
 
-  // ── Boot ──────────────────────────────────────────────────────────────
   loading = true;
   try {
     await loadCompanies();
     await usersCache.load();
-    // Precarga de miembros de todas las empresas — sin esto, la card sólo
-    // mostraba el conteo real después de haber abierto el detalle al menos
-    // una vez en la sesión (quedaba en "0 miembros" hasta el primer click).
     await Promise.all(companies.map((c) => loadMembers(c.id).catch(() => {})));
   } catch (e) {
     grid.innerHTML = '';
@@ -186,7 +158,6 @@ export async function renderCompanies({ user }) {
   }
   drawGrid();
 
-  // ── Draw: grid de cards ──────────────────────────────────────────────
   function drawGrid() {
     grid.innerHTML = '';
     if (loading) { grid.appendChild(renderLoading('Cargando…')); return; }
@@ -266,7 +237,6 @@ export async function renderCompanies({ user }) {
     }
   }
 
-  // ── Modal: detalle de empresa ───────────────────────────────────────
   function openDetailModal(company) {
     if (!company) return;
     const body = h('div.flex.flex-col.gap-4', {}, [
@@ -312,7 +282,6 @@ export async function renderCompanies({ user }) {
     openDetailModal(company);
   }
 
-  // ── Tabs del detalle ─────────────────────────────────────────────────
   function renderTabs(company) {
     const tabs = [
       { key: 'data',    label: 'Datos' },
@@ -361,7 +330,6 @@ export async function renderCompanies({ user }) {
     return h('div', {}, [bar, tabContent]);
   }
 
-  // ── Tab: Datos ───────────────────────────────────────────────────────
   function renderDataTab(company) {
     if (!canManage) {
       return h('p.text-sm.text-slate-500', {}, 'Solo el administrador de plataforma puede editar los datos de la empresa.');
@@ -398,11 +366,6 @@ export async function renderCompanies({ user }) {
       }
       responsible.appendChild(h('option', { value: '' }, '— Selecciona un encargado —'));
       if (currentId && !currentInList) {
-        // El encargado actual ya no es admin_area activo (se desactivó o le
-        // cambiaron el rol desde /users). Sin esta opción, el <select>
-        // quedaba en "" y el form bloqueaba GUARDAR CUALQUIER cambio (hasta
-        // ubicación o prefijo) hasta elegir un reemplazo, aunque el admin
-        // solo quisiera editar otro campo sin tocar el encargado.
         const currentUser = usersCache.get().find((u) => String(u.id) === currentId);
         const label = currentUser
           ? `${currentUser.full_name || currentUser.username} (actual — ya no es admin. de área activo)`
@@ -493,7 +456,6 @@ export async function renderCompanies({ user }) {
     ]);
   }
 
-  // ── Tab: Miembros ────────────────────────────────────────────────────
   function renderMembersTab(company) {
     const members = membersByCompany.get(company.id) || [];
     const header = h('div.flex.items-center.justify-between.mb-3', {}, [
@@ -561,9 +523,6 @@ export async function renderCompanies({ user }) {
 
     if (canManage) {
       wrap.querySelectorAll('[data-edit-member]').forEach((b) => b.addEventListener('click', () => {
-        // String(): m.id llega como string desde Firestore (p.ej. "11"), el
-        // dataset también es string — comparar contra Number(dataset) nunca
-        // hacía match y el botón quedaba mudo (sin request, sin error).
         const id = b.dataset.editMember;
         const m = members.find((x) => String(x.id) === String(id));
         if (m) openMembershipModal(company.id, async () => { await loadMembers(company.id); drawGrid(); refreshDetailModal(); }, m);
@@ -721,9 +680,6 @@ export async function renderCompanies({ user }) {
   return root;
 }
 
-// ── Helpers compartidos ────────────────────────────────────────────────────
-// Wrapper de getRoleLabel (de ../utils/role-labels.js) que cae a la key cruda
-// si el cache aún no se inicializó (mismo patrón que dashboard.js, roles.js).
 function roleLabel(role) {
   return getRoleLabel(role) || role;
 }
@@ -741,7 +697,6 @@ function renderLoading(message) {
   ]);
 }
 
-// ── Modal: crear/editar empresa ───────────────────────────────────────────
 function openCompanyModal(company, onSaved) {
   const isEdit = !!company;
   const name = h('input.input', { type: 'text', value: company?.name || '', maxlength: String(LIMITS.company.name.max) });
@@ -764,7 +719,6 @@ function openCompanyModal(company, onSaved) {
   wireClear(codePrefix, codePrefixErr);
   wireClear(location, locationErr); wireClear(responsible, responsibleErr);
 
-  // Poblar encargado solo con usuarios activos que son administrador de área.
   function populateResponsibleNew() {
     const users = usersCache.get().filter((u) => u.active && u.role === 'admin_area');
     responsible.innerHTML = '';
@@ -846,17 +800,9 @@ h('div', {}, [h('label.label', {}, 'Encargado *'), responsible, h('p.text-xs.tex
   openModal({ title: isEdit ? `Editar ${company.name}` : 'Nueva empresa', body, actions, size: 'lg' });
 }
 
-// ── Modal: crear/editar membresía ─────────────────────────────────────────
 function openMembershipModal(companyId, onSaved, membership = null) {
   const isEdit = !!membership;
   const company = companies.find((c) => c.id === companyId);
-  // Lista de usuarios activos: usamos usersCache (sincronizado por realtime).
-  // El encargado de la empresa ya pertenece a ella (es su admin de área) y
-  // no se agrega como miembro aparte, así que se excluye de la lista.
-  // También se excluye a quien YA tiene una membresía (activa o inactiva) en
-  // esta empresa — el backend rechaza duplicados con un 409 crudo
-  // ("El usuario ya tiene una membresía..."); mejor prevenirlo en el
-  // selector que dejar que el admin lo intente y se encuentre con un error.
   const existingMemberIds = new Set((membersByCompany.get(companyId) || []).map((m) => String(m.user_id)));
   const allUsers = usersCache.get().filter((u) =>
     (!company?.responsible_user_id || String(u.id) !== String(company.responsible_user_id))
@@ -927,3 +873,4 @@ function openMembershipModal(companyId, onSaved, membership = null) {
   ];
   openModal({ title: isEdit ? 'Editar membresía' : 'Agregar miembro a la empresa', body, actions, size: 'md' });
 }
+

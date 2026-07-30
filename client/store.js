@@ -1,5 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Store reactivo mínimo: estado global + emit
+/* Documentado por: Miguel Flores */
 const listeners = new Set();
 let state = {
   user: null,
@@ -19,3 +18,4 @@ export function subscribe(fn) {
   fn(state);
   return () => listeners.delete(fn);
 }
+

@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { exportToExcel, exportListToPDF, fetchAllForExport, fetchAllTickets, TICKET_EXPORT_COLUMNS } from '../utils/exports.js';
@@ -22,9 +22,6 @@ const AREA_ORDER = [...Object.keys(AREA_LABEL), NO_AREA];
 const AREA_CHART_LABEL = { ...AREA_LABEL, [NO_AREA]: 'Sin área' };
 const PAGE_SIZE = 25;
 
-// Colores de barra alineados con los dots de statusBadge/priorityBadge
-// (utils/format.js + styles.css .badge-* / .prio-*) para que el chart no
-// invente una paleta nueva.
 const STATUS_BAR_COLOR = {
   recibido: 'bg-slate-400', asignado: 'bg-blue-500', en_proceso: 'bg-amber-500',
   solucionado: 'bg-emerald-500', cerrado: 'bg-slate-600', reabierto: 'bg-orange-500',
@@ -35,9 +32,6 @@ const AREA_BAR_COLOR = {
   sistemas: 'bg-blue-500', otro: 'bg-slate-400', [NO_AREA]: 'bg-slate-300',
 };
 
-// Tono por KPI: acento lateral + chip de ícono + color del valor. La tarjeta
-// "Urgentes" usa borde completo (no solo lateral) para que destaque como en
-// el resto de vistas críticas de la app.
 const KPI_TONE = {
   '':      { border: 'border-l-4 border-l-surface-border-strong', icon: 'bg-surface-alt text-brand', value: 'text-brand-ink' },
   ocean:   { border: 'border-l-4 border-l-brand-ocean',           icon: 'bg-brand-ocean/10 text-brand-ocean', value: 'text-brand-ocean' },
@@ -74,8 +68,6 @@ export async function renderReports({ query, user }) {
     exportBtn,
   ]));
 
-  // Filtros — grid responsivo (1 col mobile, hasta 6 en desktop grande),
-  // cada campo con su label arriba.
   const filters = { status: query?.status || '', priority: query?.priority || '', area: query?.area || '', assigned_to: query?.assigned_to || '', date_from: query?.date_from || '', date_to: query?.date_to || '', search: query?.search || '' };
   const filtersBar = h('div.card.grid.grid-cols-1.gap-4.items-end', { class: 'sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6' });
   const search = h('input.input', { type: 'search', placeholder: 'Ej: GCM-2849…' });
@@ -98,12 +90,9 @@ export async function renderReports({ query, user }) {
   filtersBar.appendChild(h('div.flex.gap-2', {}, [apply, clearBtn]));
   root.appendChild(filtersBar);
 
-  // KPIs
   const kpis = h('div.grid.grid-cols-2.gap-3', { class: 'md:grid-cols-3 lg:grid-cols-6' });
   root.appendChild(kpis);
 
-  // Tabla → data-list (tabla desktop / card-list mobile) + paginación real
-  // sobre el set completo filtrado (ver fetchAllTickets más abajo).
   const listWrap = h('div', {});
   const pagerInfo = h('div.text-xs.text-slate-500', {}, '');
   const pagerPageLabel = h('div.text-xs.text-slate-500.font-medium', {}, '');
@@ -116,9 +105,6 @@ export async function renderReports({ query, user }) {
   const listContainer = h('div.flex.flex-col', {}, [listWrap, pager]);
   root.appendChild(listContainer);
 
-  // Charts — estado/prioridad (existentes), + área y carga de trabajo (nuevo),
-  // + tendencia diaria a todo el ancho. Todo calculado sobre el set COMPLETO
-  // filtrado (no solo la página visible en la tabla).
   const chartsRow1 = h('div.grid.grid-cols-1.gap-3', { class: 'lg:grid-cols-2' });
   const chartsRow2 = h('div.grid.grid-cols-1.gap-3', { class: 'lg:grid-cols-2' });
   const trendWrap = h('div', {});
@@ -213,7 +199,6 @@ export async function renderReports({ query, user }) {
     filters.date_from = from.value;
     filters.date_to = to.value;
 
-    // Guardar filtros en la URL
     setFilterInUrl('search', filters.search);
     setFilterInUrl('status', filters.status);
     setFilterInUrl('priority', filters.priority);
@@ -232,8 +217,6 @@ export async function renderReports({ query, user }) {
     trendWrap.innerHTML = '';
     kpis.innerHTML = '';
     try {
-      // Todo el set filtrado (no solo la página de 25) para que KPIs y
-      // gráficos reflejen el total real, no solo lo que se ve en pantalla.
       const { rows, truncated } = await fetchAllTickets(filters);
       cachedAll = rows;
       if (truncated) {
@@ -479,3 +462,4 @@ export async function renderReports({ query, user }) {
   await render();
   return root;
 }
+

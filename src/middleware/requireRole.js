@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 
 function requireRole(...roles) {
   return function (req, res, next) {
@@ -14,3 +14,4 @@ function requireRole(...roles) {
 }
 
 module.exports = requireRole;
+

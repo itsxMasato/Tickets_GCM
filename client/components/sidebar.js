@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { go } from '../router.js';
 import {
@@ -17,7 +17,6 @@ function icon(path, cls = 'sidebar-icon') {
 }
 
 function sectionIcon(path) {
-  // Icono más pequeño y de menor opacidad para headers de sección.
   return h('svg.flex-none.opacity-70', {
     class: 'w-3.5 h-3.5',
     xmlns: 'http://www.w3.org/2000/svg',
@@ -28,8 +27,6 @@ function sectionIcon(path) {
   });
 }
 
-// Mapea cada título de sección a su icono. Si el sistema crece a más
-// secciones, agregar aquí. Mantener en sync con navFor() abajo.
 const SECTION_ICON = {
   'Operación':       ICON.section_operation,
   'Administración':  ICON.section_admin,
@@ -37,16 +34,11 @@ const SECTION_ICON = {
   'Cuenta':          ICON.section_account,
 };
 
-// ── Definición de navegación por rol ─────────────────────────────────────────
-// Cada rol tiene su propio arreglo: secciones -> items.
-// path: ruta destino, label, icon, active: (pathActual) => bool, visible: (user) => bool
-
 function path() {
   return (location.hash || '').replace(/^#/, '') || '/dashboard';
 }
 
 function navFor(user) {
-  // === Supervisor de campo ===
   if (isSupervisor(user)) {
     return [
       {
@@ -66,7 +58,6 @@ function navFor(user) {
     ];
   }
 
-  // === Administrador de área ===
   if (isAdmin(user)) {
     return [
       {
@@ -86,7 +77,6 @@ function navFor(user) {
     ];
   }
 
-  // === Jefe inmediato ===
   if (isJefe(user)) {
     return [
       {
@@ -107,7 +97,6 @@ function navFor(user) {
     ];
   }
 
-  // === SAC (admin global) ===
   if (isSAC(user)) {
     return [
       {
@@ -138,7 +127,6 @@ function navFor(user) {
     ];
   }
 
-  // fallback
   return [
     {
       title: 'Operación',
@@ -149,13 +137,11 @@ function navFor(user) {
   ];
 }
 
-// ── Sidebar export ───────────────────────────────────────────────────────────
 export function renderSidebar({ user, onClose }) {
   const p = path();
   const sections = navFor(user);
 
   return h('aside.sidebar', {}, [
-    // Brand
     h('div.sidebar-brand', {}, [
       h('div.w-10.h-10.rounded-lg.bg-white.flex.items-center.justify-center.shadow-soft.flex-none', {}, [
         h('img.w-8.h-8.object-contain', { src: '/img/Logo.png', alt: 'Logo GCM' }),
@@ -166,7 +152,6 @@ export function renderSidebar({ user, onClose }) {
       ]),
     ]),
 
-    // Nav por secciones
     h('nav.flex-1.overflow-y-auto.py-2', {}, sections.map((section) => {
       const items = section.items.filter((i) => i.visible?.(user) !== false);
       if (!items.length) return null;
@@ -180,9 +165,6 @@ export function renderSidebar({ user, onClose }) {
           const active = item.match(p);
           return h('button', {
             class: ['sidebar-link', active ? 'active' : ''],
-            // Cierre optimista del drawer mobile antes de la navegación.
-            // Evita el frame visible donde el drawer queda sobre la nueva vista
-            // (cierre por hashchange tiene 1 frame de delay perceptible).
             onclick: () => {
               if (typeof onClose === 'function') onClose();
               go(item.to);

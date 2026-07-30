@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 
 export function badge(text, type = 'slate', extra = '') {
@@ -14,3 +14,4 @@ export function priorityBadge(priority) {
 }
 
 import { STATUS_LABEL, PRIORITY_LABEL } from '../utils/format.js';
+

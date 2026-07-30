@@ -1,5 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Carga SheetJS (xlsx) y jsPDF + jspdf-autotable desde CDN
+/* Documentado por: Miguel Flores */
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) return resolve();
@@ -39,27 +38,19 @@ async function ensureJsPDF() {
 import { api } from '../api.js';
 import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, formatDateTime } from './format.js';
 
-// ── Identidad de marca para membretes de export (PDF y Excel) ──────────────
-// Mismos colores que DESIGN.md (brand-navy, brand-ocean, brand-ink,
-// surface-border) y el nombre legal completo usado en el splash de login
-// (client/index.html) — para que un documento exportado se lea como un
-// documento oficial de la empresa, no un CSV genérico con logo pegado.
 export const BRAND = {
   name: 'Grupo Camaronero Milcien',
   shortName: 'GCM',
   system: 'Sistema de Tickets',
   logoUrl: '/img/Logo.png',
-  navy: [7, 29, 76],       // #071D4C
-  ocean: [22, 172, 228],   // #16ACE4
-  ink: [36, 52, 71],       // #243447
-  muted: [100, 116, 139],  // slate-500
-  border: [214, 222, 232], // #D6DEE8
-  surface: [247, 249, 252],// #F7F9FC
+  navy: [7, 29, 76],
+  ocean: [22, 172, 228],
+  ink: [36, 52, 71],
+  muted: [100, 116, 139],
+  border: [214, 222, 232],
+  surface: [247, 249, 252],
 };
 
-// Carga el logo una sola vez por sesión de página. Si falla (offline, ruta
-// rota), el export sigue sin logo en vez de romperse — nunca debe bloquear
-// la generación de un documento que el usuario necesita ahora.
 let logoImagePromise = null;
 function loadLogoImage() {
   if (!logoImagePromise) {
@@ -85,9 +76,6 @@ function humanize(t) {
   };
 }
 
-// Exportado para que los call-sites de tickets puedan reusar el mismo set
-// de columnas en exportListToPDF (que no tiene un default interno como
-// exportToExcel — es genérica para cualquier entidad).
 export const TICKET_EXPORT_COLUMNS = [
   { key: 'code',             label: 'Código' },
   { key: 'title',            label: 'Título' },
@@ -103,28 +91,12 @@ export const TICKET_EXPORT_COLUMNS = [
   { key: 'closed_at',        label: 'Cerrado' },
 ];
 
-// Recorre todas las páginas del listado de tickets que cumplen `filters`.
-// Usado tanto por el export (Excel/PDF) como por los reportes agregados
-// (KPIs/gráficos), que necesitan el conjunto completo filtrado — no solo la
-// página que se muestra en la tabla — para no subestimar los totales.
-//
-// Antes esto paginaba con `page` (offset): cada vuelta del loop volvía a
-// pedirle al server `limit(page*limit)` documentos desde el principio y
-// descartaba casi todos — exportar 5,000 tickets terminaba leyendo del
-// orden de 127,000 documentos en total (la página 50 sola releía 5,000).
-// Encima cortaba en `page > 50` EN SILENCIO: con más de 5,000 tickets
-// matcheando el filtro, el export/reporte quedaba incompleto sin ningún
-// aviso. Ahora usa el cursor que devuelve el server (ver
-// firestoreData.listTickets): cada página cuesta lo mismo sin importar
-// cuántas se hayan pedido antes, y el límite de seguridad es mucho más
-// alto y se informa explícitamente si se llega a truncar.
 const FETCH_ALL_MAX_ROWS = 20000;
 
 export async function fetchAllTickets(filters = {}) {
   const all = [];
   let cursor = null;
   let truncated = false;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const params = { ...filters, limit: 200 };
     if (cursor) params.cursor = cursor;
@@ -143,18 +115,6 @@ export async function fetchAllForExport(filters = {}) {
   return { rows: rows.map(humanize), truncated };
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// EXCEL
-// ═══════════════════════════════════════════════════════════════════════
-// `options.columns` permite exportar otras entidades (ej. usuarios) sin
-// depender de TICKET_EXPORT_COLUMNS, que es específico de tickets. Por defecto se
-// mantiene el comportamiento histórico (tickets) para no romper los
-// call-sites existentes.
-//
-// El logo NO se incrusta como imagen: la build gratuita de SheetJS (CDN,
-// xlsx.full.min.js) no expone una API de imágenes — eso es exclusivo de
-// SheetJS Pro (de pago). El membrete de marca en Excel es tipográfico
-// (nombre completo en navy, tamaño grande) en vez de logo + texto.
 export async function exportToExcel(rows, filename = 'reporte.xlsx', options = {}) {
   const columns = options.columns || TICKET_EXPORT_COLUMNS;
   const title = options.title || 'Reporte';
@@ -168,7 +128,6 @@ export async function exportToExcel(rows, filename = 'reporte.xlsx', options = {
   const XLSX = await ensureXLSX();
   const wb = XLSX.utils.book_new();
 
-  // ── Hoja "Resumen": membrete + resumen ejecutivo + firmas ──────────────
   const summaryRows = [
     [BRAND.name],
     [`${BRAND.shortName} · ${BRAND.system}`],
@@ -203,13 +162,11 @@ export async function exportToExcel(rows, filename = 'reporte.xlsx', options = {
   if (subtitle) summarySheet['A5'].font = { italic: true, sz: 10, color: { rgb: 'FF64748B' } };
   summarySheet['A7'].font = { bold: true, sz: 12, color: { rgb: 'FF071D4C' } };
   summarySheet['A14'].font = { bold: true, sz: 12, color: { rgb: 'FF071D4C' } };
-  // Encabezados de la fila "Elaborado por | Revisado por | Aprobado por"
   ['A16', 'B16', 'C16'].forEach((addr) => {
     if (summarySheet[addr]) summarySheet[addr].font = { bold: true, sz: 9, color: { rgb: 'FF64748B' } };
   });
   XLSX.utils.book_append_sheet(wb, summarySheet, 'Resumen');
 
-  // ── Hoja de datos ────────────────────────────────────────────────────
   const data = [columns.map((c) => c.label), ...rows.map((r) => columns.map((c) => r[c.key] ?? ''))];
   const ws = XLSX.utils.aoa_to_sheet(data);
   ws['!cols'] = columns.map((c) => ({ wch: Math.max(12, c.label.length + 4) }));
@@ -247,10 +204,6 @@ export async function exportToExcel(rows, filename = 'reporte.xlsx', options = {
   XLSX.writeFile(wb, filename);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// PDF — helpers de membrete compartidos entre el export de listas
-// (exportListToPDF) y el de un ticket individual (exportTicketToPDF).
-// ═══════════════════════════════════════════════════════════════════════
 const PDF_MARGIN = 40;
 
 async function drawPdfHeader(doc, { title, subtitle, meta = [] }) {
@@ -267,10 +220,7 @@ async function drawPdfHeader(doc, { title, subtitle, meta = [] }) {
     try {
       doc.addImage(logo, 'PNG', PDF_MARGIN, 20, logoSize, logoSize, undefined, 'FAST');
       textX = PDF_MARGIN + logoSize + 16;
-    } catch {
-      // Formato de imagen no soportado por jsPDF (raro, pero no debe
-      // romper el export) — seguimos sin logo.
-    }
+    } catch {}
   }
 
   doc.setTextColor(255, 255, 255);
@@ -323,11 +273,6 @@ function drawPdfFooter(doc, pageNumber) {
   doc.text(`Página ${pageNumber}`, pageWidth - PDF_MARGIN, footerY + 14, { align: 'right' });
 }
 
-// drawSignatureBlock — tres espacios de firma (Elaborado / Revisado /
-// Aprobado), estándar en reportes formales corporativos. "Elaborado por"
-// viene pre-llenado con quien generó el documento (queda registrado quién
-// lo sacó del sistema); los otros dos quedan en blanco para firma física
-// tras imprimir. Si no entra en la página actual, abre una nueva.
 function drawSignatureBlock(doc, y, generatedByName, generatedByRole) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -370,10 +315,6 @@ function drawSignatureBlock(doc, y, generatedByName, generatedByRole) {
   return y + blockHeight;
 }
 
-// exportListToPDF — versión tabular genérica (tickets, auditoría, usuarios,
-// empresas...) con el mismo membrete/firma que exportTicketToPDF. Antes
-// sólo existía PDF para el detalle de un ticket individual; el resto de
-// las vistas sólo ofrecían Excel.
 export async function exportListToPDF(rows, columns, filename = 'reporte.pdf', options = {}) {
   const { jsPDF } = await ensureJsPDF();
   const orientation = columns.length > 6 ? 'landscape' : 'portrait';
@@ -539,3 +480,4 @@ export async function exportTicketToPDF(ticket) {
 
   doc.save(`${ticket.code || 'ticket'}.pdf`);
 }
+

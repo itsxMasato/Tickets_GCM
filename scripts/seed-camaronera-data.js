@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firebaseAdmin = require('../src/firebaseAdmin');
 const { hashPassword } = require('../src/utils/password');
 
@@ -204,3 +204,4 @@ async function main() {
 }
 
 main();
+

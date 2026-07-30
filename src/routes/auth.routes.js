@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
@@ -12,8 +12,6 @@ const firebaseAdmin = require('../firebaseAdmin');
 const { deriveAuthEmail } = require('../utils/deriveAuthEmail');
 const { avatarUpload, avatarDir } = require('../middleware/upload');
 
-// Mensaje único de "no encontrado" para no filtrar si el identificador
-// correspondía a un usuario inexistente o a uno sin cuenta en Firebase Auth.
 const NOT_FOUND_MSG = 'No encontramos una cuenta con ese usuario o correo.';
 
 function resolvePlatformAdminFlag(user) {
@@ -25,8 +23,6 @@ function resolvePlatformAdminFlag(user) {
   return false;
 }
 
-// Membresías del user (para el selector de empresa del cliente) — acceso a
-// las propias siempre permitido en memberships.service.js:listByUser.
 async function loadMemberships(userId) {
   try {
     return await membershipsService.listByUser(userId, { requester: { id: userId } });
@@ -35,11 +31,6 @@ async function loadMemberships(userId) {
   }
 }
 
-// Construye el payload de "usuario de sesión" con datos frescos de Firestore
-// (no los que quedaron cacheados en la cookie de sesión al loguearse — si
-// otro SAC edita full_name/avatar/rol después del login, esto lo refleja al
-// toque en el próximo /me en vez de esperar a que la persona vuelva a
-// loguearse) + lo que sí vive en sesión (empresa activa) + membresías.
 async function buildSessionUser(req) {
   const fresh = await authService.getById(req.user.id);
   const memberships = await loadMemberships(req.user.id);
@@ -63,14 +54,6 @@ router.post('/login', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /auth/resolve-login — dado un username o email, devuelve el email
-// canónico con el que ese usuario está registrado en Firebase Auth. El
-// frontend usa esto antes de llamar a signInWithEmailAndPassword para
-// soportar tanto el username corto ("Miguel") como el email real con el
-// que se registró ("miguel@gmail.com").
-//
-// Privacidad: si no hay match, devolvemos 404 con el mismo cuerpo
-// indistinguible, así un atacante no puede enumerar usuarios válidos.
 router.post('/resolve-login', async (req, res, next) => {
   try {
     const { identifier } = req.body || {};
@@ -82,14 +65,10 @@ router.post('/resolve-login', async (req, res, next) => {
     if (!user) return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
 
     const primary = deriveAuthEmail(user);
-    if (!primary) return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
+    if (!primary)
+      return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
 
-    // Probar primero el email primario. Si Firebase Auth no lo tiene
-    // (p.ej. bootstrap corrió con un set de datos parcial), caer al
-    // alternativo: sintético ↔ real.
-    const candidates = primary.endsWith('@ticketsgcm.local')
-      ? [primary, (user.email || '').trim().toLowerCase()].filter(Boolean)
-      : [(user.username || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '') + '@ticketsgcm.local', primary].filter(Boolean);
+    const candidates = Array.from(new Set([primary, (user.email || '').trim().toLowerCase()].filter(Boolean)));
 
     const auth = firebaseAdmin.getAuth();
     for (const email of candidates) {
@@ -129,7 +108,6 @@ router.get('/me', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /auth/firebase — intercambia un ID token de Firebase por sesión local.
 router.post('/firebase', async (req, res, next) => {
   try {
     const { idToken } = req.body || {};
@@ -139,14 +117,11 @@ router.post('/firebase', async (req, res, next) => {
     if (!email) return res.status(400).json({ error: { message: 'El token no contiene un correo electrónico.' } });
 
     const user = await firestoreData.getUserByIdentifier(email);
-    if (!user) return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
-    // Mismo mensaje que auth.service.js usa para el login local — un usuario
-    // desactivado que cae en el fallback de Firebase (login local devuelve
-    // 400 tanto para credenciales invalidas como para usuario inactivo) veia
-    // "User inactive" en ingles en vez de este texto.
-    if (!user.active) return res.status(403).json({ error: { message: 'Usuario inactivo. Contacte al administrador.' } });
+    if (!user)
+      return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
+    if (!user.active)
+      return res.status(403).json({ error: { message: 'Usuario inactivo. Contacte al administrador.' } });
 
-    // Crear sesión
     const activeCompanyId = await membershipsService.resolveDefaultCompanyId(user.id);
     req.session.userId = user.id;
     req.session.role = user.role;
@@ -166,10 +141,6 @@ router.post('/firebase', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /auth/active-company — cambia la empresa activa de la sesión (para
-// usuarios con más de una membresía, p.ej. un admin_area asignado a varias
-// empresas). Requiere membresía activa en esa empresa; platform admin y sac
-// pueden elegir cualquiera (mismo criterio que companies.service.js:list).
 router.post('/active-company', requireAuth, async (req, res, next) => {
   try {
     const companyId = Number((req.body || {}).company_id);
@@ -188,12 +159,6 @@ router.post('/active-company', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /auth/avatar — sube/reemplaza la foto de perfil del usuario logueado.
-// Autoservicio: cualquiera puede cambiar SU PROPIA foto (no requiere SAC,
-// a diferencia de PATCH /api/users/:id). El archivo se guarda en
-// uploads/avatars y se sirve público (ver src/app.js) porque se muestra en
-// <img> por toda la UI. Si ya tenía una foto, se borra la anterior para no
-// acumular archivos huérfanos.
 router.post('/avatar', requireAuth, avatarUpload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) {
@@ -216,3 +181,4 @@ router.post('/avatar', requireAuth, avatarUpload.single('file'), async (req, res
 });
 
 module.exports = router;
+

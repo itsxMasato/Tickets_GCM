@@ -1,12 +1,8 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { isImage, fileSize } from '../utils/format.js';
 import { ICON } from '../utils/icons.js';
 
-// Tipos aceptados — espejo de src/middleware/upload.js (ALLOWED_MIMES). El
-// backend sigue siendo la fuente de verdad: si el cliente acepta un tipo que
-// el server rechaza, multer devuelve 400 UNSUPPORTED_MEDIA. Esta lista es
-// sólo para feedback inmediato y filtrar al elegir archivos.
 const ACCEPT = [
   'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp',
   'application/pdf',
@@ -22,11 +18,8 @@ const ACCEPT = [
 ].join(',');
 const ACCEPT_TYPES = new Set(ACCEPT.split(','));
 
-// Límite client-side (espejo de config.maxUploadMb). Backend sigue siendo
-// la fuente de verdad — esto evita gastar upload en un archivo que será rechazado.
 const MAX_BYTES = 25 * 1024 * 1024;
 
-// Catálogo de iconos por tipo (paths SVG, no JSX).
 const FILE_ICON = {
   image: ICON.image,
   pdf:   'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM9 13h6M9 17h6M14 2v6h6',
@@ -46,8 +39,6 @@ function iconFor(mime) {
 }
 
 function readPreviewDataURL(file) {
-  // Sólo imágenes. Genera data URL para preview inmediato. Si el navegador
-  // se ahoga con un archivo grande, capturamos el error y caemos al icono.
   return new Promise((resolve) => {
     if (!isImage(file.type)) return resolve(null);
     const reader = new FileReader();
@@ -57,29 +48,17 @@ function readPreviewDataURL(file) {
   });
 }
 
-/**
- * Dropzone accesible: drag&drop + click + paste desde clipboard.
- *
- * API:
- *   const dz = attachmentsDropzone({ onChange: (files) => {}, disabled: bool })
- *   dz.getFiles() — array de File (limpios, sin metadatos UI)
- *   dz.clear()
- *   dz.destroy() — desconecta listeners
- *
- * Mantiene una lista interna de archivos pendientes. Valida tipo y tamaño
- * client-side (espejo de upload.js — el server sigue siendo la fuente de
- * verdad). Llama onChange en cada mutación.
- */
-export function attachmentsDropzone({
-  onChange,
-  disabled = false,
-  label = 'Adjuntar archivos',
-  hint = 'Imágenes, PDF, Office, ZIP, texto. Máx. 25 MB por archivo.',
-} = {}) {
-  const files = [];   // { id, file, preview }
-  const invalids = []; // { name, reason }
+export function attachmentsDropzone(
+  {
+    onChange,
+    disabled = false,
+    label = 'Adjuntar archivos',
+    hint = 'Imágenes, PDF, Office, ZIP, texto. Máx. 25 MB por archivo.',
+  } = {}
+) {
+  const files = [];
+  const invalids = [];
 
-  // Input file invisible (lo activamos por click o por teclado sobre la zona).
   const fileInput = h('input.hidden', {
     type: 'file',
     multiple: true,
@@ -89,12 +68,10 @@ export function attachmentsDropzone({
     onchange: (e) => { addFiles(e.target.files); e.target.value = ''; },
   });
 
-  // Lista de archivos pendientes
   const fileList = h('ul.gcm-dropzone-list.hidden.flex.flex-col.gap-2.mt-2', { 'aria-label': 'Archivos adjuntos' });
   const invalidList = h('ul.gcm-dropzone-invalids.hidden.mt-2.text-xs.text-amber-800.bg-amber-50.border.border-amber-200.rounded-md.px-3.py-2', { 'aria-label': 'Archivos no añadidos' });
   const counter = h('div.text-slate-500.mt-1', { class: 'text-[10px]' }, '0 archivos');
 
-  // Zona principal: clic + teclado abren el file picker
   const drop = h('div.gcm-dropzone.flex.flex-col.items-center.justify-center.gap-2.px-4.py-8.rounded-xl.border-2.border-dashed.border-surface-border-strong.text-center.transition', {
     class: 'bg-surface/40',
     tabindex: '0',
@@ -109,8 +86,6 @@ export function attachmentsDropzone({
     h('div.text-slate-500.mt-1', { class: 'text-[10px]' }, 'Arrastra · pega con Ctrl+V · o haz click para elegir'),
   ]);
 
-  // El input vive FUERA del dropzone (no anidado) para evitar doble trigger
-  // por el for=… del label. La zona abre el picker programáticamente.
   function openPicker() { if (!disabled) fileInput.click(); }
   drop.addEventListener('click', openPicker);
   drop.addEventListener('keydown', (e) => {
@@ -118,7 +93,6 @@ export function attachmentsDropzone({
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); }
   });
 
-  // Drag & drop
   function setDragVisual(on) {
     drop.classList.toggle('gcm-dropzone-active', on);
   }
@@ -135,9 +109,6 @@ export function attachmentsDropzone({
   drop.addEventListener('dragleave', onDragLeave);
   drop.addEventListener('drop', onDrop);
 
-  // Paste desde clipboard. El listener está en document para que funcione
-  // aunque el foco esté en cualquier parte — exceptuamos inputs/textarea
-  // editables (título, descripción) para no romper el comportamiento nativo.
   function onPaste(e) {
     if (disabled) return;
     const t = e.target;
@@ -154,7 +125,6 @@ export function attachmentsDropzone({
     if (pasted.length === 0) return;
     e.preventDefault();
     addFiles(pasted);
-    // Pulso visual de confirmación
     drop.classList.add('gcm-dropzone-active');
     setTimeout(() => drop.classList.remove('gcm-dropzone-active'), 320);
   }
@@ -175,7 +145,6 @@ export function attachmentsDropzone({
         continue;
       }
       files.push({ id, file, preview: null });
-      // Preview de imagen en background; si falla, queda null y usamos icono.
       readPreviewDataURL(file).then((url) => {
         const f = files.find((x) => x.id === id);
         if (f) { f.preview = url; renderFileList(); }
@@ -255,3 +224,4 @@ export function attachmentsDropzone({
     destroy,
   };
 }
+

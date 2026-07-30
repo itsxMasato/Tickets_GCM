@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-﻿'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firestoreData = require('../firestoreData');
 const { validationError } = require('../utils/validators');
 
@@ -8,9 +8,7 @@ async function emitNotification(userId, event) {
     const io = require('../sockets').getIO();
     if (!io) return;
     io.to(`user:${userId}`).emit('notification:new', event);
-  } catch (e) {
-    /* socket no inicializado aún */
-  }
+  } catch (e) {}
 }
 
 async function create({ user_id, type, ticket_id, title, body }) {
@@ -51,3 +49,4 @@ module.exports = {
   getUnreadCountAsync,
   markRead,
 };
+

@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const isSqliteFallback = process.env.DISABLE_MSSQL === 'true';
 
@@ -8,3 +8,4 @@ const timestampDefault = isSqliteFallback
   : () => 'SYSUTCDATETIME()';
 
 module.exports = { timestampDefault };
+

@@ -1,3 +1,4 @@
+/* Documentado por: Miguel Flores */
 'use strict';
 
 async function authenticateWithFallback({
@@ -31,3 +32,4 @@ async function authenticateWithFallback({
 }
 
 module.exports = { authenticateWithFallback };
+

@@ -1,16 +1,6 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Cache en memoria de los labels editables de los roles (rol → etiqueta
-// visible). Una sola fuente de verdad: el backend (Firestore) cargado en
-// init() tras el login. Si el cache está vacío, se cae al default local
-// — mismo string que validators.ROLE_LABEL en el backend, para mantener
-// una sola cara del sistema. La desincronización cliente/servidor
-// histórica queda resuelta: ambos usan los mismos defaults y el cliente
-// siempre refleja lo que dice el servidor.
-
+/* Documentado por: Miguel Flores */
 import { api } from '../api.js';
 
-// Defaults locales — espejo de src/utils/validators.js#ROLE_LABEL. Es
-// legítimo duplicar: son 4 strings, y evita un import cross-side.
 const DEFAULT_ROLE_LABEL = {
   supervisor_campo: 'Supervisor de campo',
   sac:              'Servicio al cliente (SAC)',
@@ -36,8 +26,6 @@ export async function init() {
       }
       initialized = true;
     } catch (e) {
-      // Si falla (sin red, 5xx), cargamos defaults para que la UI no
-      // muestre keys crudas. El siguiente init() lo reintentará.
       cache.clear();
       for (const role of Object.keys(DEFAULT_ROLE_LABEL)) {
         cache.set(role, DEFAULT_ROLE_LABEL[role]);
@@ -52,17 +40,11 @@ export function isInitialized() {
   return initialized;
 }
 
-// Devuelve el label visible de un rol. Orden de resolución:
-//   1. Cache (lo que devolvió init o lo último aplicado por realtime).
-//   2. Default local (espejo del backend).
-//   3. La key cruda como último recurso.
 export function getRoleLabel(role) {
   if (!role) return '';
   return cache.get(role) || DEFAULT_ROLE_LABEL[role] || role;
 }
 
-// Aplica un cambio de label al cache y lo difunde a las vistas vivas.
-// Las vistas suscritas a 'gcm:role_label_updated' re-renderizan lo propio.
 export function applyRoleLabel(role, label) {
   if (!role) return;
   if (typeof label === 'string' && label.length > 0) {
@@ -75,7 +57,6 @@ export function applyRoleLabel(role, label) {
   }
 }
 
-// Suscripción ergonómica. Devuelve función de cleanup.
 export function subscribe(handler) {
   if (typeof window === 'undefined') return () => {};
   const evt = 'gcm:role_label_updated';
@@ -83,7 +64,7 @@ export function subscribe(handler) {
   return () => window.removeEventListener(evt, handler);
 }
 
-// Sólo para tests/debug. La UI nunca debe leer esto directamente.
 export function _debugCache() {
   return new Map(cache);
 }
+

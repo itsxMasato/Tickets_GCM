@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { go } from '../router.js';
@@ -7,8 +7,6 @@ import { backButton } from '../components/back-button.js';
 import { PRIORITY_LABEL } from '../utils/format.js';
 import { attachmentsDropzone } from '../components/attachments-dropzone.js';
 
-// Límites espejo del backend (tickets.service.js → requireString). El cliente
-// valida para feedback inmediato; el backend sigue siendo la fuente de verdad.
 const LIMITS = {
   title:       { min: 4,  max: 200 },
   description: { min: 8,  max: 5000 },
@@ -16,8 +14,6 @@ const LIMITS = {
 
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
 
-// Marca/limpia error de un campo con feedback a11y. Mismo patrón usado en
-// /users (users.js → setFieldError). Reutilizar para evitar divergencias.
 function setFieldError(input, errorEl, message) {
   if (message) {
     errorEl.textContent = message;
@@ -34,7 +30,6 @@ function setFieldError(input, errorEl, message) {
 export async function renderTicketNew({ user }) {
   const root = h('div.flex.flex-col.gap-4.max-w-5xl', {});
 
-  // Header con back button (mismo patrón que el resto de vistas /tickets/*).
   root.appendChild(backButton({ href: '/tickets', label: 'Volver a tickets' }));
   root.appendChild(h('h1.text-2xl.font-bold.text-slate-800', {}, 'Nuevo ticket'));
   root.appendChild(h('p.text-sm.text-slate-500', {},
@@ -42,13 +37,8 @@ export async function renderTicketNew({ user }) {
   ));
 
   
-  // Categorías (no bloqueantes: si falla el fetch, el select queda con "Sin
-  // categoría", que es un estado válido — el ticket no requiere categoría).
   const { categories } = await api.categories.list().catch(() => ({ categories: [] }));
 
-  // ── Form layout ───────────────────────────────────────────────────────
-  // 2 columnas en desktop: form (izq) + side de contexto (der). En mobile
-  // colapsa a 1 columna con el side de contexto al final.
   const grid = h('div.grid.grid-cols-1.gap-4', { class: 'lg:grid-cols-3' });
   const formCol = h('form.card.flex.flex-col.gap-4', { class: 'lg:col-span-2', onsubmit: onSubmit, novalidate: 'true' });
   const sideCol = h('aside.flex.flex-col.gap-3', {});
@@ -56,7 +46,6 @@ export async function renderTicketNew({ user }) {
   grid.appendChild(sideCol);
   root.appendChild(grid);
 
-  // ── Campos del formulario ──────────────────────────────────────────────
   const titleInput = h('input.input', {
     type: 'text',
     maxlength: String(LIMITS.title.max),
@@ -81,19 +70,16 @@ export async function renderTicketNew({ user }) {
     PRIORITIES.map((p) => h('option', { value: p, selected: p === 'media' ? '' : null }, PRIORITY_LABEL[p]))
   );
 
-  // Errores field-level
   const titleErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-new-title-err', role: 'alert' });
   const descErr  = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-new-desc-err',  role: 'alert' });
   const catErr   = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-new-cat-err',   role: 'alert' });
   const banner   = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', { role: 'alert' });
 
-  // Helper text bajo el título y la descripción
   const titleHelper = h('p.text-xs.text-slate-500.mt-1', {},
     `Mínimo ${LIMITS.title.min} caracteres. Resume el problema en una frase.`);
   const descHelper = h('p.text-xs.text-slate-500.mt-1', {},
     'Contexto, ubicación, hora. Mientras más detalle, más rápido se asigna.');
 
-  // Field groups
   const titleField = h('div', {}, [
     h('label.label', {}, 'Título *'),
     titleInput,
@@ -109,7 +95,6 @@ export async function renderTicketNew({ user }) {
     descHelper,
     descErr,
   ]);
-  // Sincroniza counter a medida que escribe
   descInput.addEventListener('input', () => {
     formCol.querySelector('[data-counter="desc"]').textContent = `${descInput.value.length}/${LIMITS.description.max}`;
   });
@@ -130,7 +115,6 @@ export async function renderTicketNew({ user }) {
   formCol.appendChild(descField);
   formCol.appendChild(h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-2' }, [catField, prioField]));
 
-  // ── Sección de adjuntos (dropzone) ────────────────────────────────────
   const dropzoneSection = h('div.flex.flex-col.gap-2', {}, [
     h('div.flex.items-baseline.justify-between', {}, [
       h('label.label', {}, 'Adjuntos'),
@@ -138,12 +122,11 @@ export async function renderTicketNew({ user }) {
     ]),
   ]);
   const dz = attachmentsDropzone({
-    onChange: () => { /* estado ya vive dentro del dropzone */ },
+    onChange: () => {},
   });
   dropzoneSection.appendChild(dz.root);
   formCol.appendChild(dropzoneSection);
 
-  // Banner de error + acciones
   formCol.appendChild(banner);
 
   const submitBtn = h('button.btn.btn-primary.w-fit.gap-2', { type: 'submit' }, [
@@ -156,9 +139,6 @@ export async function renderTicketNew({ user }) {
   ]);
   formCol.appendChild(formActions);
 
-  // ── Side de contexto: ayuda + recordatorio ────────────────────────────
-  // "Ayuda" con bullets cortos: qué adjuntar, qué evitar. "Recordatorio"
-  // sobre SLA implícito por prioridad. Sin métricas inventadas.
   const tipTitle = h('div.text-sm.font-semibold.text-brand-ink.mb-2', {}, 'Antes de enviar');
   const tips = [
     { d: 'M7 11V7a5 5 0 0110 0v4M5 11h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z', t: 'Adjunta evidencia', s: 'Fotos del error, capturas, archivos relacionados.' },
@@ -179,7 +159,6 @@ export async function renderTicketNew({ user }) {
   });
   sideCol.appendChild(h('div.card', {}, [tipTitle, tipList]));
 
-  // Recordatorio de prioridad
   const prioItems = [
     { key: 'urgente', cls: 'text-red-700', label: 'Urgente', desc: 'Detiene la operación.' },
     { key: 'alta',    cls: 'text-amber-700', label: 'Alta',    desc: 'Impacto material en el servicio.' },
@@ -203,7 +182,6 @@ export async function renderTicketNew({ user }) {
     prioList,
   ]));
 
-  // ── Validación ─────────────────────────────────────────────────────────
   function clearAllErrors() {
     [titleErr, descErr, catErr].forEach((e) => e.classList.add('hidden'));
     banner.classList.add('hidden'); banner.textContent = '';
@@ -257,17 +235,10 @@ export async function renderTicketNew({ user }) {
     banner.classList.remove('hidden');
   }
 
-  // Limpia error del campo apenas el usuario edita (mensaje stale es peor
-  // que ningún mensaje).
   titleInput.addEventListener('input', () => setFieldError(titleInput, titleErr, null));
   descInput.addEventListener('input', () => setFieldError(descInput, descErr, null));
   catSel.addEventListener('change', () => setFieldError(catSel, catErr, null));
 
-  // ── Submit ────────────────────────────────────────────────────────────
-  // Estrategia: crear el ticket primero (JSON), luego subir adjuntos en
-  // paralelo. Si la creación falla, no se sube nada. Si la creación pasa
-  // pero un adjunto falla, igual navegamos al ticket y reportamos el fallo
-  // — el ticket ya existe con su código y los adjuntos que sí subieron.
   let submitting = false;
   async function onSubmit(e) {
     e.preventDefault();
@@ -283,7 +254,6 @@ export async function renderTicketNew({ user }) {
 
     try {
       const { ticket } = await api.tickets.create(v.payload);
-      // Subir adjuntos si los hay
       const pending = dz.getFiles();
       if (pending.length > 0) {
         submitBtn.querySelector('span').textContent = `Subiendo 0/${pending.length}…`;
@@ -311,7 +281,6 @@ export async function renderTicketNew({ user }) {
       }
       go(`/tickets/${ticket.id}`);
     } catch (err) {
-      // Error del backend o de red al crear el ticket
       showBanner(err.message || 'No se pudo crear el ticket.');
       submitting = false;
       submitBtn.disabled = false;
@@ -320,11 +289,10 @@ export async function renderTicketNew({ user }) {
     }
   }
 
-  // Cleanup: desconecta el listener de paste del dropzone cuando la vista
-  // se desmonta (e.g. al navegar a otra ruta).
   root._gcmCleanup = () => {
     try { dz.destroy(); } catch {}
   };
 
   return root;
 }
+

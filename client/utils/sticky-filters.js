@@ -1,9 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-/**
- * Estilos CSS para hacer que un elemento sea "sticky" cuando se desplaza.
- * Se aplica a la barra de filtros en vistas de lista.
- */
-
+/* Documentado por: Miguel Flores */
 export const stickyHeaderStyles = `
   .filters-bar-sticky {
     position: sticky;
@@ -18,9 +13,6 @@ export const stickyHeaderStyles = `
   }
 `;
 
-/**
- * Habilita el efecto sticky con detección de scroll.
- */
 export function enableStickyFilters(filterBarElement) {
   filterBarElement.classList.add('filters-bar-sticky');
   
@@ -39,9 +31,7 @@ export function enableStickyFilters(filterBarElement) {
   });
 }
 
-/**
- * Desactiva el efecto sticky.
- */
 export function disableStickyFilters(filterBarElement) {
   filterBarElement.classList.remove('filters-bar-sticky', 'scrolled');
 }
+

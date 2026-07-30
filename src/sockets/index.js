@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const { Server } = require('socket.io');
 const config = require('../config');
 
@@ -10,7 +10,6 @@ function setup(httpServer, sessionMiddleware) {
     cors: { origin: true, credentials: true },
   });
 
-  // Compartir la sesión con Socket.IO
   io.engine.use(sessionMiddleware);
 
   io.on('connection', (socket) => {
@@ -24,11 +23,6 @@ function setup(httpServer, sessionMiddleware) {
       socket.join('sac');
     }
     socket.join(`user:${session.userId}`);
-    // Empresa activa: hasta ahora se emitía a `company:{id}` (ver
-    // memberships.service.js) pero nadie se unía a esa sala — los eventos
-    // se perdían en silencio. Un usuario reconecta el socket al cambiar de
-    // empresa activa (ver client/components/company-switcher.js), así que
-    // esta sala siempre refleja la sesión vigente.
     if (session.activeCompanyId) {
       socket.join(`company:${session.activeCompanyId}`);
     }
@@ -43,18 +37,6 @@ function getIO() {
   return io;
 }
 
-/**
- * Emite un evento a las salas indicadas. Diseñado para ser seguro cuando
- * el socket aún no está inicializado (arranque en frío, tests).
- *
- * @param {string} event  Nombre del evento (p. ej. 'role:permissions_updated')
- * @param {object} payload  Datos del evento
- * @param {object} [opts]
- * @param {string} [opts.user]  ID de usuario → emite a `user:{id}`
- * @param {string|boolean} [opts.role]  'sac' / 'admin_area' → sala de rol
- * @param {string|boolean} [opts.broadcast]  true → sala 'tickets' (todos)
- * @param {string[]} [opts.extraRooms]  Salas adicionales
- */
 function emit(event, payload, opts = {}) {
   try {
     const target = getIO();
@@ -66,9 +48,8 @@ function emit(event, payload, opts = {}) {
     if (Array.isArray(extraRooms)) {
       for (const room of extraRooms) target.to(room).emit(event, payload);
     }
-  } catch (e) {
-    /* socket no inicializado aún */
-  }
+  } catch (e) {}
 }
 
 module.exports = { setup, getIO, emit };
+

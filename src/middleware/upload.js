@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
@@ -46,11 +46,6 @@ const upload = multer({
   limits: { fileSize: config.maxUploadMb * 1024 * 1024 },
 });
 
-// ── Avatares de perfil ──────────────────────────────────────────────────────
-// Carpeta separada de los adjuntos de tickets (se sirve pública y
-// directamente vía /uploads/avatars — ver src/app.js — porque las fotos de
-// perfil se muestran en <img> por toda la UI sin poder mandar cookies de
-// sesión en cada request como sí hacen los adjuntos autenticados).
 const avatarDir = path.join(config.uploadDir, 'avatars');
 if (!fs.existsSync(avatarDir)) {
   fs.mkdirSync(avatarDir, { recursive: true });
@@ -77,7 +72,8 @@ function avatarFileFilter(req, file, cb) {
 const avatarUpload = multer({
   storage: avatarStorage,
   fileFilter: avatarFileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB alcanza de sobra para una foto de perfil.
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 module.exports = { upload, ALLOWED_MIMES, avatarUpload, avatarDir };
+

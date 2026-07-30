@@ -1,5 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Hash router simple. Rutas: #/dashboard, #/tickets, #/tickets/new, #/tickets/:id, #/users, #/categories, #/notifications, #/reports
+/* Documentado por: Miguel Flores */
 import { api } from './api.js';
 import { setState, getState } from './store.js';
 
@@ -45,13 +44,11 @@ export async function onHashChange() {
   const { path, query } = parseHash();
   const user = getState().user;
 
-  // Rutas públicas
   if (path === '/login') {
     if (user) return navigate('/dashboard');
     return await runHandler('/login', {}, query);
   }
 
-  // Requiere login
   if (!user) {
     try {
       const me = await api.auth.me();
@@ -61,14 +58,12 @@ export async function onHashChange() {
     }
   }
 
-  // Buscar handler
   for (const [pattern, handler] of routes.entries()) {
     const params = match(pattern, path);
     if (params) {
       return await runHandler(pattern, params, query);
     }
   }
-  // 404 → dashboard
   navigate('/dashboard');
 }
 
@@ -86,3 +81,4 @@ export function startRouter() {
   if (!location.hash) location.hash = '#/login';
   onHashChange();
 }
+

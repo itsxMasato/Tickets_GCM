@@ -1,3 +1,4 @@
+/* Documentado por: Miguel Flores */
 import { readFileSync } from 'fs';
 const src = readFileSync('client/components/topbar.js', 'utf8');
 let inS = null, inLC = false, inBC = false;
@@ -26,11 +27,11 @@ while (i < src.length) {
   }
   i++;
 }
-// Show last 5 events
 console.log('Last 5 events:');
-for (const ev of events.slice(-5)) console.log(JSON.stringify(ev));
-// Show events around line 527
+for (const ev of events.slice(-5))
+  console.log(JSON.stringify(ev));
 console.log('Events near line 527:');
 for (const ev of events) {
   if (ev.line >= 520 && ev.line <= 530) console.log(JSON.stringify(ev));
 }
+

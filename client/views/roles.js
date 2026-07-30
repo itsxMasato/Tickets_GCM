@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
@@ -9,14 +9,8 @@ import { AREA_LABEL } from '../utils/format.js';
 import { ICON, svg } from '../utils/icons.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 
-// ── Datos canónicos ─────────────────────────────────────────────────────────
-// Roles en orden de autoridad del flujo: SAC arriba (admin global), jefe
-// inmediato (última palabra), admin de área (ejecuta), supervisor de campo
-// (origen). Este orden guía las tabs y el orden del preview.
 const ROLE_ORDER = ['sac', 'jefe_inmediato', 'admin_area', 'supervisor_campo'];
 
-// Una línea que resume la responsabilidad del rol. Aparece bajo el nombre
-// en la card principal y justifica por qué el rol tiene los permisos que tiene.
 const ROLE_DESCRIPTIONS = {
   sac:              'Administra el sistema, configura permisos y es el último eslabón antes del cliente.',
   jefe_inmediato:   'Cierra y reabre tickets. Tiene la última palabra sobre los casos del área.',
@@ -24,14 +18,8 @@ const ROLE_DESCRIPTIONS = {
   supervisor_campo: 'Levanta tickets en campo sobre lo que ve en operación.',
 };
 
-// Permisos que se consideran "críticos": al desactivarlos, el sistema
-// pierde una capacidad operativa real. Los marcamos con rojo camarón
-// en la fila del permiso y en el dot del cambio pendiente.
 let CRITICAL_PERMS = new Set(['manageUsers', 'assign', 'createTicket']);
 
-// ── Permisos: claves + labels + descripciones ──────────────────────────────
-// Se inicializan con defaults y el backend puede sobreescribirlos vía
-// rolesRes.permissions (mismo contrato que el módulo anterior).
 let PERMISSION_KEYS = [
   'manageUsers',
   'manageCategories',
@@ -59,10 +47,6 @@ let PERMISSION_DESCRIPTIONS = {
   assign:           'Asignar tickets a responsables y reasignar entre áreas.',
 };
 
-// Agrupado por categoría para bajar carga cognitiva. El orden de los
-// grupos y de los permisos dentro de cada grupo es el orden de aparición
-// en la card. Si el backend agrega permisos, los huérfanos (no listados)
-// se renderizan en un grupo "Otros" al final para no perderlos.
 const PERMISSION_GROUPS = [
   {
     title: 'Tickets',
@@ -81,31 +65,18 @@ const PERMISSION_GROUPS = [
   },
 ];
 
-// Ícono por grupo — el "Otros" (huérfanos) no está listado a propósito,
-// usa el fallback ICON.tag en renderPermissionGroups.
 const GROUP_ICON = {
   Tickets: ICON.ticket,
   Administración: ICON.users,
   Reportes: ICON.report,
 };
 
-// ── Estado interno del módulo ──────────────────────────────────────────────
-// Permisos efectivos leídos del backend (fuente de verdad).
 let current = null;
-// Permisos locales del usuario (lo que está editando, aún no guardado).
-// Es una copia profunda de `current` al cargar, mutada al togglear.
 let pending = null;
-// Edición inline del label por rol. Map<role, { value, error, saving }>.
-// Vacío = todos los nombres en modo lectura.
 const editingLabels = new Map();
-// Tab activa (qué rol se está editando). Default: el primero del orden.
 let activeRole = ROLE_ORDER[0];
 
-// ── Carga inicial ──────────────────────────────────────────────────────────
 async function loadAll() {
-  // Carga permisos y dispara el cache de usuarios (que se sincroniza con
-  // user:created/updated/deactivated). El cache entrega el array actual
-  // sin re-fetch si ya estaba cargado por otra vista.
   const [rolesRes] = await Promise.all([
     api.roles.list(),
     usersCache.load(),
@@ -119,7 +90,6 @@ async function loadAll() {
     PERMISSION_DESCRIPTIONS = { ...PERMISSION_DESCRIPTIONS, ...(rolesRes.permissions.descriptions || {}) };
     CRITICAL_PERMS = new Set(Array.isArray(rolesRes.permissions.critical) ? rolesRes.permissions.critical : Array.from(CRITICAL_PERMS));
   }
-  // Clonar para que el toggle local no mute el snapshot.
   pending = JSON.parse(JSON.stringify(current));
 }
 
@@ -140,8 +110,8 @@ function isDirty() {
 }
 
 function pendingChanges() {
-  // Devuelve [{ role, perm, from, to, affectedUsers }] con el diff real.
-  if (!current || !pending) return [];
+  if (!current || !pending)
+    return [];
   const out = [];
   for (const role of ROLE_ORDER) {
     const a = current[role] || {};
@@ -157,7 +127,6 @@ function pendingChanges() {
 }
 
 function totalAffected() {
-  // Cuántos usuarios únicos se ven afectados por el diff actual.
   const roles = new Set(pendingChanges().map((c) => c.role));
   let n = 0;
   for (const r of roles) n += usersWithRole(r).length;
@@ -165,23 +134,17 @@ function totalAffected() {
 }
 
 function rolesUsingPerm(perm) {
-  // Roles que tienen este permiso activo (en `current`, no en pending — es
-  // para "¿qué se romperá si elimino este permiso?").
-  if (!current) return [];
+  if (!current)
+    return [];
   return ROLE_ORDER.filter((r) => !!(current[r] || {})[perm]);
 }
 
-// ── Render principal ───────────────────────────────────────────────────────
 export async function renderRoles({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
-  // Banner de "otro usuario modificó permisos" (aparece sólo si lo
-  // detectamos por socket y tenemos cambios pendientes). Se inserta
-  // el primero en el root para que sea visible al cargar.
   const conflictBanner = h('div.hidden', { role: 'alert' });
   root.appendChild(conflictBanner);
 
-  // Header
   root.appendChild(h('div.flex.flex-wrap.items-start.justify-between.gap-3', {}, [
     h('div', {}, [
       h('h1.text-2xl.font-bold.text-slate-800', {}, 'Roles y permisos'),
@@ -199,39 +162,31 @@ export async function renderRoles({ user }) {
     ]),
   ]));
 
-  // Contenedor principal: card del rol activo + panel lateral
   const main = h('div.grid.grid-cols-1.gap-4', { class: 'lg:grid-cols-[1fr_360px]' });
   root.appendChild(main);
 
-  // Columna principal: tabs + card del rol activo
   const primary = h('div.flex.flex-col.gap-3', {});
   main.appendChild(primary);
 
-  // Tabs de roles (se llena tras la carga)
   const tabsBar = h('div.flex.gap-2.overflow-x-auto.pb-1', {
     role: 'tablist',
     'aria-label': 'Roles',
   });
   primary.appendChild(tabsBar);
 
-  // Card del rol activo (se llena tras la carga)
   const roleCard = h('div', {});
   primary.appendChild(roleCard);
 
-  // Panel de cambios pendientes (sticky en desktop)
   const pendingCard = h('div.card.flex.flex-col', {
     style: { position: 'sticky', top: '16px' },
   });
   main.appendChild(pendingCard);
 
-  // Footer
   const footer = h('div.text-xs.text-slate-500', {}, '');
   root.appendChild(footer);
 
-  // Loading inicial
   roleCard.appendChild(renderLoading('Cargando roles y permisos…'));
 
-  // ── Realtime: refresca cuando otro SAC guarda permisos o renombra un rol ──
   const onRealtime = (e) => {
     const t = e.detail?.event;
     const payload = e.detail || {};
@@ -289,15 +244,11 @@ export async function renderRoles({ user }) {
   };
   window.addEventListener('gcm:realtime', onRealtime);
 
-  // Suscripción local a cambios del cache de role-labels: cuando llega
-  // un cambio externo y NO estamos editando ese label, re-renderizamos
-  // las tabs y el header de la card para reflejar el nuevo getRoleLabel().
   const unsubscribeRoleLabel = subscribeRoleLabel((e) => {
     const role = e?.detail?.role;
     if (!role) return;
     if (editingLabels.has(role)) return;
     renderTabs();
-    // Re-render del header del rol activo si coincide
     if (role === activeRole) {
       const head = roleCard.querySelector(`[data-role-label="${role}"]`)?.parentElement;
       if (head) {
@@ -307,8 +258,6 @@ export async function renderRoles({ user }) {
     }
   });
 
-  // Suscripción al cache de usuarios: actualiza los badges de las tabs
-  // y el header de la card. No re-renderizamos todo para no perder foco.
   const refreshCountBadges = () => {
     const usersLoaded = usersCache.isLoaded();
     for (const role of ROLE_ORDER) {
@@ -338,9 +287,6 @@ export async function renderRoles({ user }) {
     refreshCountBadges();
   });
 
-  // Atajos: Ctrl/Cmd+S guarda, Esc descarta. Esc sólo descarta si NO hay
-  // un modal/diálogo abierto encima (que ya consume su propio Esc) y si NO
-  // estamos dentro de un input (no se lo quitamos al usuario mientras edita).
   const onKey = (e) => {
     const tag = (e.target?.tagName || '').toUpperCase();
     const typing = tag === 'INPUT' || tag === 'TEXTAREA';
@@ -355,8 +301,6 @@ export async function renderRoles({ user }) {
   };
   document.addEventListener('keydown', onKey);
 
-  // ── Render: tabs (píldoras, no se puede "agregar rol" — los 4 roles son
-  // un enum fijo del backend, no entidades creables por el usuario) ───────
   function renderTabs() {
     tabsBar.innerHTML = '';
     const usersLoaded = usersCache.isLoaded();
@@ -375,7 +319,8 @@ export async function renderRoles({ user }) {
             : 'bg-surface-alt text-slate-600 font-medium hover:bg-surface-border',
         ],
         onclick: () => {
-          if (editingLabels.has(role)) return; // no cambiar de tab mientras edita un label
+          if (editingLabels.has(role))
+            return;
           activeRole = role;
           renderTabs();
           renderRoleCard();
@@ -392,7 +337,6 @@ export async function renderRoles({ user }) {
     }
   }
 
-  // ── Render: card del rol activo ────────────────────────────────────────
   function renderRoleCard() {
     roleCard.innerHTML = '';
     if (!current) {
@@ -407,56 +351,59 @@ export async function renderRoles({ user }) {
     const enabledCount = PERMISSION_KEYS.filter((p) => perms[p]).length;
 
     const card = h('div.card.p-0.overflow-hidden', {}, [
-      // Cabecera: label editable + descripción + acciones del rol
-      h('div.px-5.py-4.border-b.border-surface-border', { class: 'bg-surface/40' }, [
-        h('div.flex.items-start.justify-between.gap-3', {}, [
-          h('div.min-w-0.flex-1', {}, [
-            h('div.flex.items-center.gap-2.flex-wrap', {}, [
-              renderLabelBlock(role),
-              h('span.badge.bg-surface-alt.text-brand-ink', { 'data-role-count': role }, [
-                usersLoaded ? String(count) : '…',
-                ' ',
-                usersLoaded
-                  ? count === 1 ? 'usuario' : 'usuarios'
-                  : 'usuarios',
+      h(
+        'div.px-5.py-4.border-b.border-surface-border',
+        { class: 'bg-surface/40' },
+        [
+          h('div.flex.items-start.justify-between.gap-3', {}, [
+            h('div.min-w-0.flex-1', {}, [
+              h('div.flex.items-center.gap-2.flex-wrap', {}, [
+                renderLabelBlock(role),
+                h('span.badge.bg-surface-alt.text-brand-ink', { 'data-role-count': role }, [
+                  usersLoaded ? String(count) : '…',
+                  ' ',
+                  usersLoaded
+                    ? count === 1 ? 'usuario' : 'usuarios'
+                    : 'usuarios',
+                ]),
+                h('span.badge', { class: 'bg-brand-ocean/10 text-brand-ocean' }, [
+                  `${enabledCount}/${PERMISSION_KEYS.length} permisos`,
+                ]),
               ]),
-              h('span.badge', { class: 'bg-brand-ocean/10 text-brand-ocean' }, [
-                `${enabledCount}/${PERMISSION_KEYS.length} permisos`,
-              ]),
+              h('p.text-xs.text-slate-500.mt-1', {}, ROLE_DESCRIPTIONS[role] || ''),
             ]),
-            h('p.text-xs.text-slate-500.mt-1', {}, ROLE_DESCRIPTIONS[role] || ''),
           ]),
-        ]),
-        h('div.flex.items-center.gap-1.mt-3.flex-wrap', {}, [
-          h('button.flex.items-center.rounded-lg.text-sm.font-medium.text-brand-ocean.transition', {
-            class: 'gap-1.5 px-3 py-1.5 hover:bg-brand-ocean/10',
-            type: 'button',
-            onclick: () => disableRole(role),
-            title: 'Apagar todos los permisos de este rol — cambio sin guardar',
-          }, [
-            svg(h, ICON.alert, 'w-4 h-4'),
-            h('span', {}, 'Apagar todo'),
+          h('div.flex.items-center.gap-1.mt-3.flex-wrap', {}, [
+            h('button.flex.items-center.rounded-lg.text-sm.font-medium.text-brand-ocean.transition', {
+              class: 'gap-1.5 px-3 py-1.5 hover:bg-brand-ocean/10',
+              type: 'button',
+              onclick: () => disableRole(role),
+              title: 'Apagar todos los permisos de este rol — cambio sin guardar',
+            }, [
+              svg(h, ICON.alert, 'w-4 h-4'),
+              h('span', {}, 'Apagar todo'),
+            ]),
+            h('button.flex.items-center.rounded-lg.text-sm.font-medium.text-brand-ocean.transition', {
+              class: 'gap-1.5 px-3 py-1.5 hover:bg-brand-ocean/10',
+              type: 'button',
+              onclick: () => resetRole(role),
+              title: 'Restaurar los permisos al estado actual del servidor',
+            }, [
+              svg(h, ICON.refresh, 'w-4 h-4'),
+              h('span', {}, 'Restaurar'),
+            ]),
           ]),
-          h('button.flex.items-center.rounded-lg.text-sm.font-medium.text-brand-ocean.transition', {
-            class: 'gap-1.5 px-3 py-1.5 hover:bg-brand-ocean/10',
-            type: 'button',
-            onclick: () => resetRole(role),
-            title: 'Restaurar los permisos al estado actual del servidor',
-          }, [
-            svg(h, ICON.refresh, 'w-4 h-4'),
-            h('span', {}, 'Restaurar'),
-          ]),
-        ]),
-      ]),
-      // Permisos agrupados por categoría
-      h('div.p-5.flex.flex-col.gap-5', {}, renderPermissionGroups(role, perms, currentPerms)),
+        ]
+      ),
+      h(
+        'div.p-5.flex.flex-col.gap-5',
+        {},
+        renderPermissionGroups(role, perms, currentPerms)
+      ),
     ]);
     roleCard.appendChild(card);
   }
 
-  // Devuelve las secciones de permisos, agrupadas. Los permisos que
-  // aparezcan en `PERMISSION_KEYS` pero no estén en ningún grupo van a un
-  // grupo "Otros" al final (defensa contra drift del backend).
   function renderPermissionGroups(role, perms, currentPerms) {
     const listed = new Set(PERMISSION_GROUPS.flatMap((g) => g.perms));
     const orphans = PERMISSION_KEYS.filter((p) => !listed.has(p));
@@ -476,9 +423,6 @@ export async function renderRoles({ user }) {
     ]));
   }
 
-  // Editor inline del nombre del rol. Modo lectura: texto + lápiz.
-  // Modo edición: input + guardar/cancelar. Estado por rol en `editingLabels`.
-  // El servidor impone LABEL_MAX=80; lo espejamos en maxlength.
   const LABEL_MAX = 80;
 
   function renderLabelBlock(role) {
@@ -536,7 +480,6 @@ export async function renderRoles({ user }) {
     editingLabels.set(role, { value: getRoleLabel(role), error: null, saving: false });
     renderTabs();
     renderRoleCard();
-    // Foco al input recién montado (post-render).
     queueMicrotask(() => {
       const input = roleCard.querySelector(`[data-role-label-input="${role}"]`);
       if (input) { input.focus(); input.select(); }
@@ -547,7 +490,6 @@ export async function renderRoles({ user }) {
     const cur = editingLabels.get(role);
     if (!cur) return;
     editingLabels.set(role, { ...cur, ...patch });
-    // Re-render quirúrgico: sólo el bloque del label, no la card entera.
     const head = roleCard.querySelector(`[data-role-label="${role}"]`)?.parentElement;
     if (head) {
       const fresh = renderLabelBlock(role);
@@ -603,8 +545,6 @@ export async function renderRoles({ user }) {
     renderRoleCard();
   }
 
-  // Fila individual de permiso. Tres columnas visuales: nombre+descripción
-  // (izq), impacto y estado (centro), toggle + delete (der).
   function renderPermRow({ role, perm, perms, currentPerms }) {
     const isOn = !!perms[perm];
     const wasOn = !!currentPerms[perm];
@@ -617,7 +557,6 @@ export async function renderRoles({ user }) {
       class: changed ? 'ring-2 ring-amber-200' : '',
       'data-perm-row': perm,
     }, [
-      // Col izq: label + descripción + badges
       h('div.flex-1.min-w-0', {}, [
         h('div.flex.items-center.gap-2.flex-wrap', {}, [
           h('div.text-sm.font-semibold.text-brand-ink', {}, label),
@@ -626,7 +565,6 @@ export async function renderRoles({ user }) {
         ]),
         h('p.text-xs.text-slate-500.mt-1', {}, desc),
       ]),
-      // Col der: toggle + delete
       h('div.flex.items-center.gap-2.flex-none', {}, [
         h('div.text-slate-500.w-20.text-right', { class: 'text-[11px]' }, isOn ? 'Permiso activo' : 'Inactivo'),
         renderToggle({ role, perm, isOn, changed, wasOn }),
@@ -641,9 +579,6 @@ export async function renderRoles({ user }) {
     ]);
   }
 
-  // Toggle switch accesible. Estructura: button role=switch + track + thumb.
-  // Hit-area invisible 44×28 con `before:absolute before:inset-y-0 before:-inset-x-2`
-  // para cumplir WCAG 2.5.5 (44×44) sin alterar el visual.
   function renderToggle({ role, perm, isOn, changed, wasOn }) {
     const bgClass = isOn ? 'bg-brand-navy' : 'bg-slate-300';
     return h('button.relative.inline-flex.items-center.w-9.h-5.rounded-full.transition-colors', {
@@ -671,8 +606,6 @@ export async function renderRoles({ user }) {
   function togglePerm(role, perm) {
     if (!pending[role]) pending[role] = {};
     pending[role][perm] = !pending[role][perm];
-    // Re-render quirúrgico: la fila cambió y el panel de cambios también.
-    // Re-renderizamos la card completa (es barata) y el panel.
     renderRoleCard();
     renderPending();
   }
@@ -702,14 +635,12 @@ export async function renderRoles({ user }) {
     toast(`Permisos de ${getRoleLabel(role)} restaurados.`, 'success', 1800);
   }
 
-  // Estado de UI: error visible y flag de guardado.
   let saving = false;
   let loadedAt = null;
   const errEl = h('div.hidden.m-3.mt-0.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', {
     role: 'alert',
   });
 
-  // ── Render: panel de cambios pendientes ────────────────────────────────
   function renderPending() {
     pendingCard.innerHTML = '';
     const changes = pendingChanges();
@@ -770,7 +701,6 @@ export async function renderRoles({ user }) {
     }
     pendingCard.appendChild(list);
 
-    // Acciones
     const actions = h('div.p-3.border-t.border-surface-border.flex.gap-2', {});
     const discardBtn = h('button.btn.btn-ghost.flex-1', {
       onclick: discard,
@@ -791,9 +721,6 @@ export async function renderRoles({ user }) {
       pendingCard.appendChild(errEl);
     }
 
-    // Nota informativa — real: los cambios guardados se aplican al toggle
-    // (PATCH inmediato) y se notifican por socket a otras sesiones abiertas
-    // (ver onRealtime → 'role:permissions_updated' arriba).
     pendingCard.appendChild(h('div.rounded-xl.border.p-3.mt-3', { class: 'bg-brand-ocean/10 border-brand-ocean/20' }, [
       h('div.flex.gap-2', {}, [
         svg(h, ICON.help, 'w-4 h-4 text-brand-ocean flex-none mt-0.5'),
@@ -802,7 +729,6 @@ export async function renderRoles({ user }) {
     ]));
   }
 
-  // ── Render: footer ─────────────────────────────────────────────────────
   function renderFooter() {
     const last = lastModifiedAt();
     if (!last) {
@@ -816,7 +742,6 @@ export async function renderRoles({ user }) {
     return loadedAt ? loadedAt.toLocaleString('es-ES') : null;
   }
 
-  // ── Acciones: save / discard / refresh ─────────────────────────────────
   async function save() {
     if (!isDirty() || saving) return;
     saving = true;
@@ -824,9 +749,6 @@ export async function renderRoles({ user }) {
     renderPending();
     try {
       const rolesChanged = new Set(pendingChanges().map((c) => c.role));
-      // CRÍTICO — anti-borrado: cada PATCH envía los 6 permisos del estado
-      // pendiente, no sólo los modificados. Así el backend nunca recibe un
-      // body parcial que pueda sobrescribir permisos no enviados.
       const patches = [...rolesChanged].map((role) => ({
         role,
         perms: pending[role],
@@ -902,7 +824,6 @@ export async function renderRoles({ user }) {
     }
   }
 
-  // ── Boot ───────────────────────────────────────────────────────────────
   try {
     await loadAll();
     loadedAt = new Date();
@@ -942,32 +863,17 @@ function renderLoading(message) {
   ]);
 }
 
-// ── Wizard de reasignación ─────────────────────────────────────────────────
-// Modal de 2 pasos para "Eliminar rol" o "Eliminar permiso".
-//   Paso 1: muestra los afectados (usuarios con el rol / roles con el permiso)
-//           y obliga a elegir un destino (rol alternativo / permiso de
-//           reemplazo). Si no hay afectados, pasa directo a paso 2.
-//   Paso 2: resumen + confirmación. El botón confirma llama al endpoint
-//           real (DELETE /api/roles/:role o /api/roles/permissions/:key).
-// El backend impone las reglas de seguridad (rol 'sac' inamovible,
-// permisos críticos requieren cobertura total del reemplazo, etc.) y
-// devuelve 4xx con mensaje que el wizard muestra como toast de error.
 function openReassignWizard({ type, target }) {
-  // type: 'role' | 'permission'
-  // target: role string o perm key
   const isRole = type === 'role';
   const targetLabel = isRole ? getRoleLabel(target) : (PERMISSION_LABELS[target] || target);
-  // Afectados: usuarios con el rol (role) o roles que tienen el permiso activo (permission).
   const affected = isRole ? usersWithRole(target) : rolesUsingPerm(target).map((r) => ({ id: r, full_name: getRoleLabel(r), role: r, isRole: true }));
-  // Alternativas: todos los roles/permisos excepto el target.
   const alternatives = isRole
     ? ROLE_ORDER.filter((r) => r !== target)
     : PERMISSION_KEYS.filter((p) => p !== target);
 
   let step = 1;
-  let chosen = null; // alternativa elegida en paso 1
+  let chosen = null;
 
-  // ── Render del paso ────────────────────────────────────────────────────
   const stepIndicator = (n) => h('span.font-mono.text-slate-500.tabular-nums', { class: 'text-[10px]' }, `0${n}`);
   const step1 = h('div', {});
   const step2 = h('div.hidden', {});
@@ -980,7 +886,6 @@ function openReassignWizard({ type, target }) {
         : `${affected.length} ${affected.length === 1 ? 'rol usa' : 'roles usan'} el permiso «${escapeHtml(targetLabel)}». Decide qué permisos alternativos quedan activos.`,
     ]));
 
-    // Tabla compacta de afectados
     if (affected.length === 0) {
       step1.appendChild(emptyState({
         icon: isRole ? 'users' : 'shield',
@@ -993,10 +898,6 @@ function openReassignWizard({ type, target }) {
     } else {
       const table = h('div.table-wrap', {});
       const rows = affected.map((u) => {
-        // Para wizard de permiso, u.role es el id del rol (affected se
-        // construye con rolesUsingPerm.map(r => ({ role: r, ... }))).
-        // Listamos sus permisos activos en `current[u.role]`. Para wizard
-        // de rol, mostramos su rol actual.
         const cell = isRole
           ? `<span class="badge bg-brand-ocean/10 text-brand-ocean">${escapeHtml(getRoleLabel(u.role))}</span>`
           : (() => {
@@ -1027,7 +928,6 @@ function openReassignWizard({ type, target }) {
       step1.appendChild(table);
     }
 
-    // Selector de destino
     if (affected.length > 0) {
       step1.appendChild(h('div.mt-4', {}, [
         h('label.label', { for: 'gcm-reassign-target' }, isRole ? 'Reasignar usuarios a' : 'Mantener permiso activo — reemplazo'),
@@ -1082,9 +982,6 @@ function openReassignWizard({ type, target }) {
     });
   }
 
-  // ── Modal: acciones y construcción ───────────────────────────────────
-  // openModal usa #gcm-modal-title como aria-labelledby, así que el header
-  // enriquecido (paso indicator + título) debe contener ese h3.
   const titleNode = h('div.flex.items-center.gap-3', {}, [
     stepIndicator(1),
     h('h3#gcm-modal-title.text-base.font-semibold.text-slate-800', {}, `Eliminar «${targetLabel}»`),
@@ -1108,7 +1005,6 @@ function openReassignWizard({ type, target }) {
     }
   }
 
-  // Render inicial
   renderStep1();
 
   const body = h('div.flex.flex-col.gap-4', {}, [step1, step2]);
@@ -1154,9 +1050,6 @@ function openReassignWizard({ type, target }) {
           }
           toast(`${verb} «${targetLabel}» eliminado. ${reasign}.`, 'success', 4000);
           close();
-          // Refrescar la vista actual: el estado del servidor cambió fuera
-          // de esta sesión de edición. El banner realtime también puede
-          // dispararse en otras pestañas abiertas.
           await refresh();
         } catch (err) {
           const msg = err?.message || 'No se pudo eliminar';
@@ -1172,10 +1065,9 @@ function openReassignWizard({ type, target }) {
     body,
     actions,
     size: 'xl',
-    onClose: () => { /* noop */ },
+    onClose: () => {},
   });
 
-  // Mostrar/ocultar botones según el paso
   const observer = new MutationObserver(() => {
     const buttons = document.querySelectorAll('[data-wizard-action]');
     buttons.forEach((b) => {
@@ -1185,10 +1077,9 @@ function openReassignWizard({ type, target }) {
       if (act === 'confirm')  b.classList.toggle('hidden', step !== 2);
     });
   });
-  // Observar cambios de clase en step1/step2
   observer.observe(step1, { attributes: true, attributeFilter: ['class'] });
   observer.observe(step2, { attributes: true, attributeFilter: ['class'] });
 
-  // Estado inicial de los botones
   updateContinueEnabled();
 }
+

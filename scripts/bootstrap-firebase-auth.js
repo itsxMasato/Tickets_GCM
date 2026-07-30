@@ -1,27 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores.
- *
- * bootstrap-firebase-auth.js
- *
- * Sincroniza los usuarios de Firestore (colección `users`) hacia Firebase
- * Authentication. Lee cada doc, deriva un email sintético
- * `<username>@ticketsgcm.local`, y crea la cuenta en Auth si todavía no
- * existe. Es idempotente: si el usuario ya está en Auth, lo salta.
- *
- * Es la pieza que faltaba para que el login por username funcione: hasta
- * ahora `scripts/create-user.js` solo escribía en Firestore; Firebase Auth
- * no sabía nada de esos usuarios, así que `signInWithPassword` siempre
- * devolvía "invalid-credential" sin importar la password.
- *
- * Uso:
- *   node scripts/bootstrap-firebase-auth.js                # usa la password provista
- *   node scripts/bootstrap-firebase-auth.js --password X   # fuerza una password para todos
- *   node scripts/bootstrap-firebase-auth.js --dry-run      # no crea nada, solo lista
- *
- * Por defecto la password sale de process.env.BOOTSTRAP_PASSWORD; si no está
- * definida, se usa "Motagua1928" para mantener compatibilidad con el único
- * usuario conocido (Miguel).
- */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const firebaseAdmin = require('../src/firebaseAdmin');
 const { deriveAuthEmail } = require('../src/utils/deriveAuthEmail');
@@ -69,7 +47,6 @@ async function run() {
     }
 
     try {
-      // ¿Ya existe en Auth?
       let existing = null;
       try {
         existing = await auth.getUserByEmail(email);
@@ -89,8 +66,6 @@ async function run() {
         continue;
       }
 
-      // Crear en Auth. La password se setea explícitamente para que
-      // signInWithPassword funcione sin necesidad de flujo de reset.
       const userRecord = await auth.createUser({
         email,
         password,
@@ -99,11 +74,6 @@ async function run() {
       });
       console.log(`  [created] ${email} → uid=${userRecord.uid} (firestoreDoc=${doc.id})`);
 
-      // Vincular el UID de Auth con el doc de Firestore. El frontend ya
-      // busca por `email` en `getUserByIdentifier`, así que si el doc
-      // tiene `email`/`email_lower` seteado, no hace falta renombrar el
-      // id del doc. Pero si el doc usa un id numérico legado y no
-      // tiene email, copiamos el email para que el mapping funcione.
       if (data.id !== userRecord.uid && !data.email) {
         await doc.ref.update({ email, email_lower: email.toLowerCase() });
         console.log(`    [updated] firestoreDoc ${doc.id} ahora tiene email=${email}`);
@@ -124,3 +94,4 @@ run().catch((err) => {
   console.error('[bootstrap-auth] Fatal:', err && err.stack ? err.stack : err);
   process.exit(1);
 });
+

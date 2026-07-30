@@ -1,9 +1,6 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 
-/**
- * Crea un elemento de alerta para mostrar errores de validación.
- */
 export function validationAlert(message, type = 'error') {
   if (!message) return null;
   
@@ -34,16 +31,10 @@ export function validationAlert(message, type = 'error') {
   ]);
 }
 
-/**
- * Crea un validador de formulario inline que valida mientras el usuario escribe/selecciona.
- */
 export function createFormValidator() {
   const errors = new Map();
   
   return {
-    /**
-     * Añade o actualiza un error para un campo.
-     */
     setError(fieldName, error) {
       if (error) {
         errors.set(fieldName, error);
@@ -52,39 +43,25 @@ export function createFormValidator() {
       }
     },
     
-    /**
-     * Obtiene el error para un campo.
-     */
     getError(fieldName) {
       return errors.get(fieldName) || null;
     },
     
-    /**
-     * Obtiene todos los errores.
-     */
     getAllErrors() {
       return Array.from(errors.values());
     },
     
-    /**
-     * Verifica si hay errores.
-     */
     hasErrors() {
       return errors.size > 0;
     },
     
-    /**
-     * Limpia todos los errores.
-     */
     clearAll() {
       errors.clear();
     },
     
-    /**
-     * Limpia el error de un campo específico.
-     */
     clearField(fieldName) {
       errors.delete(fieldName);
     }
   };
 }
+

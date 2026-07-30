@@ -1,12 +1,7 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* === Tokens canónicos ===
-   Una sola fuente de verdad para los colores de marca. El mapa de Tailwind
-   los referencia; el sidebar y el login usan estas variables como red de
-   seguridad si el @apply no se procesa. */
 :root {
   --color-brand-navy: #071D4C;
   --color-brand-deep: #44497B;
@@ -21,7 +16,6 @@
 
 @layer base {
   html, body { @apply h-full; }
-  /* Fallback duro: si las directivas de Tailwind no se procesan, evitamos pantalla en blanco */
   html { background-color: var(--color-surface); color: var(--color-ink); }
   body {
     @apply bg-surface text-brand-ink font-sans antialiased;
@@ -30,8 +24,6 @@
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
   a { @apply text-brand hover:text-brand-deep; }
-
-  /* Scrollbar sobria */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--color-surface-border); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
@@ -39,7 +31,6 @@
 }
 
 @layer components {
-  /* === Botones === */
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl font-medium text-sm transition
            focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed;
@@ -67,16 +58,11 @@
     @apply inline-flex items-center justify-center min-w-[36px] min-h-[36px] w-9 h-9 rounded-md
            text-brand-ink/60 hover:bg-surface hover:text-brand-ink transition;
   }
-  /* Botón logout del sidebar: nav-rail sobre navy, hover rojo accent para
-     señalar acción destructiva sin gritar. min-w/h-44px = WCAG 2.5.5.
-     Único elemento rojo del sidebar — comunica "no es navegación normal". */
   .btn-logout {
     @apply inline-flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-md
            text-white/80 hover:bg-accent/15 hover:text-accent
            focus:outline-none focus:ring-2 focus:ring-accent/60 transition;
   }
-
-  /* === Inputs === */
   .input {
     @apply w-full px-3 py-2 bg-white border border-surface-border rounded-xl shadow-soft
            text-sm text-brand-ink placeholder:text-slate-500
@@ -84,8 +70,6 @@
            focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:border-brand-ocean;
   }
   .label { @apply block text-sm font-medium text-brand-ink mb-1; }
-
-  /* === Card / surfaces === */
   .card {
     @apply bg-white shadow-card rounded-[1.25rem] p-5 border border-surface-border;
   }
@@ -100,15 +84,9 @@
   .material-symbols-outlined {
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
-
-  /* === Badges ===
-     Definidos arriba con dot de color (accesibilidad). Si necesitas una
-     variante sin dot, usa `.badge` directamente. */
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
-
-  /* === Tablas === */
   .table-wrap { @apply w-full overflow-x-auto rounded-[1.25rem] border border-surface-border bg-white shadow-card; }
   .table { @apply min-w-full text-sm; }
   .table thead th {
@@ -118,16 +96,9 @@
   .table tbody td { @apply px-4 py-3 border-b border-surface-border/60 align-top; }
   .table tbody tr:hover { @apply bg-surface/60; }
   .table tbody tr:last-child td { @apply border-b-0; }
-
-  /* === Tabla zebra (alta densidad) ===
-     Modificador opcional para tablas de alto volumen (ej. listado de
-     tickets): franjas alternas + leve desplazamiento al hover para reforzar
-     la fila activa. No toca `.table` base para no afectar el resto de vistas. */
   .table-zebra tbody tr:nth-child(even) { @apply bg-surface; }
   .table-zebra tbody tr { @apply transition-transform; }
   .table-zebra tbody tr:hover { @apply translate-x-1; }
-
-  /* === Gantt semanal === */
   .gantt-board-shell {
     border: 1px solid #e2e8f0;
     border-radius: 1.5rem;
@@ -194,20 +165,6 @@
     height: 0.8rem;
     border-radius: 9999px;
   }
-  /* === Grid semanal ===
-     Estructura en 2 niveles (no un único grid con todo adentro):
-       1. .gantt-board-header-row — grid propio, sólo la fila de días.
-       2. .gantt-hour-grid-wrap (position:relative) contiene:
-          a. .gantt-board-grid — grid propio con las 14 filas de hora ×
-             7 días (celdas invisibles: sólo dibujan la grilla y capturan
-             el drop del drag&drop).
-          b. .gantt-event-overlay (position:absolute) — los bloques de
-             evento, posicionados por coordenadas reales (hora/minuto de
-             inicio y duración), no acotados a la celda de su hora de
-             inicio. Mismo look que el mock (bloques que atraviesan varias
-             horas), pero como capa aparte para no mezclar posicionamiento
-             explícito con el auto-placement del grid de celdas — mezclar
-             ambos en un solo grid rompe el auto-flow de CSS Grid. */
   .gantt-board-header-row,
   .gantt-board-grid {
     display: grid;
@@ -255,7 +212,6 @@
   .gantt-board-cell:last-child {
     border-right: 0;
   }
-  /* Feedback visual del drag&drop — se agrega/quita por JS en dragover/dragleave. */
   .gantt-board-cell.gantt-day-over {
     background: rgba(22, 172, 228, 0.08);
   }
@@ -282,9 +238,6 @@
     text-transform: uppercase;
     letter-spacing: 0.12em;
   }
-  /* position:absolute — top/left/width/height se calculan por JS a partir
-     del horario real del evento (ver renderEventBlock en calendar.js), no
-     quedan acotados a la celda de su hora de inicio como antes. */
   .gantt-task-bar {
     position: absolute;
     display: flex;
@@ -298,9 +251,6 @@
     overflow: hidden;
     transition: transform 160ms ease, box-shadow 160ms ease, z-index 0ms;
     z-index: 2;
-    /* .gantt-event-overlay (el padre) tiene pointer-events:none para dejar
-       pasar el drag&drop hacia las celdas de abajo — sin este override el
-       bloque entero (y el botón de eliminar) queda inerte a los clicks. */
     pointer-events: auto;
   }
   .gantt-task-bar:hover {
@@ -392,7 +342,6 @@
     transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
     z-index: 40;
   }
-  /* Tooltip a la izquierda del FAB — mismo patrón "aparece al hover" del mock. */
   .gantt-fab-tooltip {
     position: absolute;
     right: 100%;
@@ -419,29 +368,10 @@
     transform: translateY(-2px) scale(1.06);
     background-color: rgb(14, 117, 175);
   }
-
-  /* === Sidebar corporativo (Navy) ===
-     Comportamiento:
-     - Desktop: push layout. El sidebar vive como columna flex pegajosa, ancho
-       w-64 (256px). Puede colapsarse a mini-rail w-16 (gcm-sidebar-collapsed)
-       con un click en el toggle del topbar; la preferencia persiste en
-       localStorage.
-     - Mobile: overlay. El sidebar está fijo fuera de pantalla
-       (translateX(-100%)); abrir = desliza sobre el main con un scrim
-       semitransparente (gcm-sidebar-scrim) que captura el click y cierra.
-       Arranca CERRADO (sin gcm-sidebar-open al boot) — el único punto de
-       entrada es el toggle hamburguesa del topbar.
-     La distinción push-vs-overlay es intencional: en desktop la columna es
-     fija y parte del flujo (empujar se siente natural), en mobile un push
-     comprime el main a menos de la mitad del viewport y se confunde con un
-     layout bug. El scrim deja claro que es un drawer modal. */
   .sidebar {
     @apply w-64 bg-brand text-white flex flex-col shadow-sidebar transition-[width] duration-200 ease-out flex-none;
   }
-  /* Red de seguridad: si @apply no se procesa (orden de CSS), garantizamos el fondo. */
   .sidebar { background-color: var(--color-brand-navy); }
-
-  /* Estado colapsado (mini-rail, sólo íconos) — sólo desktop. */
   @media (min-width: 768px) {
     body.gcm-sidebar-collapsed .sidebar { @apply w-16; }
     body.gcm-sidebar-collapsed .sidebar-section,
@@ -453,15 +383,9 @@
     body.gcm-sidebar-collapsed .sidebar-brand { @apply justify-center px-2; }
     body.gcm-sidebar-collapsed .sidebar-link { @apply justify-center px-2 gap-0; }
   }
-
-  /* Contenedor del sidebar: en desktop sticky/columna, en mobile overlay fijo
-     que se desliza con translateX. La clase gcm-sidebar-open controla visibilidad
-     en mobile. El width animado sólo aplica en desktop (mini-rail collapse). */
   .gcm-sidebar {
     @apply md:flex md:flex-none md:sticky md:top-0 md:h-screen overflow-hidden;
     transition: transform 220ms ease-out, width 220ms ease-out;
-    /* Asegurar stacking correcto: el drawer mobile y su scrim deben
-       mostrarse por encima del topbar en pantallas pequeñas. */
     z-index: 60;
   }
   @media (max-width: 767.95px) {
@@ -483,18 +407,11 @@
   @media (prefers-reduced-motion: reduce) {
     .sidebar, .gcm-sidebar { animation: none; transition: none; }
   }
-
-  /* === Scrim del sidebar mobile ===
-     Cubre todo el viewport con un velo semitransparente cuando el drawer
-     está abierto. Captura clicks para cerrar. Debajo del sidebar (z-30 vs
-     z-40) y debajo del topbar (el topbar tiene z-50 en su propia regla).
-     Pointer-events condicional: invisible también en mobile cuando el sidebar
-     está cerrado, para no interceptar taps del main. */
   .gcm-sidebar-scrim {
     position: fixed;
     inset: 0;
     z-index: 50;
-    background-color: rgb(15 23 42 / 0.5); /* slate-900/50 */
+    background-color: rgb(15 23 42 / 0.5);
     opacity: 0;
     pointer-events: none;
     transition: opacity 160ms ease-out;
@@ -503,9 +420,6 @@
     opacity: 1;
     pointer-events: auto;
   }
-  /* Sólo mobile: en desktop el scrim nunca debe existir (el sidebar es una
-     columna del flujo, no un modal). display:none fuera del media garantiza
-     que no ocupe layout aunque quede en el DOM por error. */
   @media (min-width: 768px) {
     .gcm-sidebar-scrim { display: none; }
   }
@@ -520,30 +434,16 @@
               el link de navegación queda invisible al tabular. */
            focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 transition;
   }
-  /* Activo: chip sólido en brand-ocean (en vez del overlay translúcido
-     anterior) — mismo acento que el resto del sistema usa para "esto es lo
-     importante ahora mismo" (kpi-card tone=ocean, dot activo, focus ring). */
   .sidebar-link.active {
     @apply bg-brand-ocean text-white shadow-soft;
   }
   .sidebar-icon { @apply w-5 h-5 flex-none text-white; }
-  /* Header de sección: ícono pequeño + label en mayúsculas tracking-wider.
-     Flex row con gap-1.5 para alinear el ícono a la izquierda.
-     text-white/75 (~6.2:1 sobre brand-navy) y tracking-wider (en vez de
-     tracking-widest) para que el label se lea como agrupador claro y NO
-     se confunda con un botón perdido. Sigue subordinado al .sidebar-link
-     (text-white/80). */
   .sidebar-section {
     @apply flex items-center gap-1.5 px-3 mt-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/75;
   }
   .sidebar-brand {
     @apply px-5 py-5 border-b border-white/10 flex items-center gap-3 transition-[padding] duration-200 ease-out;
   }
-
-  /* === Topbar: botones de iconos prominentes ===
-     Antes los icon buttons (bell, toggle, ayuda) usaban text-brand-ink/70
-     con stroke 1.8 — visualmente débiles. Esta clase sube a text-brand-ink
-     (contraste 1.6x mayor) y stroke 2, sin perder la jerarquía del sistema. */
   .topbar-icon-btn {
     @apply inline-flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-md
            text-brand-ink bg-white border border-surface-border
@@ -552,20 +452,14 @@
            transition shadow-soft;
   }
   .topbar-user-trigger {
-    /* El trigger del menú de usuario no necesita borde; usa la jerarquía
-       "clickable surface" sin container. */
     @apply border-0 shadow-none;
   }
-
-  /* === Topbar === */
   .topbar {
       @apply h-16 bg-white border-b border-surface-border flex items-center
         justify-between px-4 md:px-6 gap-4;
       position: relative;
       z-index: 20;
   }
-
-  /* === Chat === */
   .chat-bubble {
     @apply max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-soft;
   }
@@ -581,28 +475,15 @@
   .chat-event::before, .chat-event::after {
     content: ''; @apply flex-1 border-t border-surface-border;
   }
-  /* Contención del scroll-interno del chat. Sin overscroll-behavior:contain
-     en iOS, el scroll del chat se propaga al body y rebota contra el
-     header. La clase .chat-scroll-internal la aplica ticket-detail.js
-     sobre el contenedor que envuelve la lista de mensajes. */
   .chat-scroll-internal {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
-
-  /* === Avatar / misc === */
   .avatar {
     @apply w-9 h-9 rounded-full flex items-center justify-center text-xs
            font-semibold text-white flex-none;
   }
   .dot { @apply w-2 h-2 rounded-full inline-block; }
-
-  /* === KPI cards ===
-     Acento lateral + chip de ícono + badge contextual (CRÍTICO/ACTIVO/META…).
-     El color del acento (border-l, ícono, badge) viene del `tone` de cada
-     KPI — mismo mapa que ya teñía el valor, ahora aplicado de forma
-     consistente vía la prop `class` (no interpolado en el selector, que es
-     lo que rompía el tono del valor antes de este cambio). */
   .kpi-card {
     @apply card flex flex-col gap-3 hover:shadow-pop transition border-l-4 border-l-surface-border-strong;
   }
@@ -615,16 +496,11 @@
   }
   .kpi-label { @apply text-xs uppercase tracking-wider text-slate-500 font-medium; }
   .kpi-value { @apply text-2xl font-bold text-brand-ink; }
-  /* text-slate-500 (no -400) — WCAG AA body text ≥ 4.5:1 sobre blanco. */
   .kpi-hint  { @apply text-xs text-slate-500; }
-
-  /* === Brand dot (color chips) === */
   .dot-brand   { @apply bg-brand; }
   .dot-deep    { @apply bg-brand-deep; }
   .dot-accent  { @apply bg-accent; }
   .dot-ocean   { @apply bg-brand-ocean; }
-
-  /* === Badges con dot de color (accesibilidad para daltónicos) === */
   .badge-dot {
     @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium;
   }
@@ -652,26 +528,15 @@
   .prio-alta::before     { @apply bg-amber-600; }
   .prio-urgente  { @apply badge-dot bg-red-100 text-red-900; }
   .prio-urgente::before  { @apply bg-red-600; }
-
-  /* === Login Page Styles ===
-     El glassmorphism está reservado al login card (DESIGN_SYSTEM.md §7).
-     Es una aproximación web (backdrop-filter), no Apple Liquid Glass oficial.
-     Tono general: operacional premium. La paleta navy + glass + un solo acento
-     ocean mantienen la jerarquía sin gritar. Nada de gradientes compitiendo. */
-
-  /* ── Root ─────────────────────────────────────────────────────────── */
   .login-root {
     @apply relative overflow-x-hidden flex flex-col lg:flex-row bg-brand text-white;
     min-height: 100dvh;
-    /* patrón sutil de grano para dar textura al navy en superficies grandes */
     background-image:
       radial-gradient(1200px 600px at 15% -10%, rgba(22, 172, 228, 0.10), transparent 60%),
       radial-gradient(900px 500px at 110% 110%, rgba(68, 73, 123, 0.55), transparent 55%),
       linear-gradient(180deg, var(--color-brand-navy) 0%, color-mix(in srgb, var(--color-brand-navy) 92%, #000) 50%, color-mix(in srgb, var(--color-brand-navy) 75%, #000) 100%);
     background-blend-mode: screen, screen, normal;
   }
-
-  /* ── Background full-bleed (video + overlay) ─────────────────────── */
   .login-video-bg {
     position: absolute;
     inset: 0;
@@ -683,8 +548,6 @@
 
   .login-bg-video {
     @apply absolute inset-0 w-full h-full object-cover;
-    /* casi a color real: toda la responsabilidad de contraste vive en el
-       panel de vidrio (tinte + text-shadow), no en oscurecer el footage. */
     filter: saturate(1) brightness(0.94) contrast(1.02);
     transform: scale(1.08);
   }
@@ -692,14 +555,10 @@
   .login-video-overlay {
     position: absolute;
     inset: 0;
-    /* solo una viñeta mínima en los bordes — ya no un degradado plano que
-       lava el video. El contraste del texto lo da el panel, no esta capa. */
     background:
       radial-gradient(ellipse at bottom right, rgba(7, 29, 76, 0.10), transparent 50%),
       linear-gradient(180deg, rgba(7, 29, 76, 0.04) 0%, rgba(5, 15, 44, 0.14) 100%);
   }
-
-  /* grain muy sutil sobre el overlay — rompe el banding del degradado */
   .login-video-overlay::after {
     content: '';
     position: absolute;
@@ -709,24 +568,12 @@
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
-
-  /* ── Panel de vidrio (todo el aside, no un card flotante) ─────────── */
-  /* Aproximación web de glassmorphism navy-tinted: la translucidez lleva el
-     azul marino de marca, no blanco lechoso. El panel es todo el aside —
-     de canto a canto, sin bordes redondeados — para que el video respire
-     detrás de la marca, el form y el pie por igual. Respeta "The Glass
-     Scope Rule" del DESIGN.md (única superficie de vidrio del proyecto). */
   .login-glass-panel {
-    /* blur-sm y tinte muy ligero: el video debe reconocerse con claridad
-       detrás del panel, no leerse como una lámina navy. El contraste del
-       texto lo sostiene el text-shadow de .login-aside-inner, no esta capa. */
     @apply backdrop-blur-sm border;
     background: linear-gradient(180deg, rgba(7, 29, 76, 0.14), rgba(7, 29, 76, 0.07));
     border: 1px solid rgba(255, 255, 255, 0.22);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset; /* highlight superior */
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset;
   }
-
-  /* Variante opaca para prefers-reduced-transparency */
   @media (prefers-reduced-transparency: reduce) {
     .login-glass-panel {
       background: linear-gradient(180deg, rgba(7, 29, 76, 0.94), rgba(68, 73, 123, 0.92));
@@ -734,20 +581,11 @@
       -webkit-backdrop-filter: none;
     }
   }
-
-  /* ── Fallback si el video falla ──────────────────────────────────── */
   [data-video-failed='true'] .login-bg-video { display: none; }
   [data-video-failed='true'] .login-video-overlay { display: none; }
-
-  /* ── Campos: opacos y de alto contraste (heredan .input base) ────── */
-  /* Sobre vidrio, un input translúcido pierde legibilidad. Se usa el
-     mismo .input blanco/ink del resto de la app — converge con el resto
-     del sistema en vez de inventar una variante "glass" para el form. */
   .login-glass-panel .input {
     height: 46px;
   }
-
-  /* Botón submit: el navy manda (no el negro azulado). Estado loading visible. */
   .login-glass-panel .btn-primary.login-submit {
     @apply bg-brand text-white shadow-none;
     height: 46px;
@@ -763,17 +601,12 @@
   .login-glass-panel .btn-primary.login-submit:disabled {
     opacity: 0.7;
   }
-
-  /* ── Distribución y layout ───────────────────────────────────────── */
   .login-grid   { @apply relative z-10 flex-1 flex flex-col lg:flex-row min-h-0; }
   .login-aside  { @apply flex flex-[3] flex-col relative min-h-0; }
   .login-side   {
     @apply hidden lg:flex flex-[2] flex-col relative min-h-0 overflow-hidden;
     background: linear-gradient(160deg, var(--color-brand-navy) 0%, color-mix(in srgb, var(--color-brand-navy) 85%, #000) 100%);
   }
-
-  /* Blobs decorativos del panel de contexto — ocean arriba-derecha,
-     camarón abajo-izquierda, ambos muy tenues. Puramente atmosféricos. */
   .login-side::before,
   .login-side::after {
     content: '';
@@ -791,37 +624,21 @@
     background: radial-gradient(circle, rgba(207, 48, 29, 0.16), transparent 70%);
     filter: blur(70px);
   }
-
-  /* Bloques internos del panel — padding generoso y consistente.
-     Sin justify-between: eso repartía el espacio libre en dos huecos
-     grandes (marca↔form, form↔pie) que leían como "espacio muerto". El
-     form ahora se centra en su propio wrapper flex-1 (ver login.js);
-     aquí solo queda el flujo normal de tres bloques. */
   .login-aside-inner {
     @apply flex flex-col flex-1 min-h-0;
     padding: clamp(24px, 4vw, 56px);
     gap: 20px;
-    /* Con el video casi a color real y el panel casi transparente, todo el
-       contraste del texto vive en esta sombra — no en oscurecer el panel.
-       Se anula sobre el input opaco, donde no hace falta (ver abajo). */
     text-shadow: 0 1px 3px rgba(5, 12, 30, 0.6), 0 2px 18px rgba(5, 12, 30, 0.45);
   }
   .login-aside-inner .input { text-shadow: none; }
   .login-side-inner {
-    /* relative + z-index: los blobs decorativos de .login-side son
-       absolutely-positioned con z-index:auto; sin esto pintarían encima
-       del contenido en vez de detrás (orden de pintado CSS2.1 §E). */
     @apply flex flex-col justify-between flex-1 min-h-0 relative z-10;
     padding: clamp(32px, 4vw, 64px);
     gap: 32px;
   }
-
-  /* En mobile/tablet el side no existe; el aside tiene padding ajustado */
   @media (max-width: 1023px) {
     .login-aside-inner { padding: 24px 20px 28px; gap: 24px; }
   }
-
-  /* ── Brand lockup (logo + nombre + tagline + ubicación) ─────────── */
   .login-brand {
     @apply flex items-center gap-3 select-none;
   }
@@ -838,8 +655,6 @@
   .login-brand-meta {
     @apply text-[11px] text-white/55 mt-0.5;
   }
-
-  /* ── Cabecera del form (h2 + sub) ─────────────────────────────────── */
   .login-form-head { @apply mb-2; }
   .login-form-head .eyebrow {
     @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-ocean/90 mb-2;
@@ -850,8 +665,6 @@
   .login-form-head p {
     @apply text-[13.5px] text-white/65 leading-relaxed mt-1.5;
   }
-
-  /* ── Form rows y opciones ────────────────────────────────────────── */
   .login-form-row {
     @apply flex items-center justify-between flex-wrap gap-3 mt-1;
   }
@@ -864,11 +677,6 @@
     box-shadow: 0 0 0 3px rgba(22, 172, 228, 0.30);
     border-radius: 4px;
   }
-
-  /* ── Inputs: iconos y validación ─────────────────────────────────── */
-  /* Los inputs ahora son opacos (blanco/ink), así que los iconos pasan de
-     blanco-sobre-vidrio a slate-sobre-blanco. Activo usa brand-deep, no
-     brand-ocean: ocean puro sobre blanco no alcanza 3:1 non-text (WCAG 1.4.11). */
   .login-input-wrap { @apply relative; }
   .login-input-icon {
     @apply absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors duration-200 pointer-events-none;
@@ -881,9 +689,6 @@
   .login-input-helper-error {
     @apply mt-1.5 text-[11.5px] text-red-200/95 leading-snug flex items-center gap-1.5;
   }
-
-  /* Toggle de visibilidad: discreto, área click 44x44. Vive dentro del
-     input opaco ahora, así que usa la paleta slate-sobre-blanco. */
   .login-toggle {
     @apply absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 rounded-md
            inline-flex items-center justify-center
@@ -893,8 +698,6 @@
     outline: none;
     box-shadow: 0 0 0 3px rgba(22, 172, 228, 0.30);
   }
-
-  /* ── Checkbox recordarme ─────────────────────────────────────────── */
   .login-checkbox {
     @apply appearance-none w-[16px] h-[16px] rounded-[4px] border border-white/35 bg-white/[0.04]
            checked:bg-brand-ocean checked:border-brand-ocean
@@ -913,8 +716,6 @@
   }
   .login-checkbox-row input[type="checkbox"] { @apply flex-none; }
   .login-checkbox-row .label-text { @apply text-[13px]; }
-
-  /* ── Divider con label (continuar con SSO, etc.) ─────────────────── */
   .login-divider {
     @apply relative flex items-center my-1;
   }
@@ -926,11 +727,6 @@
   .login-divider > span {
     @apply px-3 text-[10.5px] uppercase tracking-[0.18em] text-white/45 font-medium;
   }
-
-  /* ── Banner de error / hint / info ───────────────────────────────── */
-  /* Sin border-left de 3px (DESIGN §8 lo prohíbe como tell de IA). En su
-     lugar: border 1px en todo el contorno + el icono a color lleva la
-     señal de estado (tres canales: icono + color + texto). */
   .login-banner {
     @apply rounded-lg border px-3.5 py-2.5 flex items-start gap-2.5 text-[12.5px] leading-snug;
   }
@@ -947,8 +743,6 @@
   .login-banner-error .login-banner-icon { @apply text-red-300; }
   .login-banner-warning .login-banner-icon { @apply text-amber-300; }
   .login-banner-info .login-banner-icon { @apply text-brand-ocean; }
-
-  /* ── Foot del form (legal / cifrado) ──────────────────────────────── */
   .login-form-foot {
     @apply mt-5 flex items-center gap-3 text-[11.5px] text-white/55 leading-snug;
   }
@@ -958,8 +752,6 @@
   .login-form-foot a {
     @apply text-white/70 hover:text-white underline underline-offset-2 decoration-white/20;
   }
-
-  /* ── Status row al pie del aside (datos reales) ──────────────────── */
   .login-aside-foot {
     @apply flex flex-wrap items-center justify-between gap-3
            text-[10.5px] uppercase tracking-[0.16em] text-white/45;
@@ -973,8 +765,6 @@
   }
   .login-status-dot.ok { @apply bg-brand-ocean; }
   .login-status-dot.degraded { @apply bg-accent; box-shadow: 0 0 0 3px rgba(207, 48, 29, 0.18); }
-
-  /* ── Side: superficie de contexto (40%) ──────────────────────────── */
   .login-side-eyebrow {
     @apply text-[10px] font-semibold uppercase tracking-[0.20em] text-brand-ocean/90;
   }
@@ -1003,8 +793,6 @@
     @apply inline-flex items-center gap-1.5 px-2 py-1 rounded-md
            border border-white/10 bg-white/[0.04] normal-case tracking-normal text-[11px] text-white/70;
   }
-
-  /* ── Soporte / corporativo ──────────────────────────────────────── */
   .login-support {
     @apply flex flex-wrap items-center gap-x-5 gap-y-2 text-[11.5px] text-white/55;
   }
@@ -1017,12 +805,8 @@
     font-variant-numeric: tabular-nums;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
-
-  /* ── Submit spinner ──────────────────────────────────────────────── */
   .login-submit .spinner { @apply w-4 h-4 animate-spin; }
   .login-submit[aria-busy="true"] { @apply cursor-progress; }
-
-  /* ── Animación de entrada (sutil, < 200ms) ──────────────────────── */
   @media (prefers-reduced-motion: no-preference) {
     .login-glass-panel { animation: login-card-in 220ms cubic-bezier(.2,.7,.2,1) both; }
     @keyframes login-card-in {
@@ -1030,8 +814,6 @@
       to   { opacity: 1; transform: none; }
     }
   }
-
-  /* ── Accesibilidad: respetar prefers-reduced-motion ──────────────── */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
@@ -1040,13 +822,6 @@
       scroll-behavior: auto !important;
     }
   }
-
-  /* === Dashboard primitives (módulo /dashboard) ============================
-     Primitivas exclusivas del módulo Inicio. Rediseño inspirado en un
-     lenguaje "panel de control" (banner sólido, KPIs con acento lateral,
-     chips de categoría, ranking con avatar) — colores 100% marca GCM
-     (navy/ocean/accent), sin paleta nueva. El acento rojo camarón sólo
-     aparece en el CTA del hero y en KPIs/urgencias reales (The One Voice). */
   .dash-welcome {
     @apply flex items-center flex-wrap justify-between gap-3;
   }
@@ -1070,16 +845,10 @@
   @media (prefers-reduced-motion: reduce) {
     .dash-welcome-status-dot { animation: none; }
   }
-
-  /* Hero: banner sólido navy (antes era una card clara con acento suave).
-     Es la única superficie de color pleno del dashboard — concentra la
-     atención en la acción más importante del rol. */
   .dash-hero {
     @apply relative overflow-hidden rounded-[1.25rem] bg-brand text-white p-5 md:p-6
            flex flex-col md:flex-row md:items-center justify-between gap-5;
   }
-  /* Glow diagonal sutil — la única decoración no funcional del hero, apaga
-     el lado derecho del banner sin restar legibilidad al texto (izquierda). */
   .dash-hero::after {
     content: '';
     @apply absolute right-0 top-0 h-full w-1/3 pointer-events-none;
@@ -1116,16 +885,10 @@
     @apply flex items-center gap-3 py-2.5 px-1 transition-colors;
   }
   .dash-list-row:hover { @apply bg-surface/40; }
-  /* text-slate-500 — WCAG AA: el índice "01, 02…" es texto pequeño pero texto al fin.
-     slate-400 daba ~3.4:1 sobre blanco, slate-500 sube a ~4.6:1. */
   .dash-list-index { @apply text-[10px] font-mono text-slate-500 w-5 flex-none tabular-nums text-right; }
   .dash-list-name  { @apply flex-1 min-w-0 text-sm text-brand-ink truncate; }
   .dash-list-meta  { @apply text-xs text-slate-500 hidden sm:inline; }
   .dash-list-count { @apply badge bg-surface-alt text-brand-ink tabular-nums flex-none; }
-
-  /* Top categorías: chip de ícono + nombre + badge de conteo. El color del
-     chip rota de forma determinística (mismo índice → mismo color) sobre
-     una paleta corta con buen contraste — igual criterio que avatarColor. */
   .dash-cat-row {
     @apply flex items-center justify-between gap-3 py-2.5 px-1 border-t border-surface-border/60
            first:border-t-0 transition-colors;
@@ -1136,9 +899,6 @@
   }
   .dash-cat-name { @apply flex-1 min-w-0 text-sm font-medium text-brand-ink truncate; }
   .dash-cat-count { @apply badge tabular-nums flex-none; }
-
-  /* Ranking por encargado: avatar real (foto o iniciales) + puesto. El
-     primer puesto se resalta con anillo ocean; el resto queda neutro. */
   .dash-rank-row {
     @apply flex items-center gap-3 py-2.5 border-t border-surface-border/60 first:border-t-0;
   }
@@ -1150,13 +910,6 @@
   .dash-rank-place { @apply text-[11px] font-semibold text-brand-ocean flex-none; }
   .dash-rank-place.is-muted { @apply text-slate-400; }
   .dash-rank-meta { @apply text-xs text-slate-500 mt-0.5; }
-
-  /* === Trend chart (línea + área, 30 días) ===
-     Una sola serie = un solo hue (brand-ocean), sequential por trabajo
-     ("magnitud a lo largo del tiempo"), no categórico. Línea de promedio
-     sólida (nunca punteada — ver dataviz skill, el punteado se lee como
-     grid/eje). Marks: línea 2px, área ~10% opacity, end-dot con anillo de
-     superficie, hairlines sólidas y recesivas para baseline/grid. */
   .dash-trend-wrap { @apply relative; }
   .dash-trend-svg { @apply block w-full h-32 md:h-40 overflow-visible; }
   .dash-trend-area { fill: rgba(22, 172, 228, 0.1); }
@@ -1204,10 +957,6 @@
   .dash-trend-tooltip-date { @apply text-[10px] text-white/70 uppercase tracking-wide; }
   .dash-trend-tooltip-value { @apply font-semibold; }
   .dash-trend-axis { @apply flex mt-1; }
-  /* Sin `truncate`: cada slot es angosto (30 días/fila), pero sólo 1 de
-     cada 5 tiene texto — dejamos que se desborde sobre los vecinos vacíos
-     en vez de recortarlo con ellipsis (mismo criterio que evitó el
-     desborde a 2 líneas: menos texto en pantalla, no texto cortado). */
   .dash-trend-axis-label {
     @apply flex-1 text-[10px] text-slate-500 text-center whitespace-nowrap;
     overflow: visible;
@@ -1256,17 +1005,7 @@
   @media (prefers-reduced-motion: reduce) {
     .dash-quick:hover .dash-quick-icon { transform: none; }
   }
-
-  /* === Attachments dropzone (ticket-new + reutilizable) ===
-     El estado de hover (mouse encima) NO debe verse idéntico al estado de
-     drag-over — el drag-over tiene que decir "suelta aquí". Usamos dos
-     clases separadas:
-       - hover: nativo del browser (definido arriba en el template)
-       - .gcm-dropzone-active: cuando hay un dragover O un paste reciente
-     Focus ring: como es role=button, comparte el brand-ocean/60. */
   .gcm-dropzone {
-    /* El background/border se aplican en clases utilitarias del template.
-       Aquí sólo afinamos el estado de dragover y focus. */
   }
   .gcm-dropzone.gcm-dropzone-active {
     @apply bg-brand-ocean/10 border-brand-ocean ring-2 ring-brand-ocean/40;
@@ -1278,50 +1017,23 @@
   @media (prefers-reduced-motion: reduce) {
     .gcm-dropzone { transition: none; }
   }
-
-  /* Lista de archivos pendientes: separación vertical + croma. */
   .gcm-dropzone-list > li {
-    /* El hover sobre la lista es raro (no se "borra" un item al hacer hover)
-       pero el focus del botón × debe ser visible. */
   }
   .gcm-dropzone-list > li:hover { background-color: var(--color-surface); }
   .gcm-dropzone-invalids > li + li { @apply mt-0.5; }
   .dash-quick-body { @apply flex-1 min-w-0; }
   .dash-quick-title { @apply text-sm font-medium text-brand-ink leading-snug; }
   .dash-quick-sub   { @apply text-xs text-slate-500 mt-0.5; }
-
-  /* === Responsive utilities (mobile-first) ===
-     Conjunto de reglas que sólo aplican en viewports < 768px. Activan:
-     hit-areas de 44px (WCAG 2.5.5), safe-area iOS, modal fullscreen,
-     visibilidad de la card-list móvil, y hint de scroll en el gantt. */
-
-  /* 1. Hit-area 44px. .btn-sm (28px en desktop) salta a 44px en mobile —
-     un solo cambio en CSS, sin tocar 50 call-sites. */
   @media (max-width: 767.95px) {
     .btn { min-height: 44px; }
     .btn-sm { min-height: 44px; }
     .btn-icon, .topbar-icon-btn { min-width: 44px; min-height: 44px; }
   }
-
-  /* 2. Safe-area iOS. Notifica al shell de la app, al topbar y al login
-     para que el contenido respete el notch / dynamic island / home bar.
-     Usa @supports para que no afecte a navegadores sin env(). */
   @supports (padding: max(0px)) {
     .gcm-shell { padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); padding-bottom: env(safe-area-inset-bottom); }
     .topbar { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1.5rem, env(safe-area-inset-right)); }
     .login-aside-inner { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); padding-bottom: max(28px, env(safe-area-inset-bottom)); }
   }
-
-  /* 3. Modal fullscreen en mobile. Se activa cuando .gcm-modal-fullscreen
-     está presente (lo aplica modal.js en < 640px). El body del modal
-     (.gcm-modal-body) ocupa la altura restante descontando header + footer.
-     - El contenedor usa 100dvh (no 100vh) para que el scroll-interno se
-       ajuste correctamente cuando aparece/oculta la barra del browser.
-     - El footer reserva safe-area-inset-bottom para que el botón "Guardar"
-       no quede tapado por la home-bar de iOS.
-     - El body tiene -webkit-overflow-scrolling: touch para scroll con
-       inercia en iOS, y overscroll-behavior:contain para que el scroll
-       no propague al body del shell. */
   @media (max-width: 639.95px) {
     .gcm-modal-fullscreen {
       position: fixed !important;
@@ -1338,26 +1050,15 @@
       overscroll-behavior: contain;
     }
     .gcm-modal-fullscreen .gcm-modal-footer {
-      /* Padding inferior del footer = max(base 12px, safe-area). Garantiza
-         que el botón primario no quede debajo de la home-bar de iPhone. */
       padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
     }
   }
-
-  /* 4. Data-list visibility: en mobile la .gcm-data-list-mobile (cards)
-     se muestra y la .gcm-data-list-desktop (tabla) se oculta. La
-     inversa ocurre en >= 768px. Lo aplica el componente data-list.js. */
   .gcm-data-list-mobile { display: block; }
   .gcm-data-list-desktop { display: none; }
   @media (min-width: 768px) {
     .gcm-data-list-mobile { display: none; }
     .gcm-data-list-desktop { display: block; }
   }
-
-  /* 5. Gantt: hint visual de scroll horizontal en mobile. El wrapper ya
-     es position:relative; el ::after con position:absolute se ancla al
-     borde derecho y se queda visible durante el scroll horizontal.
-     pointer-events:none para no interceptar taps sobre el gantt. */
   .gantt-board-grid-wrapper { position: relative; }
   @media (max-width: 767.95px) {
     .gantt-board-grid-wrapper::after {
@@ -1373,4 +1074,5 @@
     }
   }
 }
+
 

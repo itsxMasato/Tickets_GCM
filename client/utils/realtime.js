@@ -1,6 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Pequeño helper para suscribirse al evento global 'gcm:realtime'
-// Devuelve un AbortController para simplificar el cleanup en vistas.
+/* Documentado por: Miguel Flores */
 export function subscribeToRealtime(handler) {
   const ac = new AbortController();
   const listener = (e) => handler(e.detail, e);
@@ -8,7 +6,6 @@ export function subscribeToRealtime(handler) {
   return ac;
 }
 
-// Suscribe solo a un conjunto de eventos (por nombre).
 export function subscribeToRealtimeEvents(events, handler) {
   const ac = new AbortController();
   const listener = (e) => {
@@ -21,3 +18,4 @@ export function subscribeToRealtimeEvents(events, handler) {
 }
 
 export default { subscribeToRealtime, subscribeToRealtimeEvents };
+

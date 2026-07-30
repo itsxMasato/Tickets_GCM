@@ -1,10 +1,10 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-﻿'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firestoreData = require('../firestoreData');
 const auditService = require('./audit.service');
 const notificationsService = require('./notifications.service');
 const attachmentsService = require('./attachments.service');
-const { canViewTicket: canView } = require('../utils/ticket-access');
+const { canViewTicket: canView, sameCompany, resolveTicketArea } = require('../utils/ticket-access');
 const {
   validationError, notFoundError, forbiddenError, conflictError,
   requireString, optionalString, optionalEnum, TICKET_STATUS, PRIORITIES, STATUS_LABEL,
@@ -20,15 +20,20 @@ const TRANSITIONS = {
 };
 
 function canEditMeta(ticket, user) {
-  if (user.role === 'sac') return true;
+  if (user.isPlatformAdmin)
+    return true;
+  if (user.role === 'sac')
+    return sameCompany(ticket, user);
   if (user.role === 'supervisor_campo') {
     return ticket.created_by === user.id && ticket.status === 'recibido';
   }
   return false;
 }
 
-function canAssign(user) {
-  return user.role === 'sac' || user.role === 'jefe_inmediato';
+function canAssign(ticket, user) {
+  if (user.isPlatformAdmin) return true;
+  if (user.role === 'sac' || user.role === 'jefe_inmediato') return sameCompany(ticket, user);
+  return false;
 }
 
 function canClose(user) {
@@ -40,9 +45,12 @@ function canReopen(user) {
 }
 
 function canChangeStatus(ticket, user, next) {
-  if (user.role === 'sac') return true;
+  if (user.isPlatformAdmin) return true;
+  if (user.role === 'sac') return sameCompany(ticket, user);
   if (user.role === 'jefe_inmediato') {
-    return ['cerrado', 'reabierto'].includes(next);
+    if (!sameCompany(ticket, user) || !['cerrado', 'reabierto'].includes(next)) return false;
+    const area = resolveTicketArea(ticket);
+    return area == null || area === user.area;
   }
   if (user.role === 'admin_area') {
     if (ticket.assigned_to !== user.id) return false;
@@ -61,16 +69,6 @@ function decorate(ticket) {
 }
 
 async function createTicket(payload, user) {
-  // Un ticket sin company_id queda visible para TODAS las empresas
-  // (scopeByCompany trata company_id null como "legacy, visible para
-  // todos" — correcto para datos pre-multitenant, pero un ticket nuevo
-  // sin empresa activa se colaba con el mismo criterio y filtraba datos
-  // entre tenants). Bloqueamos la creacion en el origen en vez de tocar
-  // ese passthrough, que sigue siendo necesario para los registros legacy.
-  // Excepción: el platform admin (docs/MULTITENANT.md §4.3 "Crear ticket:
-  // platform_admin ✅ cualquiera") sí puede crear sin empresa activa — el
-  // passthrough de company_id null es exactamente el comportamiento
-  // documentado para ese caso, no un bug.
   if (user.activeCompanyId == null && !user.isPlatformAdmin) {
     throw validationError('Tu usuario no tiene una empresa activa asignada. Contactá al administrador antes de crear un ticket.');
   }
@@ -95,6 +93,7 @@ async function createTicket(payload, user) {
 
   await auditService.logAsync({
     user_id: user.id,
+    company_id: user.activeCompanyId,
     action_type: 'ticket_created',
     target_type: 'ticket',
     target_id: decorated.id,
@@ -109,9 +108,6 @@ async function createTicket(payload, user) {
 
 async function listTickets(filters, user) {
   const limit = Math.min(100, Math.max(1, parseInt(filters.limit || '25', 10)));
-  // cursor viene del listado anterior (nextCursor). Sin cursor = primera
-  // página. Ya no se acepta "page" — ver la nota en firestoreData.listTickets
-  // sobre por qué el offset (limit(page*limit)) no escala.
   const cursor = typeof filters.cursor === 'string' && filters.cursor ? filters.cursor : null;
   const result = await firestoreData.listTickets(filters, user, { cursor, limit });
   return { ...result, tickets: result.tickets.map(decorate) };
@@ -146,13 +142,12 @@ async function updateTicket(id, payload, user) {
 }
 
 async function assignTicket(id, payload, user) {
-  if (!canAssign(user)) throw forbiddenError('Solo SAC o jefes inmediatos pueden asignar tickets.');
+  const ticket = await firestoreData.getTicketById(id);
+  if (!ticket) throw notFoundError('Ticket no encontrado.');
+  if (!canAssign(ticket, user)) throw forbiddenError('Solo SAC o jefes inmediatos pueden asignar tickets.');
   const to_user_id = parseInt(payload.to_user_id, 10);
   if (!to_user_id) throw validationError('Debe indicar el encargado destino.');
   const notes = optionalString(payload.notes, 'notas', 1000) || null;
-
-  const ticket = await firestoreData.getTicketById(id);
-  if (!ticket) throw notFoundError('Ticket no encontrado.');
 
   let updated;
   try {
@@ -174,6 +169,7 @@ async function assignTicket(id, payload, user) {
 
   await auditService.logAsync({
     user_id: user.id,
+    company_id: user.activeCompanyId,
     action_type: 'ticket_assigned',
     target_type: 'ticket',
     target_id: id,
@@ -199,7 +195,7 @@ async function changeStatus(id, payload, user) {
   if (!next) throw validationError('Debe indicar un estado válido.');
   const comment = optionalString(payload.comment, 'comentario', 2000) || null;
 
-  const ticket = await firestoreData.getTicketById(id);
+  const ticket = await firestoreData.getTicketWithArea(id);
   if (!ticket) throw notFoundError('Ticket no encontrado.');
   if (!canView(ticket, user)) throw forbiddenError();
   if (!canChangeStatus(ticket, user, next)) throw forbiddenError('No puede cambiar a este estado.');
@@ -213,13 +209,8 @@ async function changeStatus(id, payload, user) {
   try {
     updated = await firestoreData.changeTicketStatus(id, next, comment, user);
   } catch (err) {
-    // firestoreData.changeTicketStatus revalida la transicion dentro de una
-    // transaccion de Firestore (contra el estado mas reciente, no el `ticket`
-    // ya leido arriba) para evitar que dos cambios de estado simultaneos se
-    // pisen en silencio. Si otro cambio gano la carrera entre esta lectura y
-    // el commit, cae aca — lo traducimos al mismo 409 que el chequeo de
-    // arriba, en vez de dejar pasar un 500 crudo.
-    if (err.code === 'CONFLICT') throw conflictError(err.message);
+    if (err.code === 'CONFLICT')
+      throw conflictError(err.message);
     if (err.code === 'NOT_FOUND') throw notFoundError(err.message);
     throw err;
   }
@@ -278,6 +269,7 @@ async function changeStatus(id, payload, user) {
 
   await auditService.logAsync({
     user_id: user.id,
+    company_id: user.activeCompanyId,
     action_type: 'ticket_status_changed',
     target_type: 'ticket',
     target_id: id,
@@ -297,13 +289,9 @@ async function changeStatus(id, payload, user) {
 }
 
 async function addComment(id, payload, user) {
-  // El composer del chat (chat-composer.js) muestra un contador "x/4000" y
-  // permite escribir hasta 4000 caracteres — el backend cortaba en 2000, asi
-  // que un mensaje largo (alentado por el propio contador visible) fallaba
-  // sin aviso previo, y de paso dejaba sin enviar los adjuntos ya en cola.
   const comment = requireString(payload.comment, 'comentario', 4000);
 
-  const ticket = await firestoreData.getTicketById(id);
+  const ticket = await firestoreData.getTicketWithArea(id);
   if (!ticket) throw notFoundError('Ticket no encontrado.');
   if (!canView(ticket, user)) throw forbiddenError();
 
@@ -323,6 +311,7 @@ async function addComment(id, payload, user) {
 
   await auditService.logAsync({
     user_id: user.id,
+    company_id: user.activeCompanyId,
     action_type: 'comment_added',
     target_type: 'ticket',
     target_id: id,
@@ -336,7 +325,7 @@ async function addComment(id, payload, user) {
 }
 
 async function addAttachment(id, file, user) {
-  const ticket = await firestoreData.getTicketById(id);
+  const ticket = await firestoreData.getTicketWithArea(id);
   if (!ticket) throw notFoundError('Ticket no encontrado.');
   if (!canView(ticket, user)) throw forbiddenError();
 
@@ -364,6 +353,7 @@ async function addAttachment(id, file, user) {
 
   await auditService.logAsync({
     user_id: user.id,
+    company_id: user.activeCompanyId,
     action_type: 'attachment_added',
     target_type: 'ticket',
     target_id: id,
@@ -383,9 +373,7 @@ function emit(event, payload, { room, role, user } = {}) {
     if (user) io.to(`user:${user}`).emit(event, payload);
     if (role === 'sac') io.to('sac').emit(event, payload);
     if (room) io.to(room).emit(event, payload);
-  } catch (e) {
-    /* socket no inicializado aún */
-  }
+  } catch (e) {}
 }
 
 module.exports = {
@@ -394,3 +382,4 @@ module.exports = {
   canView, canEditMeta, canAssign, canClose, canReopen, canChangeStatus,
   TRANSITIONS, STATUS_LABEL, TICKET_STATUS,
 };
+

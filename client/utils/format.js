@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 export function formatDateTime(iso) {
@@ -70,3 +70,4 @@ export const AREA_LABEL = {
 };
 
 export function isImage(mime) { return /^image\//i.test(mime || ''); }
+

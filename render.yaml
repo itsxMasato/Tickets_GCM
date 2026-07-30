@@ -9,18 +9,25 @@ services:
   - type: web
     name: tickets-gcm-api
     runtime: node
-    plan: free
+    # Los discos persistentes de Render requieren un plan pago (no "free").
+    # Sin esto, `uploads/` (fotos de perfil, adjuntos de tickets) y las
+    # sesiones se pierden en cada redeploy porque el filesystem del plan
+    # free es efímero. Cambiar el plan implica un costo mensual — hacerlo
+    # desde el dashboard de Render antes de que este blueprint tome efecto.
+    plan: starter
     region: oregon
     branch: main
     buildCommand: pnpm install --frozen-lockfile
     startCommand: node src/server.js
+    disk:
+      name: gcm-data
+      mountPath: /data
+      sizeGB: 1
     # Sin healthCheckPath — Render no validará ningún endpoint al levantar.
-    # El plan free de Render duerme el servicio tras 15 min sin tráfico
-    # (cold start de 20-30s al primer request). El health check hace un GET
-    # al levantarse y se queda sin tiempo antes de que Express termine de
-    # inicializar Firebase Admin y conectar a Firestore, marcando el deploy
-    # como "Timed Out" aunque el servicio sí esté corriendo (verificado en
-    # logs: el server escucha correctamente, solo que después del timeout).
+    # El health check hace un GET al levantarse y se queda sin tiempo antes
+    # de que Express termine de inicializar Firebase Admin y conectar a
+    # Firestore, marcando el deploy como "Timed Out" aunque el servicio sí
+    # esté corriendo (verificado en logs). Esto no depende del plan.
     autoDeploy: true
     envVars:
       - key: NODE_ENV
@@ -31,6 +38,15 @@ services:
         value: ticketsgcm
       - key: ALLOWED_ORIGIN
         value: https://ticketsgcm.netlify.app
+      # Fotos de perfil y adjuntos de tickets viven en el disco persistente
+      # montado en /data (ver `disk` arriba) — sin esto, se perderían en
+      # cada redeploy igual que antes.
+      - key: UPLOAD_DIR
+        value: /data/uploads
+      # Igual que UPLOAD_DIR: antes las sesiones vivían en /tmp/sessions
+      # (también efímero) — ahora en el disco persistente.
+      - key: SESSION_DIR
+        value: /data/sessions
       # FIREBASE_SERVICE_ACCOUNT se setea manualmente en el dashboard
       # (Sync: false evita que Render intente leerlo del blueprint).
       - key: FIREBASE_SERVICE_ACCOUNT

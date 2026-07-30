@@ -1,5 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Diagnóstico: probar endpoints /api/users y /api/roles con auth real
+/* Documentado por: Miguel Flores */
 require('dotenv').config();
 const http = require('http');
 const admin = require('../src/firebaseAdmin');
@@ -11,13 +10,11 @@ admin.init();
 const db = admin.getFirestoreInstance();
 
 (async () => {
-  // 1) Crear/actualizar un usuario SAC con password conocido
   const username = 'diag_sac';
   const password = 'diag1234';
   const hash = await hashPassword(password);
 
-  // Buscar
-  const existing = await firestoreData.findUserByIdentifier?.(username) || await firestoreData.getUserByIdentifier?.(username);
+  const existing = (await firestoreData.findUserByIdentifier?.(username)) || (await firestoreData.getUserByIdentifier?.(username));
   if (existing) {
     await db.collection('users').doc(String(existing.id)).update({ password_hash: hash, role: 'sac', active: 1 });
     console.log('updated password for user', username, 'id:', existing.id);
@@ -29,7 +26,6 @@ const db = admin.getFirestoreInstance();
     console.log('created user', u.id);
   }
 
-  // 2) Login HTTP
   const cookieJar = {};
   async function call(method, path, body) {
     return new Promise((resolve, reject) => {
@@ -113,3 +109,4 @@ const db = admin.getFirestoreInstance();
 
   process.exit(0);
 })().catch((e) => { console.error('Err:', e); process.exit(1); });
+

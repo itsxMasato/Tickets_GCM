@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const Database = require('better-sqlite3');
 const config = require('../config');
 
@@ -22,3 +22,4 @@ function closeDb() {
 }
 
 module.exports = { getDb, closeDb };
+

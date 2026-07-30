@@ -1,6 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Carga socket.io-client desde CDN y maneja conexión
-
+/* Documentado por: Miguel Flores */
 let socket = null;
 let loading = null;
 let readyResolve = null;
@@ -56,7 +54,6 @@ export async function connectSocket() {
       withCredentials: true,
       transports: ['websocket', 'polling'],
     });
-  // Re-registra handlers
   for (const [event, fns] of handlers.entries()) {
     for (const fn of fns) socket.on(event, fn);
   }
@@ -77,12 +74,6 @@ export function on(event, handler) {
 export function isConnected() { return !!socket?.connected; }
 export const whenReady = () => readyPromise;
 
-// Fuerza una reconexión (nuevo socket + handshake). Necesario después de
-// cambiar la empresa activa: la sesión HTTP ya tiene el nuevo
-// `activeCompanyId`, pero el socket existente se unió a las salas con la
-// sesión vieja al conectar — solo un handshake nuevo hace que el server
-// lo una a `company:{id}` correcto. Los handlers ya registrados se
-// reenganchan automáticamente (connectSocket() los reaplica al abrir).
 export function reconnectSocket() {
   if (socket) {
     try { socket.disconnect(); } catch {}
@@ -91,3 +82,4 @@ export function reconnectSocket() {
   readyPromise = new Promise((res) => { readyResolve = res; });
   return connectSocket();
 }
+

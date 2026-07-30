@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { api } from '../api.js';
 import { svg } from '../utils/icons.js';
@@ -15,9 +15,6 @@ import {
   SupportRow,
 } from '../components/login.js';
 
-// ───────────────────────────────────────────────────────────────────────
-// Copy localizado (Honduras · es-HN)
-// ───────────────────────────────────────────────────────────────────────
 const ERROR_COPY = {
   invalid_credentials: 'Usuario o contraseña incorrectos. Verifica los datos e intenta de nuevo.',
   not_found: 'No encontramos una cuenta con ese usuario o correo.',
@@ -37,19 +34,10 @@ function describeError(err) {
   return err.message || ERROR_COPY.server_error;
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// Vista
-// ───────────────────────────────────────────────────────────────────────
 export async function renderLogin({ params, query, onLogin }) {
   const nextUrl = typeof query?.next === 'string' ? query.next : null;
   const root = h('div.login-root', {});
 
-  // ── Background — video siempre activo, con transparencia ───────────
-  // El video de producción (public/videos/DJI_0495.mp4) es la superficie de
-  // contexto del login. Se muestra en loop, autoplay, silenciado. El CSS del
-  // overlay aplica una capa navy translúcida encima para que el card glass
-  // tenga contraste sin tapar el footage. Si la decodificación del MP4 falla,
-  // el listener `error` activa el fallback CSS (fondo brand sólido).
   const videoWrapper = h('div.login-video-bg', { 'aria-hidden': 'true' });
   const videoElement = h('video.login-bg-video', {
     muted: true,
@@ -73,24 +61,17 @@ export async function renderLogin({ params, query, onLogin }) {
   videoWrapper.appendChild(videoOverlay);
   root.appendChild(videoWrapper);
 
-  // ── Grid principal ─────────────────────────────────────────────────
   const grid = h('div.login-grid', {});
 
-  // ── Panel de tarea (60% en desktop) ─────────────────────────────────
-  // El aside ES el panel de vidrio completo (de canto a canto, sin card
-  // anidado) — el video respira detrás de la marca, el form y el pie por igual.
   const aside = h('div.login-aside.login-glass-panel', {});
   const asideInner = h('div.login-aside-inner', {});
 
-  // Brand arriba — sin ubicación específica.
   asideInner.appendChild(BrandLockup({
     name: 'GCM Tickets',
     tagline: 'Sala de control',
     location: 'Acceso corporativo seguro',
   }));
 
-  // Grupo del form — agrupa cabecera + campos para la distribución
-  // justify-between del aside; no lleva fondo propio (lo da el panel).
   const formGroup = h('div.flex.flex-col.gap-6.max-w-md', {});
   const cardHead = h('div.login-form-head', {}, [
     h('div.eyebrow', {}, 'Acceso corporativo'),
@@ -107,7 +88,6 @@ export async function renderLogin({ params, query, onLogin }) {
     novalidate: true,
   });
 
-  // Username
   const { node: userNode, input: userInput } = LoginField({
     id: 'username',
     label: 'Usuario o correo',
@@ -121,7 +101,6 @@ export async function renderLogin({ params, query, onLogin }) {
   });
   form.appendChild(userNode);
 
-  // Password
   const { node: passNode, input: passInput } = PasswordField({
     id: 'password',
     label: 'Contraseña',
@@ -129,28 +108,15 @@ export async function renderLogin({ params, query, onLogin }) {
   });
   form.appendChild(passNode);
 
-  // Opciones (recordarme + olvidé mi acceso)
-  //const optionsRow = h('div.login-form-row', {});
-  //optionsRow.appendChild(LoginCheckbox({ id: 'remember', label: 'Recordarme en este dispositivo' }));
-  //optionsRow.appendChild(h('a.login-link.inline-flex.items-center.gap-1', {
-    //href: '/recuperar',
-    //tabindex: '0',
-  //}, ['Olvidé mi acceso']));
-  //form.appendChild(optionsRow);
-
-  // Banner de error (oculto al inicio)
   const errorBox = h('div.hidden', {});
   form.appendChild(errorBox);
 
-  // Banner de pista tras 3 intentos
   const hintBox = h('div.hidden', {});
   form.appendChild(hintBox);
 
-  // Submit
   const submit = PrimaryButton({ label: 'Ingresar', loadingLabel: 'Verificando…' });
   form.appendChild(submit);
 
-  // Foot del form: cifrado + caducidad + términos
   const foot = h('div.login-form-foot', {}, [
     h('span.lock-dot', { 'aria-hidden': 'true' }),
     h('span', {}, [
@@ -164,15 +130,10 @@ export async function renderLogin({ params, query, onLogin }) {
   form.appendChild(foot);
 
   formGroup.appendChild(form);
-  // El form se centra en el espacio libre entre la marca y el pie, en vez
-  // de que justify-between lo separe a golpes de "espacio muerto" repartido.
   const formCenter = h('div.flex-1.flex.flex-col.justify-center.min-h-0', {});
   formCenter.appendChild(formGroup);
   asideInner.appendChild(formCenter);
 
-  // Pie del aside: status del sistema + atajo al centro de ayuda.
-  // Sin teléfono ni correo: el usuario ya está en una sesión autenticable,
-  // no necesita canales de soporte pre-login que filtren datos de contacto.
   const since = window.__GCM_CONFIG__?.serviceSince;
   const asideFoot = h('div.login-aside-foot', {}, [
     SystemStatus({ status: 'ok', since }),
@@ -183,7 +144,6 @@ export async function renderLogin({ params, query, onLogin }) {
   aside.appendChild(asideInner);
   grid.appendChild(aside);
 
-  // ── Panel de contexto (40%, solo ≥ lg) ─────────────────────────────
   const side = h('div.login-side', {});
   const sideInner = h('div.login-side-inner', {});
 
@@ -218,8 +178,6 @@ export async function renderLogin({ params, query, onLogin }) {
   ]);
   sideInner.appendChild(capList);
 
-  // Pie del side: línea de producto neutra. Sin build SHA ni reloj local
-  // (filtrarían entorno y zona); sin nombre de equipo interno.
   const sideFoot = h('div.login-side-foot', {}, [
     h('div.flex.items-center.gap-2.normal-case.tracking-normal', {}, [
       svg(h, 'shield', 'w-3.5 h-3.5 text-white/40'),
@@ -233,7 +191,6 @@ export async function renderLogin({ params, query, onLogin }) {
 
   root.appendChild(grid);
 
-  // Atajo "/" para mover foco a username si no hay foco en un input.
   root.addEventListener('keydown', (e) => {
     if (e.key === '/' && !/^(input|textarea|select)$/i.test(document.activeElement?.tagName)) {
       e.preventDefault();
@@ -241,7 +198,6 @@ export async function renderLogin({ params, query, onLogin }) {
     }
   });
 
-  // ── Submit ─────────────────────────────────────────────────────────
   async function onSubmit(e) {
     e.preventDefault();
     if (state.busy) return;
@@ -321,7 +277,6 @@ export async function renderLogin({ params, query, onLogin }) {
       s.appendChild(p);
       submit.appendChild(s);
     } else {
-      // icono login (mismo path que el componente)
       const NS = 'http://www.w3.org/2000/svg';
       const s = document.createElementNS(NS, 'svg');
       s.setAttribute('class', 'w-4 h-4');
@@ -362,3 +317,4 @@ export async function renderLogin({ params, query, onLogin }) {
 
   return root;
 }
+

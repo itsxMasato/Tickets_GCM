@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api, assetUrl } from '../api.js';
 import { go } from '../router.js';
@@ -15,14 +15,8 @@ import { exportButton } from '../components/export-button.js';
 import { ICON, svg } from '../utils/icons.js';
 import { renderAvatar, avatarColor, initials } from '../utils/avatar.js';
 
-// Dominio sintético de los correos autogenerados al crear un usuario.
-// Espejo de src/utils/deriveAuthEmail.js → DOMAIN para que el email que
-// se guarda en Firestore coincida con el que el backend deriva para
-// Firebase Auth.
 const AUTO_EMAIL_DOMAIN = 'gcm.com';
 
-// Sanitiza un username para que sea válido como parte local de un email:
-// mismo patrón que LIMITS.username del backend, en minúsculas.
 function usernameToLocalPart(username) {
   return String(username || '')
     .trim()
@@ -40,8 +34,6 @@ const TABLE_COLUMNS = [
 
 const PAGE_SIZE = 10;
 
-// Tono por rol para el badge de la tabla — mismo criterio de color que el
-// resto de la app (brand=SAC, ocean=admin de área, deep=jefe, slate=supervisor).
 const ROLE_BADGE_TONE = {
   sac:              'bg-brand text-white',
   admin_area:       'bg-brand-ocean/15 text-brand-ocean',
@@ -93,16 +85,9 @@ export async function renderUsers({ user }) {
     ]),
   ]));
 
-  // KPIs — snapshot del personal completo (no reactivo a los filtros de la
-  // tabla, igual criterio que /reports y /tickets: son el estado global,
-  // no la vista filtrada).
   const kpis = h('div.grid.grid-cols-2.gap-3', { class: 'md:grid-cols-4' });
   root.appendChild(kpis);
 
-  // Panel de filtros — oculto por defecto, se muestra con el botón "Filtrar".
-  // Todo se aplica client-side: la lista completa ya está en memoria (el
-  // endpoint de usuarios no pagina), así que no hace falta ida y vuelta al
-  // servidor para filtrar/paginar.
   const searchInput = h('input.input', { type: 'search', placeholder: 'Buscar por nombre, usuario o correo…' });
   const roleSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los roles'), ...ROLES.map((r) => h('option', { value: r }, getRoleLabel(r)))]);
   const areaSel = h('select.input', {}, [h('option', { value: '' }, 'Todas las áreas'), ...AREAS.map((a) => h('option', { value: a }, AREA_LABEL[a]))]);
@@ -118,7 +103,6 @@ export async function renderUsers({ user }) {
     el.addEventListener('input', () => { currentPage = 1; draw(); });
   }
 
-  // Lista (tabla desktop / card-list mobile) + paginación numerada.
   const listWrap = h('div', {});
   const pagerInfo = h('div.text-xs.text-slate-500', {}, '');
   const pagerPageLabel = h('div.text-xs.text-slate-500.font-medium', {}, '');
@@ -130,8 +114,6 @@ export async function renderUsers({ user }) {
   ]);
   root.appendChild(h('div.card-tight.overflow-hidden', {}, [listWrap, pager]));
 
-  // Bento inferior: conteo real por rol (no plantillas ficticias) + panel
-  // informativo sobre la protección de roles base ya implementada.
   const roleChipsWrap = h('div.flex.flex-wrap.gap-2.mt-1', {});
   const bentoSection = h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-3' }, [
     h('div.card.flex.flex-col.gap-3', { class: 'md:col-span-2' }, [
@@ -164,7 +146,6 @@ export async function renderUsers({ user }) {
     });
   }
 
-  // Re-engancha los listeners de las filas desktop tras cada repaint.
   function wireTableRows() {
     const rows = listWrap.querySelectorAll('tr[data-id]');
     rows.forEach((tr) => {
@@ -205,10 +186,6 @@ export async function renderUsers({ user }) {
     });
   }
 
-  // Toggle switch accesible — mismo patrón (button role=switch + track +
-  // thumb) que ya usa /roles, adaptado acá para activar/desactivar cuentas.
-  // El click sigue disparando el modal de confirmación (onToggle): no se
-  // salta esa guarda de seguridad sólo por el cambio visual.
   function statusToggleHtml(u) {
     const active = isUserActive(u.active);
     return `
@@ -434,7 +411,6 @@ export async function renderUsers({ user }) {
 
   await reload();
 
-  // Realtime: refresca la lista cuando otro SAC crea/edita/desactiva usuarios.
   const onRealtime = (e) => {
     const t = e.detail?.event;
     if (t === 'user:created' || t === 'user:updated' || t === 'user:deactivated') {
@@ -450,8 +426,6 @@ export async function renderUsers({ user }) {
   return root;
 }
 
-// Límites espejo del backend (auth.service.js → LIMITS). El cliente valida
-// para dar feedback inmediato, pero el backend sigue siendo la fuente de verdad.
 const VALIDATION = {
   username: { min: 3, max: 50, pattern: /^[a-zA-Z0-9._-]+$/ },
   fullName: { max: 200 },
@@ -459,8 +433,6 @@ const VALIDATION = {
   password: { min: 4, max: 200 },
 };
 
-// Marca/limpia el error de un campo. A11y: usa aria-invalid + aria-describedby
-// para que el screen reader anuncie el mensaje al tabular al campo.
 function setFieldError(input, errorEl, message) {
   if (message) {
     errorEl.textContent = message;
@@ -500,9 +472,6 @@ async function openEditModal(u, onSaved, currentUser) {
     h('option', { value: '' }, '— Sin área —'),
     ...AREAS.map((a) => h('option', { value: a, selected: u?.area === a ? '' : null }, AREA_LABEL[a])),
   ]);
-  // Company select: obligatorio al crear. Al editar, precargamos la empresa
-  // actual del usuario (si tiene membresía) para poder asignarle una a los
-  // usuarios creados antes de la migración multi-tenant, que quedaron sin.
   let company = h('select.input', {}, [h('option', { value: '' }, 'Cargando empresas…')]);
   const companyErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-edit-company-err', role: 'alert' });
   let currentCompanyId = null;
@@ -518,7 +487,6 @@ async function openEditModal(u, onSaved, currentUser) {
   }
   try {
     const res = await api.companies.list();
-    // Mostrar solo empresas activas en el selector.
     const comps = (res.companies || []).filter((c) => c.active);
     const opts = [h('option', { value: '' }, isEdit
       ? (currentCompanyId ? '— Sin cambios —' : '— Sin empresa asignada —')
@@ -531,10 +499,8 @@ async function openEditModal(u, onSaved, currentUser) {
   } catch (e) {
     company = h('select.input', {}, [h('option', { value: '' }, 'Error cargando empresas')]);
   }
-  if (u?.area) area.value = u.area;
-  // Toggle de visibilidad de la contraseña. Devuelve el contenedor (input
-  // + botón), no el input solo, para que el caller pueda meterlo en un
-  // field. El input resultante queda accesible con su `id` original.
+  if (u?.area)
+    area.value = u.area;
   function makePasswordInput(input) {
     const wrap = h('div.relative', {});
     const eyeBtn = h('button', {
@@ -572,11 +538,6 @@ async function openEditModal(u, onSaved, currentUser) {
   });
   const passwordWithToggle = makePasswordInput(password);
 
-  // Email — sólo se muestra al crear. Se autogenera como `${username}@${DOMAIN}`
-  // (espejo del `deriveAuthEmail` del backend) para que Firebase Auth y
-  // Firestore coincidan. El campo es visible pero no editable: se rellena
-  // solo a partir del username y el SAC puede copiarlo si lo necesita.
-  // `readonly` (no `disabled`) para que siga enfocable y copiable.
   const email = h('input.input', {
     type: 'email',
     value: u?.email || '',
@@ -595,7 +556,6 @@ async function openEditModal(u, onSaved, currentUser) {
     emailHelp,
   ]);
 
-  // Bloques con field-level error
   const usernameErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-edit-username-err', role: 'alert' });
   const fullnameErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-edit-fullname-err', role: 'alert' });
   const roleErr     = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-edit-role-err',     role: 'alert' });
@@ -622,11 +582,6 @@ async function openEditModal(u, onSaved, currentUser) {
     area,
   ]);
 
-  // Administrador de plataforma: bypass total cross-empresa (ver
-  // docs/MULTITENANT.md). Es un flag por usuario, no un privilegio atado a
-  // una persona — así se puede transferir el día que quien lo tenga hoy deje
-  // el puesto. Solo se muestra si quien edita YA es platform admin; el
-  // backend además bloquea dejar el sistema sin ninguno.
   const canTogglePlatformAdmin = isEdit && currentUser?.isPlatformAdmin;
   const platformAdminCheckbox = canTogglePlatformAdmin
     ? h('input', { type: 'checkbox', checked: !!u?.is_platform_admin || undefined, class: 'w-4 h-4 rounded border-slate-300' })
@@ -649,7 +604,6 @@ async function openEditModal(u, onSaved, currentUser) {
     passwordErr,
   ]);
 
-  // Banner de error de servidor (no es field-level; aparece abajo del form).
   const banner = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', {
     role: 'alert',
   });
@@ -670,8 +624,6 @@ async function openEditModal(u, onSaved, currentUser) {
     banner,
   ]);
 
-  // Limpia error del campo apenas el usuario edita — el mensaje stale es
-  // peor que ningún mensaje.
   const wireClear = (input, errorEl) => {
     const ev = input.tagName === 'SELECT' ? 'change' : 'input';
     input.addEventListener(ev, () => clearFieldError(input, errorEl));
@@ -682,10 +634,6 @@ async function openEditModal(u, onSaved, currentUser) {
   if (company) wireClear(company, companyErr);
   wireClear(password, passwordErr);
 
-  // Autogenerar email = `${username}@gcm.com` cada vez que cambia el
-  // username. El campo es visible pero no editable, así que no necesitamos
-  // el flag "dirty". Sólo aplica al crear; en edición el email se persiste
-  // y no se toca.
   if (!isEdit) {
     username.addEventListener('input', () => {
       const local = usernameToLocalPart(username.value);
@@ -693,7 +641,6 @@ async function openEditModal(u, onSaved, currentUser) {
     });
   }
 
-  // Valida el formulario completo. Devuelve { ok, firstInvalid, payload }.
   function validate() {
     const fullnameVal = fullname.value.trim();
     const roleVal = role.value;
@@ -743,7 +690,6 @@ async function openEditModal(u, onSaved, currentUser) {
       firstInvalid = firstInvalid || password;
     }
 
-    // Empresa: obligatoria al crear un usuario.
     if (!isEdit) {
       if (!company || !company.value) {
         setFieldError(company, companyErr, 'Selecciona una empresa.');
@@ -751,11 +697,6 @@ async function openEditModal(u, onSaved, currentUser) {
       }
     }
 
-    // Email: siempre se autogenera a partir del username con la nomenclatura
-    // ${username}@gcm.com (espejo de deriveAuthEmail en backend). El campo
-    // es visible pero no editable en el modal de creación, así que nunca
-    // viene un valor escrito a mano. Si el username quedó vacío (no debería,
-    // porque validate ya rechazó arriba), caemos a null.
     let emailVal = null;
     if (!isEdit) {
       const local = usernameToLocalPart(username.value.trim());
@@ -797,7 +738,6 @@ async function openEditModal(u, onSaved, currentUser) {
   const actions = (close) => [
     h('button.btn.btn-ghost', { onclick: close, type: 'button' }, 'Cancelar'),
     h('button.btn.btn-primary', { type: 'button', onclick: async () => {
-      // Limpia errores previos antes de revalidar
       [usernameErr, fullnameErr, roleErr, passwordErr].forEach((el) => el.classList.add('hidden'));
       hideBanner();
       const v = validate();
@@ -810,7 +750,6 @@ async function openEditModal(u, onSaved, currentUser) {
           await api.users.update(u.id, v.payload);
           toast('Usuario actualizado', 'success');
         } else {
-          // Incluir company_id al crear (requerido en UX).
           await api.users.create(v.payload);
           toast('Usuario creado', 'success');
         }
@@ -822,3 +761,4 @@ async function openEditModal(u, onSaved, currentUser) {
   ];
   openModal({ title: isEdit ? 'Editar usuario' : 'Nuevo usuario', body, actions });
 }
+

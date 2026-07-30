@@ -1,7 +1,15 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firestoreData = require('../firestoreData');
-const { validationError } = require('../utils/validators');
+const { validationError, forbiddenError } = require('../utils/validators');
+
+function assertCanManageCategory(category, user) {
+  if (!user || user.isPlatformAdmin) return;
+  if (category.company_id == null) return;
+  if (String(category.company_id) !== String(user.activeCompanyId)) {
+    throw forbiddenError('No puede modificar categorías de otra empresa.');
+  }
+}
 
 function serialize(row) {
   if (!row) return null;
@@ -14,17 +22,11 @@ function serialize(row) {
   };
 }
 
-/**
- * Emite un evento de categoría a la sala 'sac' (gestión administrativa).
- * Es seguro llamarlo cuando el socket aún no está inicializado.
- */
 function emitCategory(event, category, opts = {}) {
   try {
     const { emit } = require('../sockets');
     emit(event, { category, ...opts }, { role: 'sac' });
-  } catch (e) {
-    /* socket no inicializado aún */
-  }
+  } catch (e) {}
 }
 
 async function list({ activeOnly = true } = {}, user = null) {
@@ -40,9 +42,9 @@ async function create(name, user = null) {
   return created;
 }
 
-async function update(id, { name, active } = {}) {
-  // Capturamos el "antes" para enviar un diff explícito en el evento.
+async function update(id, { name, active } = {}, user = null) {
   const before = await firestoreData.getCategoryById(id).catch(() => null);
+  if (before) assertCanManageCategory(before, user);
   const row = await firestoreData.updateCategory(id, { name, active });
   const after = serialize(row);
   const changes = {};
@@ -56,21 +58,18 @@ async function update(id, { name, active } = {}) {
   return after;
 }
 
-// remove — regla de negocio del sistema: nada se elimina de verdad, todo
-// se deshabilita. firestoreData.deleteCategory ya es un alias de
-// "desactivar" (active: 0); no hay nada que bloquear por tickets en uso
-// porque no se pierde ningun dato (mismo comportamiento que el toggle
-// Desactivar/Activar del listado).
-async function remove(id) {
+async function remove(id, user = null) {
   const before = await firestoreData.getCategoryById(id);
   if (!before) {
     const err = new Error('Categoría no encontrada.');
     err.code = 'NOT_FOUND';
     throw err;
   }
+  assertCanManageCategory(before, user);
   const after = await firestoreData.deleteCategory(id);
   emitCategory('category:updated', after, { changes: { active: { from: !!before.active, to: false } } });
   return after;
 }
 
 module.exports = { list, create, update, remove };
+

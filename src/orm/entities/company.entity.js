@@ -1,36 +1,9 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const { EntitySchema } = require('typeorm');
 const { bitBoolean } = require('../transformers');
 
-/**
- * companies — entidades tenant. Cada empresa del grupo GCM.
- *
- *   id          INT IDENTITY(1,1) PRIMARY KEY
- *   name        NVARCHAR(200) NOT NULL            -- "GCM Norte", "Oficina principal"
- *   slug        NVARCHAR(50)  UNIQUE NOT NULL     -- "gcm-norte", "oficina-principal"
- *   logo_url    NVARCHAR(500) NULL                -- asset servido por /uploads o CDN
- *   color       NVARCHAR(20)  NULL                -- hex "#0F2A47" o token "navy" para fallback
- *   code_prefix NVARCHAR(6)   NULL UNIQUE          -- prefijo de nomenclatura de tickets (ej "N7", "C1", "ESP")
- *   location    NVARCHAR(200) NULL                -- dirección/ciudad de la empresa
- *   responsible_user_id INT NULL REFERENCES users(id) -- encargado asignado
- *   active      BIT NOT NULL DEFAULT 1
- *   is_default  BIT NOT NULL DEFAULT 0            -- empresa asignada a registros legacy en la migración
- *   created_at  DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
- *   updated_at  DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
- *
- * Multi-tenant core: todos los datos de negocio (tickets, users, categories, etc.)
- * referencian a una `companies.id` vía `company_id`. El flag `is_default` se usa
- * durante la migración inicial para que los registros preexistentes se asignen
- * a la empresa legacy (típicamente "GCM Central") y se puedan migrar después.
- *
- * `slug` es UNIQUE global y se usa en URLs amigables. Se autogenera a partir
- * de `name` (slugify), pero se puede customizar al crear la empresa.
- *
- * El `color` es el accent del brand contextual (sidebar, topbar, badges).
- * Si es NULL, el layout usa los tokens del brand del grupo.
- */
 module.exports = new EntitySchema({
   name: 'Company',
   tableName: 'companies',
@@ -49,3 +22,4 @@ module.exports = new EntitySchema({
     updated_at: { type: 'datetime', default: require('../timestamp-default').timestampDefault, nullable: false },
   },
 });
+

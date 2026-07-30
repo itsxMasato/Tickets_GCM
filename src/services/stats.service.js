@@ -1,52 +1,22 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firestoreData = require('../firestoreData');
 
-/**
- * Estadísticas — reescritas sobre Firebase (antes TypeORM).
- *
- * Por qué cambió: con DISABLE_MSSQL=true, getRepository(Ticket) fallaba y
- * el dashboard cliente mostraba 0s en todos los KPIs.
- *
- * Estrategia: delegamos en firestoreData.getStats() y getStatsForUser(),
- * que ya existen y están optimizados (countGroupByValues server-side, NO
- * carga de tickets en memoria). Sobre el resultado, completamos los campos
- * de `totals` que el cliente espera (recibido, asignado, en_proceso,
- * solucionado, reabierto, urgent, closed_today) y derivamos by_assignee
- * para jefe, que getStatsForUser ya devuelve pero el cliente lo quiere
- * poblado.
- *
- * API pública (compatible con stats.routes.js):
- *   - dashboard()                  → SAC global
- *   - forUser(userId, user)        → admin_area | supervisor | jefe
- *   - forSupervisor(userId)        → wrapper para supervisor_campo
- *   - forJefe(area)                → wrapper para jefe_inmediato
- */
-
-// ─────────────────────────────────────────────────────────────────────────
-// Enriquecimiento de `totals` — getStats/getStatsForUser no devuelven todos
-// los campos que el cliente espera. Una sola query liviana a `tickets` con
-// sólo los campos necesarios llena los huecos.
-// ─────────────────────────────────────────────────────────────────────────
 const TICKET_TOTALS_FIELDS = ['status', 'priority', 'closed_at'];
 
 async function enrichTotals(baseTotals) {
-  // Si getStats/getStatsForUser ya proveyó todo lo que necesita el cliente,
-  // evitamos la query extra.
-  if (
-    baseTotals.recibido != null
-    && baseTotals.asignado != null
-    && baseTotals.en_proceso != null
-    && baseTotals.solucionado != null
-    && baseTotals.reabierto != null
-    && baseTotals.urgent != null
-    && baseTotals.closed_today != null
-  ) {
+  if (baseTotals.recibido != null
+  && baseTotals.asignado != null
+  && baseTotals.en_proceso != null
+  && baseTotals.solucionado != null
+  && baseTotals.reabierto != null
+  && baseTotals.urgent != null
+  && baseTotals.closed_today != null) {
     return baseTotals;
   }
   const tickets = await firestoreData.queryCollection('tickets', [], {
     select: TICKET_TOTALS_FIELDS,
-    limit: 5000, // acotamos; si la empresa crece, se optimiza con countGroupByValues
+    limit: 5000,
   });
   const enriched = {
     ...baseTotals,
@@ -71,18 +41,29 @@ async function enrichTotals(baseTotals) {
   return enriched;
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// dashboard() — solo SAC
-// ─────────────────────────────────────────────────────────────────────────
-async function dashboard() {
-  const base = await firestoreData.getStats();
+const EMPTY_DASHBOARD = {
+  totals: { total: 0, open: 0, closed: 0, resolved: 0, reopened: 0, recibido: 0, asignado: 0, en_proceso: 0, solucionado: 0, reabierto: 0, urgent: 0, closed_today: 0 },
+  avg_resolution_hours: 0,
+  by_status: [],
+  by_priority: [],
+  by_area: [],
+  by_assignee: [],
+  last_30_days: [],
+  top_categories: [],
+};
+
+async function dashboard(requester = null) {
+  if (requester && !requester.isPlatformAdmin && requester.activeCompanyId == null) {
+    return EMPTY_DASHBOARD;
+  }
+  const companyId = requester && !requester.isPlatformAdmin ? requester.activeCompanyId : null;
+  const base = await firestoreData.getStats(companyId);
   const totals = await enrichTotals(base.totals);
 
-  // by_assignee — getStats() no lo devuelve, lo derivamos con una query
-  // acotada. Se cachea por usuario para que el cliente tenga nombres.
+  const companyClause = companyId != null ? [['company_id', '==', companyId]] : [];
   const tickets = await firestoreData.queryCollection(
     'tickets',
-    [],
+    companyClause,
     { select: ['assigned_to'], limit: 5000 }
   );
   const byAssigneeMap = tickets.reduce((acc, t) => {
@@ -115,15 +96,11 @@ async function dashboard() {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// forUser(userId, user) — admin_area | supervisor | jefe
-// ─────────────────────────────────────────────────────────────────────────
 async function forUser(userId, user) {
   const base = await firestoreData.getStatsForUser(userId, user);
-  if (!base || !base.totals) return base || {};
+  if (!base || !base.totals)
+    return base || {};
 
-  // getStatsForUser usa 'resolved'/'reopened'/'solved' para algunos roles;
-  // el cliente espera nombres canónicos en español.
   const totals = await enrichTotals({
     ...base.totals,
     solucionado: base.totals.solucionado ?? base.totals.solved ?? null,
@@ -136,12 +113,13 @@ async function forUser(userId, user) {
   return { ...base, totals };
 }
 
-async function forSupervisor(userId) {
-  return forUser(userId, { id: userId, role: 'supervisor_campo' });
+async function forSupervisor(userId, requester = null) {
+  return forUser(userId, { id: userId, role: 'supervisor_campo', activeCompanyId: requester?.activeCompanyId ?? null, isPlatformAdmin: requester?.isPlatformAdmin ?? false });
 }
 
-async function forJefe(area) {
-  return forUser(null, { role: 'jefe_inmediato', area });
+async function forJefe(area, requester = null) {
+  return forUser(null, { role: 'jefe_inmediato', area, activeCompanyId: requester?.activeCompanyId ?? null, isPlatformAdmin: requester?.isPlatformAdmin ?? false });
 }
 
 module.exports = { dashboard, forUser, forSupervisor, forJefe };
+

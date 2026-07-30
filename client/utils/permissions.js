@@ -1,7 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Permisos del frontend — espejo simple de la lógica del backend
-// user: { id, role, area }
-
+/* Documentado por: Miguel Flores */
 import { sameId } from './ids.js';
 
 export const ROLES = ['supervisor_campo', 'sac', 'admin_area', 'jefe_inmediato'];
@@ -36,12 +33,10 @@ export function canAssign(user) {
   return isSAC(user) || isJefe(user);
 }
 
-// Devuelve los próximos estados permitidos para un ticket
 export function nextStates(user, ticket) {
   if (!user || !ticket) return [];
   const cur = ticket.status;
   if (isSAC(user)) {
-    // SAC fuerza todo lo que sea transición válida
     return {
       recibido:    ['asignado', 'cerrado'],
       asignado:    ['en_proceso', 'asignado'],
@@ -83,16 +78,10 @@ export function canManageCategories(user) { return isSAC(user); }
 export function canViewReports(user)    { return isSAC(user) || isJefe(user); }
 export function canViewAllTickets(user) { return isSAC(user) || isJefe(user); }
 
-// Multi-tenant (Fase 3 visible). El flag `isPlatformAdmin` lo setea el
-// backend en `req.user` para sesiones con `users.is_platform_admin = 1`
-// (hoy solo Miguel Flores). La guarda es defensiva: el backend vuelve a
-// validar con `requirePlatformAdmin` en cada router de /api/companies/*.
 export function isPlatformAdmin(user) { return user?.isPlatformAdmin === true; }
-// El management de empresas lo puede hacer el platform admin o el SAC.
 export function canManageCompanies(user) { return isPlatformAdmin(user) || isSAC(user); }
 
-// Selector de empresa activa en el topbar: solo tiene sentido mostrarlo
-// cuando el user tiene más de una membresía entre las que elegir.
 export function hasMultipleCompanies(user) {
   return Array.isArray(user?.memberships) && user.memberships.length > 1;
 }
+

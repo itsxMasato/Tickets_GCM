@@ -1,19 +1,5 @@
-/*
- Script: migrate-sqlite-to-firestore.js
- Migrates companies and user_company_memberships from local
- SQLite (data/tickets.db) into Firestore, preserving IDs and timestamps.
-
- Usage:
-  node src/scripts/migrate-sqlite-to-firestore.js
-
- Notes:
-  - Run on a dev copy first. This will write to the Firestore project
-    configured by src/firestore.js / environment.
-  - It preserves numeric/string IDs by passing the `id` to createDoc.
-  - It will skip documents that already exist in Firestore (by id).
-  - Requires node deps: better-sqlite3 (used elsewhere in repo).
-*/
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const path = require('path');
 const fs = require('fs');
@@ -24,7 +10,6 @@ const firestoreData = require('../firestoreData');
 const config = require('../config');
 
 async function ensureFirestore() {
-  // Ensure Firestore client is initialised via src/firestore.js
   return getFirestore();
 }
 
@@ -114,3 +99,4 @@ async function run() {
 if (require.main === module) run();
 
 module.exports = { run };
+

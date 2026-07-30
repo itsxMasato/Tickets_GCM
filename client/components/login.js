@@ -1,21 +1,16 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Componentes del módulo Login (scope aislado).
-// Solo este archivo y client/views/login.js los consumen.
-// No exportar desde aquí hacia otros módulos.
-
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { ICON, svg } from '../utils/icons.js';
 
-// ───────────────────────────────────────────────────────────────────────
-// BrandLockup — logo + nombre + tagline + línea auxiliar
-// ───────────────────────────────────────────────────────────────────────
-export function BrandLockup({
-  name = 'GCM Tickets',
-  tagline = 'Sala de control',
-  location = 'Acceso corporativo seguro',
-  logoSrc = '/img/Logo.png',
-  href = '/',
-} = {}) {
+export function BrandLockup(
+  {
+    name = 'GCM Tickets',
+    tagline = 'Sala de control',
+    location = 'Acceso corporativo seguro',
+    logoSrc = '/img/Logo.png',
+    href = '/',
+  } = {}
+) {
   const inner = h('a.login-brand', { href, 'aria-label': `${name} — Inicio` }, [
     h('img.login-brand-logo', {
       src: logoSrc,
@@ -34,28 +29,27 @@ export function BrandLockup({
   return inner;
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// LoginField — input con icono izquierdo, helper, estados y a11y
-// ───────────────────────────────────────────────────────────────────────
-export function LoginField({
-  id,
-  label,
-  type = 'text',
-  icon,
-  autocomplete,
-  placeholder = '',
-  autofocus = false,
-  value = '',
-  inputmode,
-  autocapitalize,
-  autocorrect,
-  spellcheck,
-  required = true,
-  helper = '',
-  onInput,
-  describedBy,
-  invalid = false,
-}) {
+export function LoginField(
+  {
+    id,
+    label,
+    type = 'text',
+    icon,
+    autocomplete,
+    placeholder = '',
+    autofocus = false,
+    value = '',
+    inputmode,
+    autocapitalize,
+    autocorrect,
+    spellcheck,
+    required = true,
+    helper = '',
+    onInput,
+    describedBy,
+    invalid = false,
+  }
+) {
   const labelEl = h('label.label.font-medium', {
     class: 'text-white/85 text-[12.5px]',
     for: id,
@@ -98,20 +92,19 @@ export function LoginField({
   return { node, input };
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// PasswordField — LoginField + show/hide + caps lock warning
-// ───────────────────────────────────────────────────────────────────────
-export function PasswordField({
-  id = 'password',
-  label = 'Contraseña',
-  placeholder = '••••••••••',
-  autocomplete = 'current-password',
-  autofocus = false,
-  capsWarning = true,
-  required = true,
-  describedBy,
-  invalid = false,
-}) {
+export function PasswordField(
+  {
+    id = 'password',
+    label = 'Contraseña',
+    placeholder = '••••••••••',
+    autocomplete = 'current-password',
+    autofocus = false,
+    capsWarning = true,
+    required = true,
+    describedBy,
+    invalid = false,
+  }
+) {
   const labelEl = h('label.label.font-medium', {
     class: 'text-white/85 text-[12.5px]',
     for: id,
@@ -138,7 +131,6 @@ export function PasswordField({
   input.addEventListener('focus', () => lockIcon.classList.add('login-input-icon-active'));
   input.addEventListener('blur', () => lockIcon.classList.remove('login-input-icon-active'));
 
-  // Toggle de visibilidad — type="button" para no disparar submit.
   const toggle = h('button.login-toggle', {
     type: 'button',
     'aria-label': 'Mostrar contraseña',
@@ -153,7 +145,6 @@ export function PasswordField({
   wrap.appendChild(input);
   wrap.appendChild(toggle);
 
-  // Caps Lock warning (live region, polite).
   const caps = h('div.hidden.flex.items-center.mt-1', {
     class: 'text-[11.5px] text-amber-200/90 gap-1.5',
     role: 'status',
@@ -174,9 +165,6 @@ export function PasswordField({
   return { node, input };
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// LoginCheckbox — recordarme (custom-styled, área click amplia)
-// ───────────────────────────────────────────────────────────────────────
 export function LoginCheckbox({ id = 'remember', label = 'Recordarme en este equipo', checked = false }) {
   const row = h('label.login-checkbox-row', { for: id });
   const cb = h('input.login-checkbox', {
@@ -190,10 +178,9 @@ export function LoginCheckbox({ id = 'remember', label = 'Recordarme en este equ
   return row;
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// PrimaryButton — submit con spinner inline
-// ───────────────────────────────────────────────────────────────────────
-export function PrimaryButton({ label = 'Ingresar', loadingLabel = 'Verificando…', loading = false, type = 'submit' }) {
+export function PrimaryButton(
+  { label = 'Ingresar', loadingLabel = 'Verificando…', loading = false, type = 'submit' }
+) {
   const btn = h('button.btn.btn-primary.w-full.login-submit.gap-2.font-medium', {
     type,
     'aria-busy': loading ? 'true' : undefined,
@@ -205,7 +192,6 @@ export function PrimaryButton({ label = 'Ingresar', loadingLabel = 'Verificando�
     if (loading) {
       btn.appendChild(makeSpinnerSVG());
     } else {
-      // icono login al lado del label (al entrar, no al cargar)
       btn.appendChild(svg(h, 'login', 'w-4 h-4'));
     }
     const text = h('span', { class: 'tracking-[0.005em]' }, loading ? loadingLabel : label);
@@ -233,9 +219,6 @@ function makeSpinnerSVG() {
   return s;
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// Banner — error / warning / info (3 canales, sin border-left)
-// ───────────────────────────────────────────────────────────────────────
 export function Banner({ message, variant = 'error', id }) {
   const cls = {
     error:   'login-banner login-banner-error',
@@ -253,16 +236,10 @@ export function Banner({ message, variant = 'error', id }) {
   ]);
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// Divider — separador con label (continuar con SSO, etc.)
-// ───────────────────────────────────────────────────────────────────────
 export function Divider({ label = 'o continúa con' }) {
   return h('div.login-divider', {}, [h('span', {}, label)]);
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// Capability — fila con icono + título + subtítulo (panel lateral)
-// ───────────────────────────────────────────────────────────────────────
 export function Capability({ title, subtitle, icon = 'check' }) {
   return h('div.login-cap', {}, [
     h('span.login-cap-icon', { 'aria-hidden': 'true' }, [svg(h, icon, 'w-3.5 h-3.5')]),
@@ -273,9 +250,6 @@ export function Capability({ title, subtitle, icon = 'check' }) {
   ]);
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// SystemStatus — dot + label, datos reales
-// ───────────────────────────────────────────────────────────────────────
 export function SystemStatus({ status = 'ok', since } = {}) {
   const dotClass = status === 'degraded' ? 'login-status-dot degraded' : 'login-status-dot ok';
   const label = status === 'degraded' ? 'Servicio parcial' : 'Sistema operativo';
@@ -297,10 +271,6 @@ function formatSince(since) {
   }
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// SupportRow — único canal neutro (centro de ayuda). Sin email ni teléfono
-// pre-login para no filtrar datos de contacto en la página pública.
-// ───────────────────────────────────────────────────────────────────────
 export function SupportRow({ helpHref = '/ayuda' } = {}) {
   const items = [];
   if (helpHref) {
@@ -308,3 +278,4 @@ export function SupportRow({ helpHref = '/ayuda' } = {}) {
   }
   return h('div.login-support', {}, items);
 }
+

@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const firestore = require('../firestore');
 const firestoreData = require('../firestoreData');
@@ -11,8 +11,6 @@ const {
 } = require('../utils/validators');
 const { CALENDAR_EVENT_TYPE_VALUES, CALENDAR_EVENT_COLORS } = require('../orm/enums');
 
-// Coerce de fechas: el front envía ISO 8601 con Z, queremos string SQL
-// 'YYYY-MM-DD HH:MM:SS' (mismo formato que firestore.nowSql() y los tickets).
 function toSqlDate(value) {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
@@ -37,9 +35,6 @@ function decorate(row) {
   };
 }
 
-// ── Validación ────────────────────────────────────────────────────────────────
-// Centralizada: la usan createEvent y updateEvent. Lanza validationError(...)
-// con mensajes específicos para que el front pueda mostrarlos en el modal.
 function validateEventPayload(payload, { partial = false } = {}) {
   const out = {};
 
@@ -65,7 +60,6 @@ function validateEventPayload(payload, { partial = false } = {}) {
     out.end_at = end;
   }
 
-  // start < end (cuando ambos están presentes en el payload)
   if (out.start_at && out.end_at) {
     if (new Date(out.start_at.replace(' ', 'T')) >= new Date(out.end_at.replace(' ', 'T'))) {
       throw validationError('La hora de fin debe ser posterior a la hora de inicio.');
@@ -96,20 +90,10 @@ function validateEventPayload(payload, { partial = false } = {}) {
   return out;
 }
 
-// ── Listado por rango ────────────────────────────────────────────────────────
-// Devuelve los eventos del usuario autenticado cuyo [start_at, end_at]
-// intersecta [from, to]. Es O(n) sobre el rango del usuario (esperado < 200).
 async function listEvents({ user, from, to }) {
   const fromSql = toSqlDate(from) || '1970-01-01 00:00:00';
-  // Para el extremo superior: queremos cualquier evento que EMPIECE
-  // dentro del rango O que ya haya empezado antes pero siga terminando
-  // después del `from`. El query más simple (y suficiente para el uso
-  // personal del Gantt) es: start_at <= to AND end_at >= from.
   const toSql = toSqlDate(to) || '2999-12-31 23:59:59';
 
-  // Firestore still requires a composite index for `user_id == ...` plus
-  // `start_at <= ...`, so only query by user and do the range overlap filter
-  // in memory. The user's personal calendar event set is expected to be small.
   const rows = await firestore.findMany(
     'calendar_events',
     [
@@ -118,9 +102,6 @@ async function listEvents({ user, from, to }) {
   );
 
   return rows
-    // active === 0 → deshabilitado ("eliminado" por el usuario, ver
-    // deleteEvent). Docs viejos sin el campo `active` se tratan como
-    // activos para no ocultar eventos creados antes de este cambio.
     .filter((row) => row.active !== 0 && row.active !== false)
     .filter((row) => row.start_at <= toSql && row.end_at >= fromSql)
     .sort((a, b) => {
@@ -132,12 +113,8 @@ async function listEvents({ user, from, to }) {
     .map(decorate);
 }
 
-// ── Crear ────────────────────────────────────────────────────────────────────
 async function createEvent(payload, user) {
   const data = validateEventPayload(payload, { partial: false });
-  // Si el cliente envía ticket_id, validamos que exista (no pedimos
-  // canView aquí — el front sólo lo vinculará desde un ticket que ya
-  // puede ver; si no, el FK fallará al guardar).
   if (data.ticket_id != null) {
     const ticket = await getTicketById(data.ticket_id);
     if (!ticket) throw validationError('El ticket indicado no existe.');
@@ -160,6 +137,7 @@ async function createEvent(payload, user) {
 
   await auditService.logAsync({
     user_id: user.id,
+    company_id: user.activeCompanyId,
     action_type: 'calendar_event_created',
     target_type: 'calendar_event',
     target_id: decorated.id,
@@ -172,10 +150,6 @@ async function createEvent(payload, user) {
   return decorated;
 }
 
-// ── Actualizar ───────────────────────────────────────────────────────────────
-// Solo el dueño. Validamos todos los campos presentes. Si el patch es
-// parcial (sólo start_at, p. ej.) y ya hay un end_at previo, el orden se
-// valida contra el patch combinado.
 async function updateEvent(id, payload, user) {
   const existing = decorate(await firestore.getById('calendar_events', id));
   if (!existing) throw notFoundError('Evento de calendario no encontrado.');
@@ -183,9 +157,9 @@ async function updateEvent(id, payload, user) {
     throw forbiddenError('No puedes modificar eventos de otro usuario.');
   }
   const patch = validateEventPayload(payload, { partial: true });
-  if (Object.keys(patch).length === 0) return existing;
+  if (Object.keys(patch).length === 0)
+    return existing;
 
-  // Si el patch cambia start o end, validar el rango combinado.
   const newStart = patch.start_at || existing.start_at;
   const newEnd = patch.end_at || existing.end_at;
   if (new Date(newStart.replace(' ', 'T')) >= new Date(newEnd.replace(' ', 'T'))) {
@@ -198,8 +172,6 @@ async function updateEvent(id, payload, user) {
   }
 
   patch.updated_at = firestore.nowSql();
-  // Si el cliente subió un ticket_id, el type se ajusta automáticamente
-  // (un evento vinculado a un ticket se considera 'ticket_linked').
   if (patch.ticket_id !== undefined) {
     patch.type = patch.ticket_id ? 'ticket_linked' : 'personal';
   }
@@ -208,6 +180,7 @@ async function updateEvent(id, payload, user) {
 
   await auditService.logAsync({
     user_id: user.id,
+    company_id: user.activeCompanyId,
     action_type: 'calendar_event_updated',
     target_type: 'calendar_event',
     target_id: decorated.id,
@@ -221,10 +194,6 @@ async function updateEvent(id, payload, user) {
   return decorated;
 }
 
-// ── Borrar ───────────────────────────────────────────────────────────────────
-// Regla de negocio: nada se elimina de verdad, todo se deshabilita. En vez
-// de borrar el documento, lo marcamos active:0 — listEvents ya lo filtra,
-// asi que desaparece del calendario del usuario sin perder el registro.
 async function deleteEvent(id, user) {
   const existing = decorate(await firestore.getById('calendar_events', id));
   if (!existing) throw notFoundError('Evento de calendario no encontrado.');
@@ -235,6 +204,7 @@ async function deleteEvent(id, user) {
 
   await auditService.logAsync({
     user_id: user.id,
+    company_id: user.activeCompanyId,
     action_type: 'calendar_event_deleted',
     target_type: 'calendar_event',
     target_id: existing.id,
@@ -247,13 +217,7 @@ async function deleteEvent(id, user) {
   return { id: existing.id };
 }
 
-// ── Tickets "disponibles" para arrastrar al Gantt ────────────────────────────
-// Devuelve los tickets que el usuario puede ver y que aún no han sido cerrados
-// y están pendientes de iniciar o ya están en proceso.
 async function listSchedulableTickets(user, { limit = 30 } = {}) {
-  // `firestoreData.listTickets` no soporta filtros de negación como
-  // `status: '!cerrado'`, por lo que traemos los tickets visibles al usuario
-  // y filtramos por los estados permitidos en memoria.
   const allowedStatuses = new Set(['recibido', 'asignado', 'en_proceso']);
   const result = await firestoreData.listTickets({}, user, { limit: Math.max(limit * 5, 100) });
   return (result.tickets || [])
@@ -265,9 +229,7 @@ function emit(event, payload, opts = {}) {
   try {
     const { emit: emitSocket } = require('../sockets');
     emitSocket(event, payload, opts);
-  } catch (e) {
-    /* socket no inicializado aún */
-  }
+  } catch (e) {}
 }
 
 module.exports = {
@@ -276,9 +238,9 @@ module.exports = {
   updateEvent,
   deleteEvent,
   listSchedulableTickets,
-  // Helpers expuestos para los tests y posibles consumers internos.
   toSqlDate,
   validateEventPayload,
   CALENDAR_EVENT_COLORS,
   CALENDAR_EVENT_TYPE_VALUES,
 };
+

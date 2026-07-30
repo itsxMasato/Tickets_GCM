@@ -1,9 +1,9 @@
-// Real template-literal balance tracker.
+/* Documentado por: Miguel Flores */
 import { readFileSync } from 'fs';
 const src = readFileSync('client/components/topbar.js', 'utf8');
-let inS = null;          // ' " or `
-let inLC = false;        // // line comment
-let inBC = false;        // /* */ block comment
+let inS = null;
+let inLC = false;
+let inBC = false;
 let inRegex = false;
 let templateDepth = 0;
 let i = 0;
@@ -25,8 +25,8 @@ while (i < src.length) {
     if (c === inS) { push({ kind: 'close', ch: inS }); inS = null; i++; continue; }
     i++; continue;
   }
-  // Outside string
-  if (c === '/' && n === '/') { inLC = true; i += 2; col++; continue; }
+  if (c === '/' && n === '/')
+    { inLC = true; i += 2; col++; continue; }
   if (c === '/' && n === '*') { inBC = true; i += 2; col++; continue; }
   if (c === '"' || c === "'" || c === '`') {
     inS = c;
@@ -38,7 +38,6 @@ while (i < src.length) {
 console.log('Still open at EOF:', inS);
 console.log('Total open events:', events.filter(e => e.kind === 'open').length);
 console.log('Total close events:', events.filter(e => e.kind === 'close').length);
-// Find first open without matching close
 let stack = [];
 for (const ev of events) {
   if (ev.kind === 'open') stack.push(ev);
@@ -50,3 +49,4 @@ if (stack.length) {
 } else {
   console.log('All templates balanced.');
 }
+

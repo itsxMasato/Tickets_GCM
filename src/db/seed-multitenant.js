@@ -1,24 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
-
-/**
- * src/db/seed-multitenant.js
- *
- * Seed multi-tenant para MSSQL (vía TypeORM). Crea la empresa default,
- * migra role/area de users a user_company_memberships, y rellena
- * company_id en las tablas que lo requieren. Termina aplicando los
- * NOT NULL y los índices.
- *
- * Idempotente: si la empresa default ya existe, no hace nada destructivo.
- *
- * Uso (después del cutover de Fase 10):
- *   node src/db/seed-multitenant.js
- *   PLATFORM_ADMIN_USERNAME=miguel pnpm seed:multitenant
- *
- * Pre-requisito: las 13 entidades deben estar creadas en MSSQL.
- *   ORM_SYNCHRONIZE=true pnpm orm:smoke   (solo dev)
- *   o aplicar el T-SQL del DBA en prod.
- */
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const orm = require('../orm');
 const env = require('../orm/env');
@@ -102,8 +83,6 @@ async function backfillNotificationsFromTicket(Notification, Ticket) {
 }
 
 async function makeNotNull(Entity) {
-  // La conversión a NOT NULL se hace vía T-SQL del DBA. Acá solo validamos
-  // que no queden company_id NULL. Si hay NULL, el script falla ruidosamente.
   const rows = await Entity.createQueryBuilder('e')
     .where('e.company_id IS NULL')
     .getCount();
@@ -155,3 +134,4 @@ if (require.main === module) {
 }
 
 module.exports = { main, ensureDefaultCompany, migrateUsers };
+

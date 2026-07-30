@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { go } from '../router.js';
 import { subscribe, getState, setState } from '../store.js';
@@ -21,8 +21,6 @@ function icon(path, cls = 'w-5 h-5') {
   });
 }
 
-// ── Contexto del topbar según ruta + rol ─────────────────────────────────────
-// Devuelve: { title, subtitle }
 function topbarContext(user) {
   const raw = (location.hash || '').replace(/^#/, '') || '/dashboard';
   const [pathname, qs] = raw.split('?');
@@ -56,7 +54,6 @@ function subtitleByRole(user) {
   }
 }
 
-// Acciones rápidas (botón "+ Nuevo ticket" / "Refrescar") según rol y ruta
 function quickActions(user) {
   const raw = (location.hash || '').replace(/^#/, '') || '/dashboard';
   const isTickets = raw.startsWith('/tickets') && raw !== '/tickets/new';
@@ -81,11 +78,6 @@ function quickActions(user) {
   return [];
 }
 
-// ── Campana + dropdown de notificaciones (topbar) ────────────────────────────
-// Antes la campana navegaba a /notifications. Ahora abre un dropdown con las
-// no-leídas (lazy fetch on open), con check por item para marcar como leídas
-// y link "Ver todas" al fondo que sí navega a la bandeja completa.
-// Cargar realtime SOLO cuando el dropdown está abierto evita fetches pasivos.
 const BELL_TYPE_TONE = {
   ticket_created:        'bg-blue-100 text-blue-800',
   ticket_assigned:       'bg-brand/10 text-brand',
@@ -121,7 +113,6 @@ function renderBell() {
   const { unreadCount } = getState();
   const hasUnread = unreadCount > 0;
 
-  // ── Dropdown (panel) ────────────────────────────────────────────────────
   const listEl = h('div.max-h-96.overflow-y-auto.py-1', {});
   const emptyEl = h('div.px-4.py-8.text-center.text-sm.text-slate-500', {}, 'Sin notificaciones pendientes');
 
@@ -149,7 +140,6 @@ function renderBell() {
     ]),
   ]);
 
-  // ── Trigger (botón campana) ─────────────────────────────────────────────
   const trigger = h('button.topbar-icon-btn.relative', {
     onclick: (e) => { e.stopPropagation(); toggleDropdown(); },
     'aria-label': hasUnread ? `Notificaciones — ${unreadCount} sin leer` : 'Notificaciones',
@@ -172,13 +162,11 @@ function renderBell() {
       : null,
   ]);
 
-  // Wrap relativo para anclar el dropdown.
   const root = h('div.relative.inline-flex', {}, [trigger, dropdown]);
 
-  // ── Estado del dropdown ─────────────────────────────────────────────────
   let open = false;
-  let realtimeAc = null;  // AbortController de la suscripción realtime (sólo mientras abierto).
-  let fetched = false;    // ¿ya hicimos el primer fetch?
+  let realtimeAc = null;
+  let fetched = false;
 
   function isOpen() { return open; }
   function openDropdown() {
@@ -186,8 +174,6 @@ function renderBell() {
     dropdown.classList.remove('hidden');
     trigger.setAttribute('aria-expanded', 'true');
     loadList();
-    // Realtime: refresca la lista cuando llegan nuevas no-leídas mientras
-    // el usuario tiene el panel abierto. Al cerrar, se aborta.
     realtimeAc = subscribeToRealtimeEvents(['notification:new'], () => {
       loadList();
     });
@@ -206,7 +192,6 @@ function renderBell() {
       fetched = true;
       drawList(notifications);
     } catch (e) {
-      // [DIAG-2026-07-15] Temporal: ver el error en consola del navegador.
       console.error('[diag:bell] loadList failed:', e);
       listEl.innerHTML = '';
       listEl.appendChild(h('div.px-4.py-6.text-center.text-sm.text-red-600', {}, e.message || 'Error al cargar'));
@@ -257,16 +242,11 @@ function renderBell() {
   }
 
   async function onItemClick(n) {
-    // Click en el cuerpo: marcar como leída y abrir el ticket (mismo flujo
-    // que la vista completa /notifications).
     await markOne(n, { silent: true, openTicket: !!n.ticket_id });
   }
 
   async function markOne(n, opts = {}) {
     const wasUnread = !n.read;
-    // Optimistic: baja el contador y recarga la lista silenciosamente.
-    // (No removemos la fila del DOM por id para evitar inconsistencias; un
-    // refetch es lo más simple y mantiene la lista en sync con el server.)
     if (wasUnread) {
       const cur = getState().unreadCount || 0;
       setState({ unreadCount: Math.max(0, cur - 1) });
@@ -277,12 +257,10 @@ function renderBell() {
         closeDropdown();
         go(`/tickets/${n.ticket_id}`);
       } else if (open) {
-        // Refresca silenciosamente para mantener la lista coherente.
         loadList();
         if (!opts.silent) toast('Marcada como leída', 'success');
       }
     } catch (e) {
-      // Reversión si la API falla.
       if (wasUnread) {
         const cur = getState().unreadCount || 0;
         setState({ unreadCount: cur + 1 });
@@ -298,14 +276,11 @@ function renderBell() {
       toast('Notificaciones marcadas como leídas', 'success');
       listEl.innerHTML = '';
       listEl.appendChild(emptyEl);
-      // El botón "Marcar todas" se va a ocultar al re-render del bell
-      // cuando el store emita (unreadCount=0).
     } catch (e) {
       toast(e.message || 'No se pudieron marcar', 'error');
     }
   }
 
-  // ── Cierre al click fuera o Esc ─────────────────────────────────────────
   const onDocClick = (e) => {
     if (!open) return;
     if (!root.contains(e.target)) closeDropdown();
@@ -316,7 +291,6 @@ function renderBell() {
   document.addEventListener('click', onDocClick, { capture: true });
   document.addEventListener('keydown', onKey);
 
-  // Exponer cleanup al topbar (root._gcmCleanup lo llama al desmontar).
   root._bellDropdownCleanup = () => {
     document.removeEventListener('click', onDocClick, { capture: true });
     document.removeEventListener('keydown', onKey);
@@ -326,7 +300,6 @@ function renderBell() {
   return root;
 }
 
-// ── Menú de usuario ──────────────────────────────────────────────────────────
 function renderUserMenu({ user, onLogout }) {
   const root = h('div.relative', {});
   const roleLabel = ROLE_LABEL[user.role] || user.role;
@@ -360,9 +333,6 @@ function renderUserMenu({ user, onLogout }) {
     'aria-expanded': 'false',
   }, [
     renderAvatar(user, { className: 'avatar ring-2 ring-white' }),
-    // El nombre y rol del usuario se muestran en TODOS los viewports — el
-    // usuario pidió explícitamente que estén siempre visibles. Antes
-    // usaba `hidden md:block`, lo que dejaba al usuario anónimo en mobile.
     h('div.text-left.flex.flex-col.justify-center', {}, [
       h('div.text-sm.font-semibold.text-brand-ink.leading-tight.truncate', { class: 'max-w-[160px]' }, user.full_name),
       h('div.font-medium.text-slate-500.leading-tight.truncate', { class: 'text-[11px]' }, [roleLabel, areaLabel ? ` · ${areaLabel}` : ''].join('')),
@@ -375,13 +345,11 @@ function renderUserMenu({ user, onLogout }) {
   function closeMenu() { menu.classList.add('hidden'); trigger.setAttribute('aria-expanded', 'false'); }
   function toggleMenu() { isOpen() ? closeMenu() : openMenu(); }
 
-  // Cerrar al clicar fuera (suscripción única por instancia, limpiada en cleanup).
   const onDocClick = () => { if (isOpen()) closeMenu(); };
   const onKey = (e) => { if (e.key === 'Escape' && isOpen()) closeMenu(); };
   document.addEventListener('click', onDocClick, { capture: true });
   document.addEventListener('keydown', onKey);
 
-  // Exponer cleanup al topbar (que lo propaga al wrapper).
   root._userMenuCleanup = () => {
     document.removeEventListener('click', onDocClick, { capture: true });
     document.removeEventListener('keydown', onKey);
@@ -392,7 +360,6 @@ function renderUserMenu({ user, onLogout }) {
   return root;
 }
 
-// ── Acciones rápidas ─────────────────────────────────────────────────────────
 function renderQuickActions(user) {
   const actions = quickActions(user);
   if (!actions.length) return null;
@@ -402,17 +369,9 @@ function renderQuickActions(user) {
   }));
 }
 
-// ── Toggle del sidebar (universal: mobile push + desktop collapse) ───────────
-// El estado inicial del sidebar es responsabilidad de layout.js (lee
-// localStorage y abre por defecto). Este botón sólo DISPARA el evento
-// gcm:toggle-sidebar; la decisión de toggle (push mobile / collapse desktop)
-// la toma layout.js según window.innerWidth.
 function renderSidebarToggle() {
   const collapsed = document.body.classList.contains('gcm-sidebar-collapsed');
   const isMobile  = window.matchMedia('(max-width: 767.95px)').matches;
-  // En mobile: el icono refleja el estado del push (panelOpen = "abierto
-  // se muestra", panelClose = "abierto se cierra"). En desktop refleja el
-  // colapso del rail.
   let iconPath, label;
   if (isMobile) {
     const open = document.body.classList.contains('gcm-sidebar-open');
@@ -437,13 +396,11 @@ function renderSidebarToggle() {
   ]);
 }
 
-// ── Componente principal ─────────────────────────────────────────────────────
 export function renderTopbar({ user, onLogout }) {
   const { title, subtitle } = topbarContext(user);
 
   const root = h('header.topbar', {});
 
-  // Izquierda: toggle del sidebar (universal) + contexto
   const left = h('div.flex.items-center.gap-3.min-w-0', {}, [
     renderSidebarToggle(),
     h('div.min-w-0', {}, [
@@ -453,14 +410,8 @@ export function renderTopbar({ user, onLogout }) {
   ]);
   root.appendChild(left);
 
-  // Derecha: acciones + selector de empresa + campana + usuario
   const userMenu = renderUserMenu({ user, onLogout });
-  // renderBell devuelve un wrapper div.relative.inline-flex que contiene
-  // el botón campana y el dropdown. Necesitamos la referencia al wrapper
-  // para (1) reemplazarlo en refresh y (2) limpiar sus listeners al desmontar.
   let bellWrapper = renderBell();
-  // El switcher devuelve null si el user no tiene >1 membresía (no se
-  // muestra). companySwitcher puede ser null; se filtra al armar `right`.
   let companySwitcher = renderCompanySwitcher({ user });
   const right = h('div.flex.items-center', { class: 'gap-1.5 md:gap-2' }, [
     renderQuickActions(user),
@@ -482,16 +433,11 @@ export function renderTopbar({ user, onLogout }) {
 
   mountedRoot = root;
 
-  // Re-render del toggle del sidebar al colapsar.
   const refreshToggle = () => {
     if (!mountedRoot) return;
     const oldToggle = mountedRoot.querySelector('button[aria-label*="barra lateral"], button[aria-label*="menú"]');
     if (oldToggle) oldToggle.replaceWith(renderSidebarToggle());
   };
-  // Re-render de la campana cuando cambia el sidebar (no frecuente) o
-  // cuando cambia el unreadCount del store (frecuente). Importante:
-  // cada re-render del bell crea un nuevo wrapper con sus propios listeners;
-  // hay que limpiar el anterior y guardar el nuevo en `bellWrapper`.
   const refreshBell = () => {
     if (!mountedRoot || !bellWrapper.parentNode) return;
     if (typeof bellWrapper._bellDropdownCleanup === 'function') bellWrapper._bellDropdownCleanup();
@@ -500,14 +446,11 @@ export function renderTopbar({ user, onLogout }) {
     bellWrapper = next;
   };
 
-  // Escuchamos el evento de cambio de estado que dispara layout.js al colapsar.
   window.addEventListener('gcm:sidebar-state-changed', refreshToggle);
-  // Y la campana se re-renderiza al cambiar el store (unreadCount, user, etc).
   const unsubscribe = subscribe((s) => {
     refreshBell();
   });
 
-  // Cleanup: remover listeners de este topbar.
   root._gcmCleanup = () => {
     if (typeof userMenu._userMenuCleanup === 'function') userMenu._userMenuCleanup();
     if (typeof bellWrapper._bellDropdownCleanup === 'function') bellWrapper._bellDropdownCleanup();
@@ -518,3 +461,4 @@ export function renderTopbar({ user, onLogout }) {
 
   return root;
 }
+

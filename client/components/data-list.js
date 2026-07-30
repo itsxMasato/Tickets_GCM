@@ -1,28 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Componente data-list — patrón card-list (mobile) / tabla (desktop).
-//
-// API:
-//   mountDataList({
-//     wrapper,           // HTMLElement donde montar (se hace wrapper.innerHTML = '')
-//     items,             // array de datos (puede ser [])
-//     loading,           // boolean — si true, renderiza skeleton
-//     columns,           // [{ key, label, align? }] para la tabla desktop
-//     renderRow,         // (item) => string HTML de <tr>…</tr> para la tabla
-//     renderMobileCard,  // (item) => HTMLElement para la lista de cards mobile
-//     emptyState,        // HTMLElement cuando items.length === 0
-//     skeleton,          // HTMLElement (opcional) mientras loading
-//     rowKey,            // (item) => string|number para keys (default: item.id)
-//     onMatchMediaChange // (isMobile) => void, hook opcional
-//   })
-//
-// Internamente:
-//   1. Detecta mobile con matchMedia('(max-width: 767.95px)').matches
-//   2. Renderiza wrapper.gcm-data-list-mobile (cards) o .gcm-data-list-desktop (tabla)
-//   3. Escucha matchMedia change → re-renderiza sólo si cruza el breakpoint
-//
-// Devuelve { update({ items, loading, emptyState }) } para refrescar sin
-// re-llamar a mountDataList. El cleanup expone removeEventListener.
-
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 
 const MOBILE_MQ = '(max-width: 767.95px)';
@@ -53,9 +29,6 @@ export function mountDataList(opts) {
     const mobile = isMobile();
     wrapper.innerHTML = '';
 
-    // Loading: skeleton cubre ambos viewports. Usamos la versión desktop
-    // (tabla) porque la card list es muy parecida y consume casi igual;
-    // un skeleton genérico de cards sería más código sin valor.
     if (state.loading) {
       if (opts.skeleton) {
         wrapper.appendChild(opts.skeleton);
@@ -65,7 +38,6 @@ export function mountDataList(opts) {
       return;
     }
 
-    // Empty
     if (!state.items.length) {
       const empty = h('div.card', {}, [
         state.emptyState || h('p.text-sm.text-slate-500.text-center.py-10', {}, 'Sin datos.'),
@@ -97,9 +69,6 @@ export function mountDataList(opts) {
       for (const item of state.items) {
         try {
           const rowHtml = opts.renderRow(item);
-          // Inserción segura: usamos DOMParser para validar que la celda
-          // no inyecte HTML malicioso. Los call-sites actuales usan
-          // escapeHtml() antes, pero la doble verificación no hace daño.
           tbody.insertAdjacentHTML('beforeend', rowHtml);
         } catch (e) {
           console.error('[data-list] renderRow error', e, item);
@@ -113,7 +82,6 @@ export function mountDataList(opts) {
   }
 
   function defaultSkeleton(mobile) {
-    // 5 filas placeholder mientras carga.
     if (mobile) {
       const list = h('div.gcm-data-list-mobile.flex.flex-col.gap-2', {});
       for (let i = 0; i < 5; i++) {
@@ -152,11 +120,9 @@ export function mountDataList(opts) {
     }
   }
 
-  // Inicial
   paint();
   if (typeof window !== 'undefined' && window.matchMedia) {
     mq = window.matchMedia(MOBILE_MQ);
-    // addEventListener es la API moderna; addListener es legacy fallback.
     if (mq.addEventListener) {
       mq.addEventListener('change', handleMatchMedia);
       onChange = () => mq.removeEventListener('change', handleMatchMedia);
@@ -179,3 +145,4 @@ export function mountDataList(opts) {
 }
 
 export default mountDataList;
+

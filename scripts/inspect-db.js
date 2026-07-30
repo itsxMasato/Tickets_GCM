@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 const Database = require('better-sqlite3');
 const config = require('../src/config');
 
@@ -15,3 +15,4 @@ for (const t of tables) {
 }
 console.log('\nFOREIGN KEY CHECK:', db.prepare('PRAGMA foreign_key_check').all());
 db.close();
+

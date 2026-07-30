@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { attachmentThumb } from './attachments.js';
 import { relativeFromNow, formatDateTime, ROLE_LABEL } from '../utils/format.js';
@@ -17,7 +17,6 @@ function avatarOf(user) {
   return h('span.avatar', { style: { backgroundColor: avatarColor(user.id) } }, initials(user.full_name));
 }
 
-// SVG iconos inline (24x24, stroke 1.8, currentColor) — sin emojis
 const SVG = {
   created:   'M12 4v16m8-8H4',
   assigned:  'M16 11a4 4 0 10-8 0 4 4 0 008 0zM4 21a8 8 0 0116 0',
@@ -38,22 +37,19 @@ function eventNode({ icon, text, when }) {
   const wrap = h('div.chat-event', {}, [
     h('span.inline-flex.items-center.bg-white.border.border-surface-border.rounded-full.text-xs.text-slate-600.shadow-soft', { class: 'gap-1.5 px-2.5 py-0.5' }, [
       svgIcon(icon),
-      // text-slate-500 — WCAG AA: el timestamp relativo en eventos de chat es texto.
-      h('span', { html: `${escapeHtml(text)} · <span class="text-slate-500">${escapeHtml(relativeFromNow(when))}</span>` }),
+      h(
+        'span',
+        { html: `${escapeHtml(text)} · <span class="text-slate-500">${escapeHtml(relativeFromNow(when))}</span>` }
+      ),
     ]),
   ]);
   return wrap;
 }
 
-/**
- * Renderiza un timeline estilo chat a partir de { comments, assignments, attachments }.
- * Devuelve un nodo DOM.
- */
 export function renderChat({ ticket, user, onRefresh }) {
   const me = user;
   const root = h('div.flex.flex-col.gap-3.p-3.bg-slate-50.rounded-lg', { style: { minHeight: '400px' } });
 
-  // 1) Construir lista unificada de eventos en orden
   const events = [];
   if (ticket.created_at) {
     events.push({ t: ticket.created_at, kind: 'created', payload: { who: ticket.created_by_name } });
@@ -68,7 +64,6 @@ export function renderChat({ ticket, user, onRefresh }) {
       if (att) events.push({ t: c.created_at, kind: 'attachment', payload: { att, by: c.user_name, when: c.created_at } });
     }
   }
-  // Adjuntos sin comentario
   for (const a of ticket.attachments || []) {
     const isMentioned = events.some((e) => e.kind === 'attachment' && e.payload.att.id === a.id);
     if (!isMentioned) events.push({ t: a.uploaded_at, kind: 'attachment', payload: { att: a, by: a.user_name, when: a.uploaded_at } });
@@ -123,3 +118,4 @@ export function renderChat({ ticket, user, onRefresh }) {
 
   return root;
 }
+

@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-﻿'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firestoreData = require('../firestoreData');
 const { verifyPassword, hashPassword } = require('../utils/password');
 const { syncFirebaseAuthUser } = require('../utils/firebase-auth-sync');
@@ -14,14 +14,9 @@ const {
   optionalString,
   isOneOf,
 } = require('../utils/validators');
-// ROLE_VALUES vive en src/orm/enums.js (única fuente canónica del enum de
-// roles en backend). Anteriormente se importaba desde validators, que sólo
-// exporta ROLES — eso provocaba `Cannot read properties of undefined
-// (reading 'includes')` al editar un usuario.
 const { ROLE_VALUES } = require('../orm/enums');
 const membershipsService = require('./memberships.service');
 
-// Límites duros. Más allá de esto, el sistema rechaza la entrada.
 const LIMITS = {
   username: { min: 3, max: 50, pattern: /^[a-zA-Z0-9._-]+$/ },
   fullName: { max: 255 },
@@ -29,19 +24,8 @@ const LIMITS = {
   password: { min: 4, max: 200 },
 };
 
-// Áreas válidas del sistema (espejo de clients/utils/permissions.js → AREAS).
-// Si Firestore/ORM añade un área, se actualiza aquí.
 const VALID_AREAS = ['operaciones', 'logistica', 'mantenimiento', 'sistemas', 'otro'];
 
-/**
- * Emite un evento de usuario a las salas correspondientes. Es seguro
- * llamarlo cuando el socket aún no está inicializado.
- *
- * Eventos:
- *   - user:created   → user:{id}, 'sac'
- *   - user:updated   → user:{id} (siempre), 'sac' si cambió role/area/active
- *   - user:deactivated → user:{id} (siempre), 'sac'
- */
 function emitUser(event, user, opts = {}) {
   try {
     const { emit } = require('../sockets');
@@ -49,9 +33,7 @@ function emitUser(event, user, opts = {}) {
       user: user.id,
       role: opts.fanoutSac === false ? null : 'sac',
     });
-  } catch (e) {
-    /* socket no inicializado aún */
-  }
+  } catch (e) {}
 }
 
 function isUserActive(value) {
@@ -59,11 +41,8 @@ function isUserActive(value) {
 }
 
 function serialize(row) {
-  if (!row) return null;
-  // is_platform_admin/isPlatformAdmin: sin esto, getById() (usado por
-  // /api/auth/me vía buildSessionUser) no reflejaba el flag aunque la
-  // sesión sí lo tuviera correcto desde el login — mismo gap que sanitize()
-  // ya resolvía para login/firebase, ahora también para el "refresh" de /me.
+  if (!row)
+    return null;
   const isPlatformAdmin = row.isPlatformAdmin === true || row.is_platform_admin === true || row.is_platform_admin === 1 || row.isPlatformAdmin === 1 || row.isPlatformAdmin === '1' || row.is_platform_admin === '1';
   return {
     id: row.id,
@@ -135,14 +114,6 @@ async function getById(id) {
 }
 
 async function createUser({ username, password, full_name, role, area, email, company_id } = {}, requester) {
-  // Validación dura. Cada campo se sanitiza ANTES de tocar Firestore:
-  //  - username: regex estricto (sólo letras, dígitos, . _ -) + longitudes.
-  //  - full_name: requerido, max 255, trim.
-  //  - role: debe ser uno de ROLE_VALUES (validators.Roles.includes ya estaba,
-  //    ahora con requireString para fallar antes si no llega string).
-  //  - area: opcional, debe estar en VALID_AREAS si viene.
-  //  - email: opcional, regex RFC-light + max 255.
-  //  - password: min 4, max 200 (defensa contra body gigante).
   const cleanUsername = requireString(username, 'Usuario', LIMITS.username.max);
   if (cleanUsername.length < LIMITS.username.min) {
     throw validationError(`El usuario debe tener al menos ${LIMITS.username.min} caracteres.`);
@@ -196,11 +167,6 @@ async function createUser({ username, password, full_name, role, area, email, co
       password,
     }).catch((syncErr) => {
       console.warn('[auth.service] firebase auth sync failed on create', syncErr.stack || syncErr.message);
-      // Antes esto solo quedaba en el log del servidor, que nadie del
-      // equipo revisa — si Firebase Auth queda desincronizado (ej. no se
-      // creo la cuenta), el usuario no puede loguearse via el fallback de
-      // Firebase y no hay ningun rastro visible en la app para un SAC/admin
-      // que investigue. Lo dejamos en /audit para que sea descubrible.
       auditService.logAsync({
         user_id: null,
         action_type: 'firebase_auth_sync_failed',
@@ -213,17 +179,10 @@ async function createUser({ username, password, full_name, role, area, email, co
     });
 
     const row = await getById(created.id);
-    // Si vino company_id en el payload, intentamos crear la membresía
-    // asociada para que el usuario quede ligado a una empresa desde
-    // el momento de su creación. El service de membresías valida
-    // unicidad y áreas; permitimos explícitamente que un SAC cree la
-    // membresía pasando allowSACCreate = true.
     if (company_id) {
       try {
         await membershipsService.create(created.id, { company_id: Number(company_id), role }, requester, { allowSACCreate: true });
       } catch (memErr) {
-        // No revertimos la creación del user (no hay deleteUser helper).
-        // Informar y propagar el error para que el caller lo pueda manejar.
         console.warn('[auth.service] membership creation failed during user create:', memErr.stack || memErr.message);
         throw memErr;
       }
@@ -239,9 +198,11 @@ async function createUser({ username, password, full_name, role, area, email, co
   }
 }
 
-async function updateUser(id, { full_name, role, area, active, password, email, username, company_id, is_platform_admin } = {}, currentUser) {
-  // currentUser viene de req.user (seteado por requireAuth). Se usa para
-  // anti-self-demote: un SAC no puede desactivarse ni perder el rol 'sac'.
+async function updateUser(
+  id,
+  { full_name, role, area, active, password, email, username, company_id, is_platform_admin } = {},
+  currentUser
+) {
   if (currentUser && Number(currentUser.id) === Number(id)) {
     if (active === false || active === 0) {
       throw forbiddenError('No puede desactivar su propia cuenta.');
@@ -254,9 +215,6 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
   const before = await getById(id);
 
   const patch = {};
-    // Protección: no permitir desactivar o cambiar el rol del ÚLTIMO SAC.
-    // Si el target es SAC y se intenta desactivar o cambiar su rol fuera de 'sac',
-    // comprobamos cuántos SAC activos quedan en el sistema.
     if ((active !== undefined && (active === 0 || active === false)) || (role !== undefined && role !== 'sac')) {
       const target = await getById(id);
       if (target.role === 'sac') {
@@ -266,9 +224,6 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
         }
       }
     }
-    // Misma protección que el "último SAC", pero para platform admin: sin
-    // esto, alguien podía saltarse el chequeo de is_platform_admin de abajo
-    // simplemente desactivando la cuenta en vez de tocar el flag directo.
     if (active !== undefined && (active === 0 || active === false)) {
       const target = await getById(id);
       if (target.is_platform_admin) {
@@ -280,12 +235,6 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
       }
     }
 
-  // Platform admin: es un flag por usuario, no un privilegio permanente de
-  // una persona — así se puede transferir sin depender de acceso al
-  // servidor. Solo alguien que YA es platform admin puede otorgarlo o
-  // revocarlo (nunca un SAC común), y no se puede dejar al sistema sin
-  // ninguno activo (mismo criterio que el "último SAC" de arriba, pero
-  // para este flag).
   if (is_platform_admin !== undefined) {
     if (!currentUser || !currentUser.isPlatformAdmin) {
       throw forbiddenError('Solo un administrador de plataforma puede otorgar o revocar ese permiso.');
@@ -339,7 +288,6 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
     }
   }
   if (active !== undefined) {
-    // Aceptamos boolean, 0/1 (lo que mande Firestore o un cliente legacy).
     if (typeof active === 'boolean') {
       patch.active = active ? 1 : 0;
     } else if (active === 1 || active === '1' || active === 'true') {
@@ -379,10 +327,6 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
     }
   }
 
-  // Asignar empresa a un usuario existente (para altas hechas antes de la
-  // migración multi-tenant, que quedaron sin membresía). Si ya tiene una
-  // membresía en esa empresa, no hacemos nada (idempotente); cualquier otro
-  // error se propaga.
   if (company_id) {
     try {
       await membershipsService.create(
@@ -418,10 +362,6 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
       password,
     }).catch((syncErr) => {
       console.warn('[auth.service] firebase auth sync failed on update', syncErr.stack || syncErr.message);
-      // Ver comentario equivalente en create(): sin esto, un cambio de
-      // password/email/username que falla al sincronizar con Firebase Auth
-      // queda desincronizado en silencio (Firestore actualizado, Firebase
-      // Auth con las credenciales viejas) sin ningun rastro visible.
       auditService.logAsync({
         user_id: null,
         action_type: 'firebase_auth_sync_failed',
@@ -435,12 +375,6 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
   }
   const after = await getById(id);
 
-  // Decidir qué evento emitir.
-  // - Si pasó de activo a inactivo, priorizamos 'user:deactivated' (un
-  //   evento más fuerte, fácil de filtrar en el cliente).
-  // - Si cambió role/area, 'user:updated' con diff explícito.
-  // - Para cambios triviales (full_name, email, password) también
-  //   emitimos 'user:updated' para que la vista de usuarios refresque.
   if (before.active && !after.active) {
     emitUser('user:deactivated', after);
   } else {
@@ -453,12 +387,6 @@ async function updateUser(id, { full_name, role, area, active, password, email, 
   return after;
 }
 
-/**
- * updateAvatar — autoservicio: cualquier usuario autenticado puede cambiar
- * SU PROPIA foto de perfil (a diferencia de updateUser, que solo puede
- * llamar SAC). El caller (auth.routes.js) ya se aseguró de borrar el
- * archivo físico anterior antes de llamar esto.
- */
 async function updateAvatar(userId, avatarUrl) {
   const before = await getById(userId);
   const row = await firestoreData.updateUser(userId, { avatar_url: avatarUrl });
@@ -473,3 +401,4 @@ async function listUsers({ role, active, area } = {}, requester = null) {
 }
 
 module.exports = { login, verifyPasswordForUser, getById, sanitize, createUser, updateUser, updateAvatar, listUsers };
+

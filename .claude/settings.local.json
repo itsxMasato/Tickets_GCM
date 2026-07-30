@@ -39,7 +39,12 @@
       "Skill(impeccable)",
       "Artifact",
       "Bash(git check-ignore *)",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(python3 -c \"import yaml; print\\(yaml.safe_load\\(open\\('render.yaml'\\)\\)\\)\")",
+      "Bash(rm -f scripts/_strip-comments-tmp.js scripts/_strip-css-tmp.js /tmp/test-tailwind-output.css)",
+      "Bash(pnpm remove *)"
     ]
   },
   "hooks": {

@@ -1,8 +1,7 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { svg, ICON } from '../utils/icons.js';
 
-// Selector de elementos focusables dentro del modal (excluye disabled y tabindex=-1).
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -12,23 +11,12 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-/**
- * Abre un modal accesible.
- * - role="dialog" + aria-modal="true" para que screen readers lo anuncien.
- * - Foco inicial: primer focusable del body; si no hay, el contenedor.
- * - Focus trap: Tab/Shift+Tab cicla dentro del modal.
- * - Esc: cierra (vía onClose).
- * - Click en el backdrop: cierra.
- * - Al cerrar, restaura el foco al elemento que estaba activo antes de abrir.
- */
 export function openModal({ title, body, actions, onClose, size = 'md' }) {
   const root = document.getElementById('modal-root');
   if (!root) return;
 
   const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
 
-  // Guarda de foco: el elemento que tenía foco antes de abrir el modal.
-  // Si es null (p.ej. click desde el body sin foco explícito), no restauramos.
   const previouslyFocused = document.activeElement instanceof Element
     ? document.activeElement
     : null;
@@ -43,9 +31,8 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
   const cleanup = () => {
     if (root.firstElementChild) root.firstElementChild.remove();
     document.removeEventListener('keydown', onKey, true);
-    // Restaurar foco: primero al guard, fallback al body.
     if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
-      try { previouslyFocused.focus(); } catch { /* elemento desmontado: aceptamos */ }
+      try { previouslyFocused.focus(); } catch {}
     }
   };
 
@@ -57,7 +44,6 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
       return;
     }
     if (e.key === 'Tab') {
-      // Focus trap: si Tab sale del modal, vuelve al primero; Shift+Tab, al último.
       const focusable = getFocusable();
       if (focusable.length === 0) {
         e.preventDefault();
@@ -77,12 +63,6 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
     }
   };
 
-  // Fullscreen en mobile: en viewports < 640px el modal ocupa toda la
-  // pantalla. La CSS ya define .gcm-modal-fullscreen con position:fixed,
-  // inset:0, height:100dvh y border-radius:0 — sólo necesitamos aplicar
-  // la clase. Se evalúa al abrir (no al resize) porque abrir/cerrar es
-  // un evento discreto; si el usuario rota el dispositivo, el modal ya
-  // está anclado a sus dimensiones y no queremos repaint a mitad de uso.
   const isMobileViewport = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(max-width: 639.95px)').matches;
@@ -102,7 +82,6 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
       h('div.gcm-modal-header.flex.items-center.justify-between.px-5.py-3.border-b.border-surface-border', {}, [
         (() => {
           const t = h('h3#gcm-modal-title.text-base.font-semibold.text-brand-ink');
-          // textContent seguro (NUNCA html: title — previene XSS)
           t.textContent = typeof title === 'string' ? title : '';
           return t;
         })(),
@@ -121,8 +100,6 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
   root.appendChild(modal);
   document.addEventListener('keydown', onKey, true);
 
-  // Foco inicial: primer focusable del modal; si no hay, el contenedor (tabindex=-1).
-  // Usamos requestAnimationFrame para que el browser haya aplicado el DOM antes.
   requestAnimationFrame(() => {
     const focusable = getFocusable();
     if (focusable.length > 0) {
@@ -138,15 +115,10 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
 export function confirmModal({ title = 'Confirmar', message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false, onConfirm }) {
   let modal;
   const tone = danger ? 'bg-accent/10 text-accent' : 'bg-brand-ocean/10 text-brand-ocean';
-  // Icono en círculo centrado — el título ya lo muestra el header del modal
-  // (openModal), así que el body se concentra en la pregunta: ícono grande
-  // como señal de tono (peligro/info) + el mensaje, ambos centrados.
   const body = h('div.flex.flex-col.items-center.text-center.gap-3.py-1', {}, [
     h('div.w-16.h-16.rounded-full.grid.place-items-center.flex-none', { class: tone }, [svg(h, danger ? ICON.alert : ICON.shield, 'w-7 h-7')]),
     h('p.text-sm.text-slate-600', { class: 'max-w-[38ch]' }, String(message || '')),
   ]);
-  // message es HTML controlado por el código (no viene del usuario),
-  // por seguridad usamos textContent + marcado manual cuando hace falta
   if (typeof message === 'string' && /<\/?\w+/.test(message)) {
     body.lastChild.innerHTML = message;
   }
@@ -178,8 +150,6 @@ export function passwordConfirmModal({
     autocomplete: 'current-password',
     placeholder: 'Contraseña',
   });
-  // Toggle mostrar/ocultar — antes no existía, el usuario no tenía forma
-  // de verificar lo que escribió antes de confirmar una acción sensible.
   const toggleVisibility = h('button', {
     type: 'button',
     class: 'absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-ink rounded p-1 focus:outline-none focus:ring-2 focus:ring-brand-ocean/60',
@@ -287,3 +257,4 @@ export function passwordConfirmModal({
 
   return promise;
 }
+

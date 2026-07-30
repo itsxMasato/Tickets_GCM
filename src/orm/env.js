@@ -1,18 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
-
-/**
- * Resolución de variables de entorno para la capa TypeORM.
- *
- * Convenciones:
- *   - MSSQL_*     es el namespace "canónico" para la capa ORM.
- *   - DB_*        es el namespace legacy que ya existía en .env (DB_SERVER, DB_PORT, etc.).
- *                 Si MSSQL_* no está definido, se usa el valor de DB_* como fallback.
- *   - Defaults    solo cuando ni MSSQL_* ni DB_* están presentes.
- *
- * Esto evita obligar al usuario a duplicar variables en .env: el .env actual
- * con DB_SERVER=... sigue funcionando para TypeORM sin cambios.
- */
+/* Documentado por: Miguel Flores */
+'use strict'
 
 function bool(v, fallback = false) {
   if (v === undefined || v === null || v === '') return fallback;
@@ -25,8 +12,6 @@ function int(v, fallback) {
 }
 
 const rawHost     = process.env.MSSQL_HOST        || process.env.DB_SERVER   || '127.0.0.1';
-// MSSQL_HOST admite "hostname" o "hostname,puerto" para named instances
-// con puerto fijo (formato nativo del driver mssql). Si trae coma, separamos.
 let host = rawHost;
 let hostPort = null;
 const commaIdx = rawHost.indexOf(',');
@@ -58,3 +43,4 @@ module.exports = {
   ORM_SYNCHRONIZE: synchronize,
   ORM_LOGGING: logging,
 };
+

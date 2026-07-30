@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
@@ -6,8 +6,6 @@ import { openModal, confirmModal } from '../components/modal.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { ICON, svg } from '../utils/icons.js';
 
-// Mismo patrón que kpiCard en views/users.js — no se comparte como componente
-// porque cada vista lo ajusta ligeramente (tonos/labels propios).
 function kpiCard({ label, value, hint = '', icon = null, tone = '' }) {
   const TONE = {
     '':      { border: 'border-l-4 border-l-surface-border-strong', icon: 'bg-surface-alt text-brand' },
@@ -130,7 +128,6 @@ export async function renderCategories({ user }) {
 
   await reload();
 
-  // Realtime: refresca cuando otro SAC crea/edita categorías.
   const onRealtime = (e) => {
     const t = e.detail?.event;
     if (t === 'category:created' || t === 'category:updated') reload();
@@ -164,3 +161,4 @@ function openEditModal(c, onSaved) {
   ];
   openModal({ title: c ? 'Editar categoría' : 'Nueva categoría', body, actions });
 }
+

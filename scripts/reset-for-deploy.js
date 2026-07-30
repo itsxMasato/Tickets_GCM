@@ -1,24 +1,6 @@
 #!/usr/bin/env node
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
-// Limpia Firestore para dejar el sistema listo para deploy: borra tickets y
-// todo lo que cuelga de ellos, categorías, calendario, notificaciones y
-// auditoría. Preserva usuarios, role_permissions, companies y
-// user_company_memberships (según lo confirmado en conversación), salvo la
-// cuenta de prueba @debug_jefe_tmp, que también se elimina.
-//
-// NO toca archivos en disco (uploads/attachments, uploads/avatars) — se
-// dejó así a propósito. Los registros de `attachments` en Firestore sí se
-// borran (son parte de "tickets y lo que cuelga de ellos"), así que
-// quedarán archivos huérfanos en disco; limpiarlos es una tarea aparte.
-//
-// Por defecto corre en modo DRY-RUN (solo cuenta y muestra qué borraría).
-// Pasar --confirm para ejecutar el borrado de verdad.
-//
-// Uso:
-//   node scripts/reset-for-deploy.js            # dry-run
-//   node scripts/reset-for-deploy.js --confirm   # borra de verdad
-
+/* Documentado por: Miguel Flores */
+'use strict'
 const firebaseAdmin = require('../src/firebaseAdmin');
 
 const COLLECTIONS_TO_WIPE = [
@@ -39,9 +21,9 @@ const DEBUG_USERNAME = 'debug_jefe_tmp';
 async function countAndMaybeDelete(db, collectionName, confirm) {
   const snap = await db.collection(collectionName).get();
   const count = snap.size;
-  if (!confirm || count === 0) return count;
+  if (!confirm || count === 0)
+    return count;
 
-  // Firestore batch: máximo 500 escrituras. Partimos en chunks.
   const docs = snap.docs;
   for (let i = 0; i < docs.length; i += 500) {
     const batch = db.batch();
@@ -74,8 +56,6 @@ async function run() {
     console.log(`  - ${col}: ${count} documento(s)`);
   }
 
-  // Usuario de prueba @debug_jefe_tmp + sus membresías + su cuenta de
-  // Firebase Auth (best-effort: si no existe, no es un error).
   console.log('');
   const userSnap = await db.collection('users').where('username_lower', '==', DEBUG_USERNAME).get();
   if (userSnap.empty) {
@@ -131,3 +111,4 @@ run().catch((err) => {
   console.error('[reset] Error:', err && err.stack ? err.stack : err);
   process.exit(1);
 });
+

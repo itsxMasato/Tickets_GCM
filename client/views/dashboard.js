@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { api } from '../api.js';
 import { ticketCard } from '../components/ticket-card.js';
@@ -11,14 +11,6 @@ import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { subscribeToRealtimeEvents } from '../utils/realtime.js';
 import { renderAvatar } from '../utils/avatar.js';
 
-// ─────────────────────────────────────────────────────────────────────────
-// Identidad de rol: una sola fuente para todo el render. Cada rol expone
-// su propio set de KPIs, copy del hero, quick actions y panel primario.
-// El diseño sigue la regla "cada rol es una superficie distinta" de
-// PRODUCT.md §Anti-references (no dashboards idénticos).
-//
-// Devolvemos la key real del backend (la misma que viene en user.role y
-// la misma que getRoleLabel conoce), para no mantener un mapa paralelo.
 const ROL_FROM_USER = (user) =>
   isSAC(user)          ? 'sac'
   : isJefe(user)       ? 'jefe_inmediato'
@@ -26,14 +18,6 @@ const ROL_FROM_USER = (user) =>
   : isSupervisor(user) ? 'supervisor_campo'
   : 'supervisor_campo';
 
-// ─────────────────────────────────────────────────────────────────────────
-// KPI sets por rol. Cada entrada: { label, value, hint, tone? }.
-// `tone: 'accent'` tiñe el value de rojo camarón (urgentes), `'ocean'`
-// de brand-ocean (info). El resto usa brand-ink (default).
-// ─────────────────────────────────────────────────────────────────────────
-// Cada KPI trae `icon` (chip superior) y `badge` (etiqueta corta de estado,
-// tipo "CRÍTICO"/"META" — mismo lenguaje que el hero, sin inventar datos:
-// el badge es sólo un rótulo sobre el mismo `value` que ya se calculaba).
 function buildKpis(rol, totals) {
   const t = totals || {};
   switch (rol) {
@@ -69,11 +53,6 @@ function buildKpis(rol, totals) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Hero copy por rol. Devuelve { count, headline, sub, ctaLabel, ctaHref,
-// icon } para el CTA primaria. Si count === 0, el caller renderiza la
-// variante "verde / sin pendientes" (sin CTA, sin acento rojo).
-// ─────────────────────────────────────────────────────────────────────────
 function buildHero(rol, totals) {
   const t = totals || {};
   switch (rol) {
@@ -128,25 +107,19 @@ function buildHero(rol, totals) {
     case 'supervisor_campo':
     default: {
       return {
-        count: -1, // -1 = sin cuantificar, CTA permanente
+        count: -1,
         icon: ICON.plus,
         eyebrow: 'Captura',
         headline: 'Reportar una incidencia',
         sub: 'Levanta un ticket en menos de un minuto desde el campo. Adjunta fotos, asigna categoría y prioridad.',
         ctaLabel: 'Crear ticket',
         ctaHref: '/tickets/new',
-        ctaRole: 'supervisor', // hint para el caller
+        ctaRole: 'supervisor',
       };
     }
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Quick actions por rol (máximo 3, contextual a su trabajo real).
-// ─────────────────────────────────────────────────────────────────────────
-// `tone` tiñe el chip de ícono (is-brand | is-ocean | is-accent | is-emerald)
-// — misma idea que CATEGORY_TONES: variedad visual determinística, no color
-// aleatorio. Sin tone = ocean (default ya existente en CSS).
 function buildQuickActions(rol) {
   switch (rol) {
     case 'sac':
@@ -177,12 +150,6 @@ function buildQuickActions(rol) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Helpers de UI
-// ─────────────────────────────────────────────────────────────────────────
-
-// Welcome strip — identidad del usuario en una línea. El topbar ya tiene
-// el saludo; aquí añadimos contexto de rol/área y freshness del realtime.
 function welcomeStrip(user, lastUpdateIso) {
   const firstName = (user.full_name || '').split(' ')[0] || 'equipo';
   const role = ROL_FROM_USER(user);
@@ -207,8 +174,6 @@ function welcomeStrip(user, lastUpdateIso) {
   ]);
 }
 
-// Hero action — la única zona de acento rojo en toda la vista. Si count===0
-// y la acción es cuantificable, renderiza la variante verde (sin CTA).
 function heroAction(rol, totals) {
   const h_ = buildHero(rol, totals);
   const noCount = h_.count === -1;
@@ -246,8 +211,6 @@ function heroAction(rol, totals) {
   ]);
 }
 
-// Mapa de tono → clases de acento lateral / chip de ícono / badge / valor.
-// Un solo lugar para las 4 superficies que se tiñen juntas por KPI.
 const KPI_TONE = {
   accent: { border: 'border-l-accent',       iconTone: 'is-accent',  badge: 'bg-accent/10 text-accent',           value: 'dash-kpi-accent' },
   ocean:  { border: 'border-l-brand-ocean',  iconTone: 'is-ocean',   badge: 'bg-brand-ocean/10 text-brand-ocean', value: 'dash-kpi-ocean' },
@@ -255,10 +218,6 @@ const KPI_TONE = {
   '':     { border: 'border-l-surface-border-strong', iconTone: '',  badge: '',                                   value: '' },
 };
 
-// KPI card — acento lateral + chip de ícono + badge contextual opcional.
-// `tone`: '' | 'accent' | 'ocean' | 'good'. Las clases dinámicas van por la
-// prop `class` (no interpoladas en el selector — interpolarlas ahí es lo
-// que hacía que el tono del valor nunca se aplicara antes de este cambio).
 function kpi(label, value, hint = '', tone = '', icon = null, badge = '') {
   const t = KPI_TONE[tone] || KPI_TONE[''];
   const top = (icon || badge)
@@ -277,7 +236,6 @@ function kpi(label, value, hint = '', tone = '', icon = null, badge = '') {
   ]);
 }
 
-// Skeleton para una KPI card (mismas dimensiones que la real, incl. chip)
 function kpiSkeleton() {
   return h('div.card.flex.flex-col.gap-3.border-l-4.border-l-surface-border', { 'aria-hidden': 'true' }, [
     h('div.flex.items-start.justify-between', {}, [
@@ -288,14 +246,6 @@ function kpiSkeleton() {
   ]);
 }
 
-// Tendencia de tickets (30 días) — línea + área (una sola serie = un solo
-// hue, brand-ocean). Reemplaza el chart de 30 barras: con 30 categorías
-// angostas una barra por día lee como ruido; el volumen diario es una
-// tendencia (trend over time), así que la forma correcta es línea/área,
-// no columnas — ver skill de dataviz §choosing-a-form. Línea de promedio
-// sólida (nunca punteada: el punteado se lee como grid/eje, no como dato,
-// ver anti-patterns §Marks). Eje X sólo en las marcas mayores (cada 5 días)
-// para no repetir el desborde de texto que tenía la versión de barras.
 function ticketsTrendChart(data) {
   if (!data || data.length === 0) {
     return emptyState({
@@ -309,9 +259,9 @@ function ticketsTrendChart(data) {
   const total = values.reduce((s, v) => s + v, 0);
   const avg = total / n;
 
-  const fmtDay = (iso) => (iso || '').slice(5); // "MM-DD"
+  const fmtDay = (iso) => (iso || '').slice(5);
   const majorIdx = new Set(values.map((_, i) => (i % 5 === 0 ? i : -1)).filter((i) => i >= 0));
-  majorIdx.add(n - 1); // el eje siempre termina mostrando el día más reciente
+  majorIdx.add(n - 1);
 
   const VIEW_W = 600;
   const VIEW_H = 150;
@@ -342,11 +292,9 @@ function ticketsTrendChart(data) {
   const svg = h('svg.dash-trend-svg', {
     viewBox: `0 0 ${VIEW_W} ${VIEW_H}`,
     preserveAspectRatio: 'none',
-    'aria-hidden': 'true', // decorativo — el dato accesible vive en la tabla oculta de abajo
+    'aria-hidden': 'true',
   }, [baseline, avgLine, area, line, endDot, crosshair, hoverDot, hitRect]);
 
-  // Tooltip HTML (crosshair + tooltip son la capa de hover; ver dataviz
-  // skill §interaction — todo chart HTML es interactivo por defecto).
   const tooltipDate = h('div.dash-trend-tooltip-date', {}, '');
   const tooltipValue = h('div.dash-trend-tooltip-value', {}, '');
   const tooltip = h('div.dash-trend-tooltip', {}, [tooltipDate, tooltipValue]);
@@ -380,13 +328,9 @@ function ticketsTrendChart(data) {
   svg.addEventListener('pointermove', onMove);
   svg.addEventListener('pointerleave', onLeave);
 
-  // Eje X — sólo marcas mayores (cada 5 días + el último), mismo criterio
-  // que evitó el desborde de texto en la versión de barras.
   const axis = h('div.dash-trend-axis', {}, data.map((d, i) =>
     h('span.dash-trend-axis-label', {}, majorIdx.has(i) ? fmtDay(d.day || d.label) : '')));
 
-  // Tabla oculta — equivalente accesible completo (screen readers / zoom
-  // de texto), el chart en sí es aria-hidden y decorativo.
   const table = h('table.sr-only', {}, [
     h('caption', {}, `Tickets creados por día, últimos ${n} días. Promedio ${avg.toFixed(1)} por día.`),
     h('thead', {}, [h('tr', {}, [h('th', {}, 'Fecha'), h('th', {}, 'Tickets')])]),
@@ -408,7 +352,6 @@ function ticketsTrendChart(data) {
   return wrap;
 }
 
-// Progress bar monocromática
 function progressBar(value, max, color = 'bg-brand-ocean') {
   const pct = max ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return h('div.w-full.h-2.bg-slate-100.rounded.overflow-hidden', {}, [
@@ -416,8 +359,6 @@ function progressBar(value, max, color = 'bg-brand-ocean') {
   ]);
 }
 
-// Lista "Por prioridad" — dot de acento sólo en urgente; la barra se tiñe
-// por nivel para que la lectura sea visual, no solo por el número.
 const PRIORITY_BAR_COLOR = {
   urgente: 'bg-accent',
   alta: 'bg-brand',
@@ -442,8 +383,6 @@ function priorityList(byPriority) {
   }));
 }
 
-// Formatea horas (float) a una unidad legible — minutos si es menos de 1h,
-// horas con un decimal si es menos de 2 días, días si es más.
 function formatDuration(hours) {
   if (hours == null || Number.isNaN(hours)) return '—';
   if (hours <= 0) return '0 min';
@@ -452,9 +391,6 @@ function formatDuration(hours) {
   return `${(hours / 24).toFixed(1)} d`;
 }
 
-// Por área — mismo lenguaje visual que priorityList (barra + conteo), pero
-// por área operativa. Dato real de getStats().by_area, antes calculado en
-// el backend y nunca mostrado en el dashboard SAC.
 function areaBreakdown(byArea) {
   if (!byArea || byArea.length === 0) {
     return h('p.text-xs.text-slate-500', {}, 'Sin datos para mostrar.');
@@ -472,7 +408,6 @@ function areaBreakdown(byArea) {
   ])));
 }
 
-// Lista densa (carga por administrador — jefe) — con índice 1-N
 function denseList(items, opts = {}) {
   const { getName, getMeta, showIndex = true, showAvatar = false, max = 8 } = opts;
   if (!items || items.length === 0) {
@@ -486,8 +421,6 @@ function denseList(items, opts = {}) {
       showIndex
         ? h('span.dash-list-index', { 'aria-hidden': 'true' }, String(i + 1).padStart(2, '0'))
         : null,
-      // Avatar real (foto o iniciales) — dato ya disponible en by_assignee
-      // (avatar_url) pero sin usar hasta ahora en esta lista.
       showAvatar ? renderAvatar(it, { className: 'w-7 h-7 rounded-full text-[11px] font-semibold text-white flex items-center justify-center flex-none' }) : null,
       h('span.dash-list-name', { title: name }, name),
       meta ? h('span.dash-list-meta', {}, meta) : null,
@@ -496,9 +429,6 @@ function denseList(items, opts = {}) {
   }));
 }
 
-// Top categorías — chip de ícono + nombre + badge de conteo. El tono rota
-// de forma determinística por posición (misma idea que avatarColor: no hay
-// "color de categoría" en el modelo de datos, así que el índice decide).
 const CATEGORY_TONES = [
   { bg: 'bg-brand/10', text: 'text-brand' },
   { bg: 'bg-brand-ocean/10', text: 'text-brand-ocean' },
@@ -523,9 +453,6 @@ function categoryChipList(categories) {
   }));
 }
 
-// Ranking por encargado — avatar real (o iniciales) + puesto + carga.
-// `c` cuenta tickets ASIGNADOS en total, no resueltos — el copy lo refleja
-// para no prometer un dato que no tenemos (ver stats.service.js:dashboard).
 function rankingList(agents) {
   if (!agents || agents.length === 0) {
     return h('p.text-xs.text-slate-500', {}, 'Sin datos para mostrar.');
@@ -550,8 +477,10 @@ function rankingList(agents) {
   }));
 }
 
-// Cola de trabajo (admin / supervisor) — lista de ticket-cards
-function queueList(tickets, { title, sub, linkToAll, linkLabel = 'Ver todos', emptyTitle, emptyMessage, emptyAction }) {
+function queueList(
+  tickets,
+  { title, sub, linkToAll, linkLabel = 'Ver todos', emptyTitle, emptyMessage, emptyAction }
+) {
   const head = h('div.dash-section-head.px-5.pt-4', {}, [
     h('div', {}, [
       h('div.dash-section-title', {}, title),
@@ -585,13 +514,6 @@ function queueList(tickets, { title, sub, linkToAll, linkLabel = 'Ver todos', em
   ]);
 }
 
-// Quick actions — botones contextuales por rol
-//
-// Nota: `class` (prop) en vez de interpolar el breakpoint en el selector.
-// `h()` sólo reconoce clases estáticas vía `.clase` en el selector; un
-// `\\:` escapado ahí (p.ej. `.sm\\:grid-cols-3`) rompe la regex de
-// parsing (el ":" corta el token) y la clase responsive nunca se aplica
-// — el grid quedaba en 1 columna siempre, sin importar el viewport.
 function quickActions(rol) {
   const items = buildQuickActions(rol);
   return h('div.grid.grid-cols-1.gap-3', { class: 'sm:grid-cols-3' }, items.map((it) =>
@@ -609,27 +531,19 @@ function quickActions(rol) {
   ));
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Render principal
-// ─────────────────────────────────────────────────────────────────────────
-
 export async function renderDashboard({ user }) {
   const rol = ROL_FROM_USER(user);
   const root = h('div.flex.flex-col.gap-5', {});
 
-  // 1) Welcome strip (siempre visible — primer foco del tab)
   root.appendChild(welcomeStrip(user, new Date().toISOString()));
 
-  // 2) Hero placeholder + KPIs placeholder
-  const heroNode = heroAction(rol, { /* totales vacíos al inicio */ });
+  const heroNode = heroAction(rol, {});
   const kpiNodes = buildKpis(rol, {}).map((k) => kpiSkeleton());
   const kpiRow = h('div.grid.grid-cols-2.gap-3', { class: 'md:grid-cols-4', 'aria-live': 'polite', 'aria-busy': 'true' }, kpiNodes);
   root.appendChild(heroNode);
   root.appendChild(kpiRow);
 
-  // 3) Container del dashboard por rol (con skeleton)
   const roleNode = h('div.flex.flex-col.gap-5', { 'aria-busy': 'true' }, [
-    // skeletons de relleno — un card + lista
     h('div.card.p-5', {}, [
       h('div.dash-section-head', {}, [
         h('div.h-3.bg-slate-200.rounded.animate-pulse', { class: 'w-1/3' }),
@@ -652,7 +566,6 @@ export async function renderDashboard({ user }) {
   ]);
   root.appendChild(roleNode);
 
-  // 4) Carga inicial por rol
   try {
     let data;
     if (rol === 'sac') data = await api.stats.dashboard().catch(() => ({}));
@@ -674,9 +587,7 @@ export async function renderDashboard({ user }) {
       ['No pudimos cargar tu panel ahora mismo. Intenta refrescar.']), roleNode);
   }
 
-  // 5) Realtime: actualización granular con pulse en KPIs que cambian
   let currentTotals = (() => {
-    // Capturar totales actuales desde el DOM (los que el primer load pintó)
     const row = root.children[2];
     if (!row) return {};
     const out = {};
@@ -696,7 +607,6 @@ export async function renderDashboard({ user }) {
       currentTotals = applyHero(root, rol, fresh.totals || {});
       applyKpis(root, rol, fresh.totals || {}, oldTotals);
 
-      // Re-mount del role node (último hijo de root)
       const newRole = rol === 'sac'                       ? await sacDashboard(fresh)
                     : rol === 'jefe_inmediato'            ? await jefeDashboard(fresh)
                     : rol === 'admin_area'                ? await adminDashboard(fresh)
@@ -713,27 +623,20 @@ export async function renderDashboard({ user }) {
   return { view: root, cleanup: () => ac.abort() };
 }
 
-// ── helpers internos (top-level) ──
-
 function applyHero(rootEl, r, totals) {
-  // El primer hijo (welcome) no se toca; el segundo es el hero.
   const old = rootEl.children[1];
   if (!old) return {};
   const fresh = heroAction(r, totals);
-  // Conservar foco si el botón hero lo tenía, para no perderlo en realtime
   const wasFocused = old.contains(document.activeElement);
   rootEl.replaceChild(fresh, old);
   if (wasFocused) {
     const btn = fresh.querySelector('button');
     if (btn) btn.focus();
   }
-  // Devuelve los totales aplicados (como mapa label→value) para que el caller
-  // pueda comparar en el siguiente ciclo de realtime.
   return (totals && typeof totals === 'object') ? { ...totals } : {};
 }
 
 function applyKpis(rootEl, r, totals, oldTotals) {
-  // El tercer hijo es la fila de KPIs
   const row = rootEl.children[2];
   if (!row) return;
   const kpis = buildKpis(r, totals);
@@ -741,7 +644,6 @@ function applyKpis(rootEl, r, totals, oldTotals) {
     kpis.map((k) => kpi(k.label, k.value, k.hint, k.tone, k.icon, k.badge)));
   rootEl.replaceChild(fresh, row);
 
-  // Pulso en KPIs que cambiaron de valor
   if (oldTotals && Object.keys(oldTotals).length > 0) {
     fresh.querySelectorAll('[data-kpi-label]').forEach((el) => {
       const label = el.getAttribute('data-kpi-label');
@@ -755,15 +657,10 @@ function applyKpis(rootEl, r, totals, oldTotals) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Dashboards por rol — primaria y secundaria
-// ─────────────────────────────────────────────────────────────────────────
-
 async function sacDashboard(data) {
   const root = h('div.flex.flex-col.gap-5', {});
   const t = data.totals || {};
 
-  // Primaria: chart 30d + prioridad (2 columnas en lg)
   const primaryGrid = h('div.grid.grid-cols-1.gap-3', { class: 'lg:grid-cols-3' }, [
     h('div.card', { class: 'lg:col-span-2' }, [
       h('div.dash-section-head', {}, [
@@ -773,11 +670,7 @@ async function sacDashboard(data) {
         ]),
         h('div.flex.flex-col.items-end', { class: 'gap-0.5' }, [
           h('span.dash-section-sub', {}, `${t.total ?? 0} en el mes`),
-          // Promedio de resolución — dato real ya calculado en getStats()
-          // (avg_resolution_hours) pero sin usar hasta ahora en la UI.
-          data.avg_resolution_hours != null
-            ? h('span.dash-section-sub', {}, `Prom. resolución: ${formatDuration(data.avg_resolution_hours)}`)
-            : null,
+          data.avg_resolution_hours != null ? h('span.dash-section-sub', {}, `Prom. resolución: ${formatDuration(data.avg_resolution_hours)}`) : null,
         ]),
       ]),
       ticketsTrendChart(data.last_30_days),
@@ -792,9 +685,6 @@ async function sacDashboard(data) {
   ]);
   root.appendChild(primaryGrid);
 
-  // Secundaria: top categorías + ranking por encargado + por área (3
-  // columnas en lg). "Por área" es dato real (by_area, ya calculado en
-  // getStats()) que no se mostraba en ningún lado del dashboard SAC.
   const secondaryGrid = h('div.grid.grid-cols-1.gap-3', { class: 'lg:grid-cols-3' }, [
     h('div.card', {}, [
       h('div.dash-section-head', {}, [
@@ -823,7 +713,6 @@ async function sacDashboard(data) {
   ]);
   root.appendChild(secondaryGrid);
 
-  // Quick actions (3)
   root.appendChild(quickActions('sac'));
 
   return root;
@@ -833,7 +722,6 @@ async function jefeDashboard(data) {
   const root = h('div.flex.flex-col.gap-5', {});
   const t = data.totals || {};
 
-  // Primaria: carga por administrador + mini distribución
   const primaryGrid = h('div.grid.grid-cols-1.gap-3', { class: 'lg:grid-cols-2' }, [
     h('div.card', {}, [
       h('div.dash-section-head', {}, [
@@ -861,13 +749,11 @@ async function jefeDashboard(data) {
           h('div.dash-section-sub', {}, 'Lectura rápida del flujo'),
         ]),
       ]),
-      // Mini progress por estado
       statusBreakdown(t),
     ]),
   ]);
   root.appendChild(primaryGrid);
 
-  // Quick actions
   root.appendChild(quickActions('jefe_inmediato'));
 
   return root;
@@ -879,9 +765,6 @@ async function adminDashboard(data) {
   let list = { tickets: [] };
   try { list = await api.tickets.list({ limit: 6, status: 'asignado,en_proceso' }); } catch {}
 
-  // Primaria: mi cola (2/3) + por prioridad (1/3). El breakdown por prioridad
-  // es dato real (by_priority, ya calculado en getStatsForUser) que antes no
-  // se mostraba en el dashboard de admin_area — sólo en el de SAC.
   const queue = queueList(list.tickets, {
     title: 'Mi cola de trabajo',
     sub: data.avg_resolution_hours != null ? `Prom. resolución: ${formatDuration(data.avg_resolution_hours)}` : null,
@@ -902,7 +785,6 @@ async function adminDashboard(data) {
   ]);
   root.appendChild(primaryGrid);
 
-  // Quick actions
   root.appendChild(quickActions('admin_area'));
 
   return root;
@@ -914,7 +796,6 @@ async function supervisorDashboard(data) {
   let list = { tickets: [] };
   try { list = await api.tickets.list({ limit: 3 }); } catch {}
 
-  // Primaria: últimos creados
   const queue = queueList(list.tickets, {
     title: 'Últimos creados',
     linkToAll: '/tickets',
@@ -927,13 +808,11 @@ async function supervisorDashboard(data) {
   });
   root.appendChild(queue);
 
-  // Quick actions
   root.appendChild(quickActions('supervisor_campo'));
 
   return root;
 }
 
-// Mini breakdown de estado (para jefe) — progress bars pequeñas
 function statusBreakdown(t) {
   const states = [
     { key: 'recibido',    label: 'Recibidos' },
@@ -958,3 +837,4 @@ function statusBreakdown(t) {
     })
   );
 }
+

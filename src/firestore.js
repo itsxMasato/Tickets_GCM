@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firebaseAdmin = require('./firebaseAdmin');
 
 function getFirestore() {
@@ -18,16 +18,6 @@ function nowSql() {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
 }
 
-// getNextId — contador atómico compartido (transacción sobre un único doc
-// metadata/counters). Bajo ráfagas de creación muy concurrentes (decenas de
-// creaciones de ticket realmente simultáneas) Firestore aborta algunas
-// transacciones por contención en ese documento ("ABORTED due to
-// cross-transaction contention", código 10) — es su forma de arbitrar
-// cuando muchas transacciones pelean por el mismo doc a la vez. Abortar NO
-// significa que se aplicó nada parcial (Firestore garantiza todo-o-nada),
-// así que es seguro reintentar. Sin este reintento, un usuario que crea un
-// ticket en el peor momento de una ráfaga se llevaba un error 500 en vez
-// de simplemente tardar unos milisegundos más.
 async function getNextId(collectionName, attempt = 0) {
   const db = getFirestore();
   const counterRef = db.collection('metadata').doc('counters');
@@ -42,12 +32,8 @@ async function getNextId(collectionName, attempt = 0) {
     }, { maxAttempts: 10 });
   } catch (err) {
     const isAborted = err.code === 10 || /aborted/i.test(err.message || '');
-    if (!isAborted || attempt >= 8) throw err;
-    // Backoff exponencial con jitter: espacia los reintentos para que las
-    // transacciones que chocaron no vuelvan a chocar todas en el mismo
-    // instante. Tope de 8 reintentos adicionales (más los 10 intentos
-    // internos de runTransaction) es generoso para cualquier ráfaga
-    // realista sin arriesgar un loop largo si algo está genuinamente roto.
+    if (!isAborted || attempt >= 8)
+      throw err;
     const backoffMs = Math.min(800, 20 * 2 ** attempt) + Math.random() * 30;
     await new Promise((resolve) => setTimeout(resolve, backoffMs));
     return getNextId(collectionName, attempt + 1);
@@ -130,3 +116,4 @@ module.exports = {
   listAll,
   batchUpdate,
 };
+

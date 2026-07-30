@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 require('dotenv').config();
 const path = require('path');
 
@@ -14,3 +14,4 @@ module.exports = {
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '10', 10),
   sessionDbPath: path.resolve(root, './data/sessions.db'),
 };
+

@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { api } from '../api.js';
 import { setState } from '../store.js';
@@ -13,12 +13,6 @@ const AVATAR_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp';
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const AVATAR_CLASS = 'w-32 h-32 rounded-full text-3xl font-semibold text-white flex items-center justify-center flex-none border-4 border-white shadow-card';
 
-/**
- * /profile — datos de la cuenta del usuario logueado (solo lectura: nombre,
- * usuario, rol, área, correo, empresas asignadas) + foto de perfil, que sí
- * es editable. No hay campos inventados (sin teléfono/idioma/timezone/
- * notificaciones): solo lo que el sistema realmente guarda del usuario.
- */
 export async function renderProfile({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
   draw(root, user);
@@ -159,3 +153,4 @@ function renderCompaniesCard(user) {
       : null,
   ]);
 }
+

@@ -1,16 +1,10 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const fs = require('fs');
 const path = require('path');
 const { getDb, closeDb } = require('./connection');
 const seed = require('./seed');
 
-/**
- * Migración idempotente:
- *  1) Aplica ALTERs de columnas faltantes (capturando "duplicate column" como éxito).
- *  2) Aplica schema.sql (CREATE TABLE/INDEX IF NOT EXISTS) — los índices ahora sí encuentran las columnas.
- *  3) Reaplica los CREATE INDEX por si la tabla existía pre-migración.
- */
 function safeAlter(db, sql) {
   try {
     db.exec(sql);
@@ -40,8 +34,6 @@ function applyMissingColumns(db) {
 }
 
 function applyIndexes(db) {
-  // CREATE INDEX IF NOT EXISTS: si la tabla ya existía y el índice nunca se creó
-  // (porque en su momento la columna no estaba), se crea ahora.
   const stmts = [
     'CREATE INDEX IF NOT EXISTS idx_tickets_area        ON tickets(area)',
     'CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status)',
@@ -55,7 +47,7 @@ function applyIndexes(db) {
     'CREATE INDEX IF NOT EXISTS idx_notifications_user  ON notifications(user_id, read, created_at)',
   ];
   for (const s of stmts) {
-    try { db.exec(s); } catch (e) { /* columna faltante pre-migración: ignore */ }
+    try { db.exec(s); } catch (e) {}
   }
 }
 
@@ -91,14 +83,10 @@ function repairTicketsStatusConstraint(db) {
 
 async function migrate() {
   const db = getDb();
-  // 1) Asegurar columnas nuevas antes de correr el schema (los índices dependen de ellas)
   applyMissingColumns(db);
-  // 2) Aplicar schema (CREATE IF NOT EXISTS, idempotente)
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
-  // 2a) Reparar tablas legacy que no pueden migrar con CREATE TABLE IF NOT EXISTS
   repairTicketsStatusConstraint(db);
-  // 3) Reasegurar índices por si la tabla existía con la migración previa
   applyIndexes(db);
   console.log('[migrate] Esquema aplicado.');
   await seed();
@@ -114,3 +102,4 @@ if (require.main === module) {
       process.exit(1);
     });
 }
+

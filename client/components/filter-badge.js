@@ -1,10 +1,6 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 
-/**
- * Crea un badge que muestra la cantidad de filtros activos.
- * Devuelve null si no hay filtros activos.
- */
 export function filterBadge(filters) {
   const active = Object.entries(filters)
     .filter(([k, v]) => v && v !== '' && k !== 'page' && k !== 'limit')
@@ -17,12 +13,9 @@ export function filterBadge(filters) {
   ]);
 }
 
-/**
- * Actualiza la barra de filtros para mostrar el contador de filtros activos.
- * También retorna el contador para usarlo en debug.
- */
 export function countActiveFilters(filters) {
   return Object.entries(filters)
     .filter(([k, v]) => v && v !== '' && k !== 'page' && k !== 'limit')
     .length;
 }
+

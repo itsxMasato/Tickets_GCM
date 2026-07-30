@@ -1,25 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
-
-/**
- * Enums de la capa TypeORM.
- *
- * Reflejan los CHECK constraints de src/db/schema.sql:
- *   - users.role            → 4 valores
- *   - tickets.status        → 6 valores
- *   - tickets.priority      → 4 valores
- *   - notifications.type    → 8 valores
- *
- * Importante:
- *   Los servicios actuales (auth.service.js, tickets.service.js, etc.) siguen
- *   usando sus propias constantes de string en src/utils/validators.js y
- *   servicios. Mientras convivan ambas definiciones, hay que mantenerlas en
- *   sync. Cuando un servicio migre al ORM, se reemplaza la constante local
- *   por la referencia a este archivo.
- *
- *   audit_log.action_type y audit_log.target_type NO son CHECK en el schema
- *   (son strings libres), por eso no tienen enum acá.
- */
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const RoleEnum = Object.freeze({
   SUPERVISOR_CAMPO: 'supervisor_campo',
@@ -58,16 +38,12 @@ const NotificationTypeEnum = Object.freeze({
 });
 const NOTIFICATION_TYPE_VALUES = Object.freeze(Object.values(NotificationTypeEnum));
 
-// 'personal' = bloque libre (sin ticket), 'ticket_linked' = bloque asociado a un ticket.
 const CalendarEventTypeEnum = Object.freeze({
   PERSONAL:     'personal',
   TICKET_LINKED: 'ticket_linked',
 });
 const CALENDAR_EVENT_TYPE_VALUES = Object.freeze(Object.values(CalendarEventTypeEnum));
 
-// Colores permitidos para un CalendarEvent. Coinciden con el set canónico
-// del front: 'ocean' (default), 'brand' (navy), 'deep', 'accent' (camarón).
-// Si el cliente envía uno fuera de la lista, el servicio lo rechaza.
 const CALENDAR_EVENT_COLORS = Object.freeze(['ocean', 'brand', 'deep', 'accent']);
 
 module.exports = {
@@ -83,3 +59,4 @@ module.exports = {
   CALENDAR_EVENT_TYPE_VALUES,
   CALENDAR_EVENT_COLORS,
 };
+

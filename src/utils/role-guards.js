@@ -1,3 +1,4 @@
+/* Documentado por: Miguel Flores */
 'use strict';
 
 const PROTECTED_ROLES = ['sac', 'jefe_inmediato', 'admin_area', 'supervisor_campo'];
@@ -16,3 +17,4 @@ function assertRoleDeletable(role, message = 'No se puede eliminar un rol base d
 }
 
 module.exports = { PROTECTED_ROLES, isProtectedRole, assertRoleDeletable };
+

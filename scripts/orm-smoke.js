@@ -1,28 +1,9 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
-
-/**
- * scripts/orm-smoke.js
- *
- * Verifica la conexión TypeORM contra SQL Server y reporta el conteo de filas
- * de cada una de las 13 entidades.
- *
- * Comportamiento:
- *   - Si SQL Server está alcanzable: imprime la tabla con las 13 cuentas y
- *     sale con exit 0.
- *   - Si NO está alcanzable: imprime un mensaje claro y sale con exit 1.
- *   - Si ORM_SYNCHRONIZE=true y el server está vacío, intenta crear las
- *     tablas desde las entidades. (Solo dev, no usar en prod.)
- *
- * Uso:
- *   pnpm orm:smoke
- *   ORM_SYNCHRONIZE=true pnpm orm:smoke
- */
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const path = require('path');
 
-// Resolver .env desde la raíz del proyecto (CommonJS, no next)
-try { require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') }); } catch (_) { /* dotenv opcional */ }
+try { require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') }); } catch (_) {}
 
 const orm = require('../src/orm');
 
@@ -36,8 +17,7 @@ const ENTITIES = [
   ['notifications',            orm.Notification],
   ['audit_log',                orm.AuditLog],
   ['calendar_events',          orm.CalendarEvent],
-  // Multi-tenant (Fase 1)
-  ['companies',                orm.Company],
+  ['companies', orm.Company],
   ['company_areas',            orm.CompanyArea],
   ['user_company_memberships', orm.UserCompanyMembership],
   ['role_permissions',         orm.RolePermission],
@@ -71,3 +51,4 @@ main()
       .catch(() => {})
       .finally(() => process.exit(1));
   });
+

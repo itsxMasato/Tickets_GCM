@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import './styles.css';
 import { go } from './router.js';
 import { setState, getState } from './store.js';
@@ -9,7 +9,6 @@ import { renderLayout } from './components/layout.js';
 import { initializeFirebase, signOutFirebase } from './firebase.js';
 import { init as initRoleLabels, applyRoleLabel } from './utils/role-labels.js';
 
-// Vistas
 import { renderLogin } from './views/login.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderTicketsList } from './views/tickets-list.js';
@@ -25,7 +24,6 @@ import { renderCalendar } from './views/calendar.js';
 import { renderCompanies } from './views/companies.js';
 import { renderProfile } from './views/profile.js';
 
-// Registro de rutas (devuelven un { view, cleanup } o un HTMLElement)
 const handlers = {
   '/login':         ({ params, query }) => ({ view: renderLogin({ params, query, onLogin }) }),
   '/dashboard':     ({ params, query, user }) => ({ view: renderDashboard({ params, query, user }) }),
@@ -45,7 +43,6 @@ const handlers = {
 
 const app = document.getElementById('app');
 
-// Flag para mostrar app solo una vez cuando esté lista
 let appShown = false;
 let loginSplashActive = false;
 function showAppWhenReady() {
@@ -53,12 +50,10 @@ function showAppWhenReady() {
     appShown = true;
   }
 
-  // Limpiar timeout fallback del HTML
   if (typeof window.clearShowTimeout === 'function') {
     window.clearShowTimeout();
   }
 
-  // Usar requestAnimationFrame para asegurar que el DOM se haya renderizado
   requestAnimationFrame(() => {
     const appEl = document.getElementById('app');
     const overlay = document.getElementById('loading-overlay');
@@ -77,7 +72,6 @@ function showAppWhenReady() {
 }
 
 function mount(node) {
-  // Ejecuta cleanup de listeners en tiempo real registrados por la vista previa
   if (app.firstElementChild && app.firstElementChild._gcmCleanup) {
     try { app.firstElementChild._gcmCleanup(); } catch {}
   }
@@ -96,12 +90,6 @@ function mount(node) {
 
 async function onLogin(user) {
   setState({ user });
-  // El splash de bienvenida dura mínimo 5s, incluso si la carga es más
-  // rápida. La animación del splash dura ~1.5s; los 3.5s restantes son
-  // tiempo de respiración para que el cambio de contexto no se sienta abrupto.
-  // El dashboard se monta detrás (con app.style.visibility = 'hidden' que
-  // pone el script inline de index.html) y se hace visible recién cuando
-  // hideLoginSplash se llama.
   const splashShownAt = Date.now();
   const MIN_SPLASH_MS = 5000;
 
@@ -122,7 +110,6 @@ async function onLogin(user) {
     const elapsed = Date.now() - splashShownAt;
     const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
 
-    // Fade out corto para que la transición no sea un corte seco.
     setTimeout(() => {
       if (typeof window.hideLoginSplash === 'function') {
         window.hideLoginSplash();
@@ -151,9 +138,6 @@ async function refreshBell() {
   } catch {}
 }
 
-// ── Tiempo real ──────────────────────────────────────────────────────────────
-// Refresca campana, dispara toast y notifica a las vistas vivas
-// para que recarguen su contenido (listas, detalle de ticket, dashboard).
 function emitRealtime(event, detail) {
   window.dispatchEvent(new CustomEvent('gcm:realtime', { detail: { event, ...detail } }));
 }
@@ -163,12 +147,10 @@ function wireRealtime() {
   if (realtimeWired) return;
   realtimeWired = true;
 
-  // Notificación entrante para el usuario actual
   onSocket('notification:new', async (payload = {}) => {
     setState({ unreadCount: payload.unread ?? 0 });
     try { await refreshBell(); } catch {}
     emitRealtime('notification:new', payload);
-    // Toast breve en la campana
     try {
       const list = getState().notifications || [];
       const top = list[0];
@@ -176,7 +158,6 @@ function wireRealtime() {
     } catch {}
   });
 
-  // Eventos de ticket — refrescan vistas vivas (lista, detalle, dashboard)
   const forward = (event) => onSocket(event, (payload = {}) => {
     emitRealtime(event, payload);
   });
@@ -187,15 +168,10 @@ function wireRealtime() {
   forward('ticket:commented');
   forward('attachment:added');
 
-  // Eventos administrativos — refrescan vistas de SAC
-  // (usuarios, roles, categorías, dashboard).
   forward('user:created');
   forward('user:updated');
   forward('user:deactivated');
   forward('role:permissions_updated');
-  // Renombre de etiqueta de rol. Aplica al cache y lo difunde a las
-  // vistas vivas vía gcm:role_label_updated; el forward a gcm:realtime
-  // permite que la vista /roles detecte conflictos con cambios locales.
   onSocket('role:label_updated', (payload = {}) => {
     if (payload.role && typeof payload.label === 'string') {
       applyRoleLabel(payload.role, payload.label);
@@ -204,9 +180,6 @@ function wireRealtime() {
   });
   forward('category:created');
   forward('category:updated');
-  // Multi-tenant: refresca la vista /companies cuando otro platform admin
-  // (o una sesión del propio Miguel en otra pestaña) crea/edita empresas,
-  // áreas o membresías. Los emits viven en los 3 services correspondientes.
   forward('company:created');
   forward('company:updated');
   forward('company:deleted');
@@ -217,11 +190,9 @@ function wireRealtime() {
   forward('membership:updated');
   forward('membership:deleted');
 
-  // Reconexión: cuando el socket vuelve, sincroniza contador
   onSocket('connect', async () => { try { await refreshBell(); } catch {} });
 }
 
-// Handler global del evento 'gcm:help' (despachado por topbar)
 let gcmHelpHandler = null;
 if (typeof window !== 'undefined') {
   gcmHelpHandler = () => {
@@ -230,14 +201,9 @@ if (typeof window !== 'undefined') {
   window.addEventListener('gcm:help', gcmHelpHandler);
 }
 
-// Adaptador: monta vistas respetando layout
 function withLayout(view, user) {
-  if (!view) return null;
-  // Acepta { view, cleanup } (nuevo) o un Node directo (legacy).
-  // Para el caso legacy (Node), si la vista expone un _gcmCleanup propio
-  // (p.ej. listeners de realtime en /roles, /users, /audit), lo heredamos
-  // para que mount() pueda limpiarlo en la próxima navegación — antes se
-  // perdía y los listeners se duplicaban en cada re-mount.
+  if (!view)
+    return null;
   const inner = view.view ?? view;
   const innerCleanup = (typeof view.view === 'undefined' && typeof inner?._gcmCleanup === 'function')
     ? inner._gcmCleanup
@@ -245,7 +211,6 @@ function withLayout(view, user) {
   const cleanup = typeof view.cleanup === 'function' ? view.cleanup : innerCleanup;
   const wrapper = renderLayout({ content: inner, user, onLogout });
 
-  // Combinar cleanups: del layout + de la vista
   const layoutCleanup = typeof wrapper._gcmLayoutCleanup === 'function' ? wrapper._gcmLayoutCleanup : null;
   if (cleanup || layoutCleanup) {
     wrapper._gcmCleanup = () => {
@@ -291,10 +256,6 @@ async function dispatch(rawPath, query) {
       return;
     }
   }
-  // Guard de rutas restringidas a SAC. El backend también lo aplica
-  // (requireRole('sac') en cada router), pero lo bloqueamos aquí para
-  // evitar un 403 visible y para que la UI no muestre estados vacíos
-  // a roles sin permiso.
   const SAC_ONLY = new Set(['/users', '/categories', '/roles', '/audit']);
   if (SAC_ONLY.has(path) && getState().user?.role !== 'sac') {
     toast('No tienes permiso para acceder a esa sección.', 'error');
@@ -302,19 +263,13 @@ async function dispatch(rawPath, query) {
     showAppWhenReady();
     return;
   }
-  // Guard separado para rutas de plataforma. Hoy solo /companies (gestión
-  // multi-tenant de Fase 3); si en el futuro /audit u otras se restringen
-  // a platform admin, se mueven a este set. Backend lo vuelve a validar
-  // con requirePlatformAdmin, así que esto es solo UX (evita el 403 visible).
   const PLATFORM_ADMIN_ONLY = new Set(['/companies']);
-  // Permitir acceso a /companies para `sac` además de platform admin.
   if (PLATFORM_ADMIN_ONLY.has(path) && !(getState().user?.isPlatformAdmin === true || getState().user?.role === 'sac')) {
     toast('No tienes permiso para acceder a esa sección.', 'error');
     go('/dashboard');
     showAppWhenReady();
     return;
   }
-  // matchear
   for (const [pattern, fn] of Object.entries(handlers)) {
     if (pattern === '/login') continue;
     const ps = pattern.split('/').filter(Boolean);
@@ -348,20 +303,8 @@ function onHashChange() {
   dispatch(path, query);
 }
 
-// El selector de empresa (topbar) dispara esto tras cambiar la empresa
-// activa: re-despacha la ruta actual (mismo path, re-monta la vista) para
-// que listas/dashboard refresquen con el nuevo scope — sin reload de
-// página ni perder la sesión. Mismo patrón que gcm:help/gcm:refresh.
 window.addEventListener('gcm:company-switched', () => onHashChange());
 
-// Interceptor global de 401: si CUALQUIER llamada a la API devuelve 401
-// (sesión expirada, cookie perdida, servidor reiniciado) después del login
-// inicial, la app quedaba en la página actual con requests fallando en
-// silencio — nada le avisaba al usuario que ya no estaba autenticado hasta
-// que intentaba algo y veía un error suelto. api.js dispara este evento en
-// cualquier 401 fuera de los endpoints de login/logout. getState().user
-// como guarda evita reaccionar más de una vez si llegan varios 401 en
-// ráfaga (peticiones en paralelo ya en vuelo).
 window.addEventListener('gcm:unauthorized', () => {
   if (!getState().user) return;
   setState({ user: null, notifications: [], unreadCount: 0 });
@@ -374,8 +317,6 @@ async function bootstrap() {
     console.warn('[firebase] No se pudo inicializar Firestore:', error);
   });
 
-  // Cada apertura del sitio exige login explícito: no restauramos sesión
-  // desde una cookie/token existente, sin importar el hash previo.
   setState({ user: null });
   location.hash = '#/login';
   onHashChange();
@@ -383,3 +324,4 @@ async function bootstrap() {
 }
 
 bootstrap();
+

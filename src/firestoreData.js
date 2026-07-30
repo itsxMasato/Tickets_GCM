@@ -1,14 +1,8 @@
+/* Documentado por: Miguel Flores */
 'use strict';
 const firestore = require('./firestore');
 const { FieldPath } = require('firebase-admin/firestore');
 
-// IS_NULL — sentinel para pedir explícitamente `field == null` en
-// queryCollection/countCollection. Por convención en TODO el resto del
-// código, un valor `null` literal en una cláusula significa "no aplica
-// este filtro, sáltalo" (así se arman los filtros opcionales en casi
-// todo el archivo) — así que un `['company_id', '==', null]` literal se
-// ignoraba en silencio en vez de filtrar. Este sentinel es la única forma
-// de decir "quiero el null real" sin romper esa convención existente.
 const IS_NULL = Symbol('firestoreData.IS_NULL');
 
 function normalizeString(value) {
@@ -31,13 +25,6 @@ function toLegacyDate(value) {
   return String(value);
 }
 
-// endOfDayInclusive — un filtro "Hasta: 2026-07-28" se comparaba tal cual
-// contra created_at ("2026-07-28 09:00:00", string YYYY-MM-DD HH:MM:SS).
-// Firestore compara strings lexicograficamente, y cualquier string mas largo
-// con el mismo prefijo ordena DESPUES del prefijo solo — "2026-07-28 09:00:00"
-// > "2026-07-28" — asi que TODO lo creado ese dia quedaba excluido en vez de
-// incluido, subestimando reportes/exports sin ningun aviso. Si viene una
-// fecha sin hora (YYYY-MM-DD), la extendemos al final del dia.
 function endOfDayInclusive(dateStr) {
   if (!dateStr) return dateStr;
   return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `${dateStr} 23:59:59` : dateStr;
@@ -58,10 +45,6 @@ function normalizeUser(row) {
     created_at: toLegacyDate(row.created_at),
     email: row.email || null,
     avatar_url: row.avatar_url || null,
-    // Sin esto, getUserById() (usado por /api/auth/me y por cualquier
-    // "refresh" de datos frescos) perdía el flag de platform admin aunque
-    // la sesión sí lo tuviera correcto — el bypass funcionaba, pero /me
-    // mentía y podía esconder UI que sí debía verse.
     is_platform_admin: row.is_platform_admin === true || row.is_platform_admin === 1 || row.is_platform_admin === '1',
   };
 }
@@ -77,33 +60,13 @@ function normalizeCategory(row) {
   };
 }
 
-/**
- * scopeByCompany — filtra filas por empresa activa de la sesión. Un registro
- * con company_id null es legacy/global (creado antes de que existiera esta
- * capa) y queda visible para todos independientemente de la empresa activa.
- * Sin empresa activa (activeCompanyId null), no filtra nada.
- */
 function scopeByCompany(rows, activeCompanyId) {
-  // Sin empresa activa (sesion corrupta, membresias desactivadas, usuario
-  // recien creado sin asignar) no hay que devolver TODO sin filtrar: eso
-  // exponia el dashboard/listado de tickets de todas las empresas a un
-  // usuario que no deberia ver ninguna. Solo quedan visibles los registros
-  // legacy pre-multitenant (company_id null), igual que para un usuario con
-  // empresa activa.
-  if (activeCompanyId == null) return rows.filter((row) => row.company_id == null);
+  if (activeCompanyId == null)
+    return rows.filter((row) => row.company_id == null);
   const normalized = String(activeCompanyId);
   return rows.filter((row) => row.company_id == null || String(row.company_id) === normalized);
 }
 
-/**
- * scopeUsersByCompany — como scopeByCompany, pero para `users`: el usuario
- * no tiene company_id propio, pertenece a N empresas vía
- * user_company_memberships (recibidas ya cargadas por el caller). sac y
- * platform admin quedan globales por diseño (soporte cross-empresa). Un
- * usuario sin ninguna membresía es legacy y queda visible para todos (mismo
- * criterio que company_id null en tickets/categorías). El propio requester
- * siempre se ve a sí mismo.
- */
 function scopeUsersByCompany(rows, memberships, requester) {
   if (!requester || requester.isPlatformAdmin || requester.role === 'sac' || requester.activeCompanyId == null) {
     return rows;
@@ -233,11 +196,6 @@ function normalizeAttachment(row) {
   };
 }
 
-/**
- * Consulta Firestore con filtros, proyecciones y paginación limitada.
- * Permite consultas escalables sin cargar toda la colección en memoria.
- * Documentado por Miguel Flores.
- */
 function compareFieldValues(a, b, direction = 'asc') {
   if (a === b) return 0;
   if (a === undefined || a === null) return 1;
@@ -252,12 +210,6 @@ function normalizeQueryRows(rows, orderBy, direction) {
   return rows.sort((a, b) => compareFieldValues(a[orderBy], b[orderBy], direction));
 }
 
-// compareRowsForCursor — mismo orden que Firestore aplicaria con
-// orderBy(field, dir).orderBy(FieldPath.documentId(), dir): compara primero
-// por el campo, y si empatan (ej. dos tickets con el mismo created_at por
-// creacion concurrente en el mismo segundo), desempata por el id del
-// documento. Se usa tanto para ordenar en memoria en el fallback como para
-// filtrar por cursor ahi mismo.
 function compareRowsForCursor(a, b, orderByField, direction, tieBreakByDocId) {
   const primary = compareFieldValues(a[orderByField], b[orderByField], direction);
   if (primary !== 0 || !tieBreakByDocId) return primary;
@@ -279,11 +231,6 @@ async function queryCollection(collectionName, whereClauses = [], options = {}) 
   if (options.orderBy) {
     q = q.orderBy(options.orderBy, options.direction || 'asc');
   }
-  // tieBreakByDocId — desempata filas con el mismo valor de orderBy (ej.
-  // created_at, resolucion de 1 segundo: dos tickets creados en el mismo
-  // segundo bajo carga concurrente). Necesario para que startAfter sea
-  // determinista pagina a pagina (paginacion cursor-based) — ver
-  // listTickets, que es el consumidor principal de esta opcion.
   if (options.tieBreakByDocId) {
     q = q.orderBy(FieldPath.documentId(), options.direction || 'asc');
   }
@@ -300,16 +247,9 @@ async function queryCollection(collectionName, whereClauses = [], options = {}) 
   } catch (err) {
     const code = String(err.code || '').toLowerCase();
     const isIndexError = code === 'failed-precondition' || (err.message || '').toLowerCase().includes('requires an index');
-    if (!isIndexError) throw err;
+    if (!isIndexError)
+      throw err;
 
-    // Fallback para consultas que requieren un índice compuesto y que
-    // todavía no existe en el proyecto Firestore actual (frecuente la
-    // primera vez que se usa una combinación nueva de where+orderBy — el
-    // propio error de Firestore trae un link para crearlo). Sin el
-    // índice compuesto no se puede pedir orderBy/startAfter/limit en el
-    // servidor, así que se trae todo lo que matchea el where y se
-    // ordena/pagina en memoria — más caro, pero sigue siendo correcto
-    // mientras no exista el índice.
     let fallbackQuery = db.collection(collectionName);
     for (const [field, op, value] of whereClauses) {
       if (value === undefined || value === null) continue;
@@ -336,11 +276,6 @@ async function queryCollection(collectionName, whereClauses = [], options = {}) 
   }
 }
 
-/**
- * Cuenta documentos en Firestore con filtros indexados.
- * Usa count() cuando está disponible para minimizar el consumo.
- * Documentado por Miguel Flores.
- */
 async function countCollection(collectionName, whereClauses = []) {
   const db = firestore.getFirestore();
   let q = db.collection(collectionName);
@@ -362,28 +297,18 @@ async function countCollection(collectionName, whereClauses = []) {
   return snapshot.size;
 }
 
-/**
- * Agrega recuentos por valor conocido sin necesidad de agrupar en el servidor.
- * Ideal para métricas de estado, prioridad y área con millones de tickets.
- * Documentado por Miguel Flores.
- */
 async function countGroupByValues(collectionName, whereClauses = [], field, values = []) {
   const counts = await Promise.all(values.map((value) => countCollection(collectionName, [...whereClauses, [field, '==', value]])));
   return counts.map((c, index) => ({ [field]: values[index], c }));
 }
 
-/**
- * Cuenta documentos por día usando rangos de fecha y filtros Firestore.
- * Diseñado para calcular series temporales sin escanear la colección completa.
- * Documentado por Miguel Flores.
- */
-async function countByDay(collectionName, field, dates = []) {
+async function countByDay(collectionName, field, dates = [], extraClauses = []) {
   const results = await Promise.all(dates.map(async (start) => {
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
     const isoStart = start;
     const isoEnd = end.toISOString().slice(0, 10);
-    const c = await countCollection(collectionName, [[field, '>=', isoStart], [field, '<', isoEnd]]);
+    const c = await countCollection(collectionName, [...extraClauses, [field, '>=', isoStart], [field, '<', isoEnd]]);
     return { day: start, c };
   }));
   return results;
@@ -514,12 +439,6 @@ async function updateUser(id, patch) {
   if (patch.email !== undefined) {
     const normalizedEmail = normalizeString(patch.email);
     const lowerEmail = normalizedEmail ? normalizedEmail.toLowerCase() : null;
-    // createUser ya validaba esto contra otros usuarios; updateUser lo
-    // calculaba pero nunca lo chequeaba, asi que se podia dejar a dos
-    // usuarios con el mismo email_lower editando uno para que coincida con
-    // otro. Con eso duplicado, getUserByIdentifier (findOneByFields con
-    // limit:1, sin orden determinista) resuelve el login a cualquiera de
-    // los dos de forma impredecible.
     if (lowerEmail) {
       const conflict = await findOneByFields('users', [['email_lower', '==', lowerEmail]]);
       if (conflict && String(conflict.id) !== String(id)) {
@@ -555,7 +474,7 @@ async function listCategories(activeOnly = true, user = null) {
   const clauses = [];
   if (activeOnly) clauses.push(['active', '==', 1]);
   const rows = await queryCollection('categories', clauses);
-  const scoped = user && user.role !== 'sac' ? scopeByCompany(rows, user.activeCompanyId) : rows;
+  const scoped = user && !user.isPlatformAdmin ? scopeByCompany(rows, user.activeCompanyId) : rows;
   return scoped.map(normalizeCategory);
 }
 
@@ -573,11 +492,6 @@ async function createCategory(name, user = null) {
     throw err;
   }
   const companyId = user && user.activeCompanyId != null ? toId(user.activeCompanyId) : null;
-  // Antes el chequeo de unicidad era global (name_lower en TODA la colección),
-  // aunque las categorías ya se listan/filtran por company_id. Dos empresas
-  // distintas no podían usar el mismo nombre ("Urgente" en Empresa A bloqueaba
-  // "Urgente" en Empresa B) con un falso "ya existe" que un admin de la otra
-  // empresa no tiene forma de investigar. Escopar por company_id.
   const existing = await findOneByFields('categories', [['name_lower', '==', lowerName], ['company_id', '==', companyId]]);
   if (existing) {
     const err = new Error('Ya existe una categoría con ese nombre.');
@@ -625,11 +539,6 @@ async function updateCategory(id, { name, active } = {}) {
   return normalizeCategory(updated);
 }
 
-// deleteCategory — regla de negocio: nada se elimina de verdad en el
-// sistema, solo se deshabilita. Antes esto borraba el documento de
-// Firestore; ahora es un alias de "desactivar" (active: 0), igual que el
-// resto de las entidades (empresas, membresías, permisos). El nombre de la
-// funcion se mantiene por compatibilidad con el route/service existente.
 async function deleteCategory(id) {
   const existing = await getDoc('categories', id);
   if (!existing) {
@@ -694,6 +603,7 @@ async function logAudit(audit) {
   const now = firestore.nowSql();
   const doc = await createDoc('audit_log', {
     user_id: toId(audit.user_id),
+    company_id: audit.company_id != null ? toId(audit.company_id) : null,
     action_type: audit.action_type,
     target_type: audit.target_type,
     target_id: audit.target_id != null ? toId(audit.target_id) : null,
@@ -725,26 +635,35 @@ async function logAudit(audit) {
   return doc;
 }
 
-// listAudit — misma paginación por cursor que listTickets (ver la nota
-// grande ahí sobre por qué `limit(page*limit)` no escala). Más simple que
-// listTickets porque audit_log es SAC-only y SAC es global por diseño: una
-// sola consulta, sin merge de streams ni scope por empresa.
-async function listAudit({ cursor = null, limit = 50, user_id = null, action_type = null, date_from = null, date_to = null, search = null } = {}) {
+async function listAudit(
+  { cursor = null, limit = 50, user_id = null, action_type = null, date_from = null, date_to = null, search = null, requester = null } = {}
+) {
   const clauses = [];
   if (user_id) clauses.push(['user_id', '==', toId(user_id)]);
   if (action_type) clauses.push(['action_type', '==', action_type]);
   if (date_from) clauses.push(['created_at', '>=', date_from]);
   if (date_to) clauses.push(['created_at', '<=', endOfDayInclusive(date_to)]);
 
-  function applySearch(rows) {
-    if (!search) return rows;
-    const needle = search.toLowerCase();
-    return rows.filter((row) => (row.description || '').toLowerCase().includes(needle)
-      || (row.target_code || '').toLowerCase().includes(needle));
+  const companyScoped = !!(requester && !requester.isPlatformAdmin);
+  const activeCompanyId = companyScoped ? requester.activeCompanyId : null;
+
+  function applyScope(rows) {
+    let out = rows;
+    if (search) {
+      const needle = search.toLowerCase();
+      out = out.filter((row) => (row.description || '').toLowerCase().includes(needle)
+        || (row.target_code || '').toLowerCase().includes(needle));
+    }
+    if (companyScoped) {
+      out = out.filter((row) => row.company_id == null
+        || (activeCompanyId != null && String(row.company_id) === String(activeCompanyId)));
+    }
+    return out;
   }
 
-  const windowSize = search ? Math.max(limit * 4, 100) : Math.max(limit + 10, 30);
-  const maxIterations = search ? 15 : 8;
+  const needsWiderWindow = !!search || companyScoped;
+  const windowSize = needsWiderWindow ? Math.max(limit * 4, 100) : Math.max(limit + 10, 30);
+  const maxIterations = needsWiderWindow ? 15 : 8;
 
   let cursorState = decodeCreatedAtCursor(cursor);
   const collected = [];
@@ -760,7 +679,7 @@ async function listAudit({ cursor = null, limit = 50, user_id = null, action_typ
     if (batch.length === 0) { exhausted = true; break; }
     const last = batch[batch.length - 1];
     cursorState = [last.created_at, String(last.id)];
-    collected.push(...applySearch(batch));
+    collected.push(...applyScope(batch));
     if (batch.length < windowSize) exhausted = true;
   }
 
@@ -768,21 +687,14 @@ async function listAudit({ cursor = null, limit = 50, user_id = null, action_typ
   const hasMore = collected.length > limit || !exhausted;
   const nextCursor = pageRows.length > 0 ? encodeCreatedAtCursor(pageRows[pageRows.length - 1]) : null;
 
-  // Total exacto sólo cuando es barato (count() sin leer documentos). Con
-  // búsqueda de texto libre se devuelve null, igual que en listTickets.
-  const total = search ? null : await countCollection('audit_log', clauses);
+  const total = needsWiderWindow ? null : await countCollection('audit_log', clauses);
 
   const userIds = Array.from(new Set(pageRows.map((r) => String(r.user_id)).filter(Boolean)));
   const users = await cacheById('users', userIds);
   const data = pageRows.map((row) => normalizeAudit({ ...row, user_name: users[String(row.user_id)]?.full_name || null }));
 
-  // Estadísticas ("Tipo más frecuente"/"Usuarios activos") sobre una
-  // muestra del set filtrado, no sólo la página visible — misma idea que
-  // antes, pero ahora con una query aparte acotada en vez de depender de
-  // cuántas filas se hayan traído para ESTA página (que ahora es mucho más
-  // chica que el fetchLimit viejo).
   const STATS_SAMPLE = 1000;
-  const statsRows = search
+  const statsRows = needsWiderWindow
     ? collected
     : await queryCollection('audit_log', clauses, { orderBy: 'created_at', direction: 'desc', tieBreakByDocId: true, limit: STATS_SAMPLE });
   const actionCounts = statsRows.reduce((acc, r) => {
@@ -812,11 +724,6 @@ async function getActionTypes() {
 }
 
 async function getActiveAuditUsers() {
-  // audit_active_users es sólo una caché de IDs para no escanear todo
-  // audit_log; sus propios campos username/full_name nunca se pueblan
-  // (logAudit los escribe desde audit.user_name, que ningún caller pasa
-  // hoy), así que quedan siempre en null. Los nombres reales SIEMPRE se
-  // resuelven contra la colección users, sin importar de dónde salgan los IDs.
   const cacheRows = await queryCollection('audit_active_users', [], {});
   let userIds;
   if (cacheRows.length > 0) {
@@ -833,14 +740,8 @@ async function getActiveAuditUsers() {
 
 async function getTicketById(id) {
   const ticket = await getDoc('tickets', id);
-  if (!ticket) return null;
-  // Normalizar los mismos campos-id que normalizeTicket() aplica en el
-  // detalle (getTicketDetail). Sin esto, canView()/canEditMeta() en
-  // tickets.service.js comparan con === contra valores crudos de Firestore
-  // que pueden venir como string en tickets viejos/migrados, mientras
-  // user.id siempre llega normalizado a Number desde requireAuth — la
-  // comparación estricta falla en silencio y el creador del ticket
-  // (ej. supervisor_campo) puede ver el chat pero no comentar.
+  if (!ticket)
+    return null;
   return {
     ...ticket,
     id: toId(ticket.id),
@@ -869,6 +770,12 @@ async function getTicketRelatedData(ticket) {
     assigned_to_area: assignedTo?.area || null,
     assigned_to_role: assignedTo?.role || null,
   };
+}
+
+async function getTicketWithArea(id) {
+  const ticket = await getTicketById(id);
+  if (!ticket) return null;
+  return decorateTicket(ticket);
 }
 
 async function decorateTicket(ticket) {
@@ -904,11 +811,6 @@ async function createTicket({ title, description, category_id, priority }, user)
   return normalizeTicket({ ...doc, category_name: category?.name || null });
 }
 
-// encodeCreatedAtCursor/decodeCreatedAtCursor — cursor de paginación
-// genérico (tickets, audit_log): opaco para el cliente, un base64 de
-// [created_at, id] de la última fila devuelta. Ver la nota grande en
-// listTickets sobre por qué esto reemplazó a `limit(page*limit)` + slice
-// en memoria.
 function encodeCreatedAtCursor(row) {
   if (!row) return null;
   return Buffer.from(JSON.stringify([row.created_at, String(row.id)])).toString('base64');
@@ -924,11 +826,6 @@ function decodeCreatedAtCursor(cursor) {
   }
 }
 
-// countTicketsTotal — total exacto vía count() de Firestore (no lee
-// documentos), con el mismo criterio de scoping por empresa que
-// scopeByCompany: company_id == empresa activa OR company_id == null
-// (legacy). Como son condiciones mutuamente excluyentes, sumar dos
-// count() da el OR correcto sin tener que traer filas.
 async function countTicketsTotal(user, clauses, companyScoped) {
   const companyFilterSets = companyScoped
     ? [[['company_id', '==', toId(user.activeCompanyId)]], [['company_id', '==', IS_NULL]]]
@@ -952,23 +849,6 @@ async function countTicketsTotal(user, clauses, companyScoped) {
   return countWithClauses([]);
 }
 
-// listTickets — paginación por CURSOR (Firestore startAfter), no por
-// offset. Antes: `limit(page*limit)` + `rows.slice((page-1)*limit, ...)` —
-// para ver la página 100 volvía a leer los primeros 2,500 documentos desde
-// cero y descartaba casi todos. Con 1M+ tickets eso escala en O(página²)
-// lecturas: lento y caro (Firestore cobra por documento leído).
-//
-// Ahora cada página cuesta lo mismo sin importar qué tan profunda sea:
-// `fetchWindow` trae un lote acotado empezando DESPUÉS del cursor. Los
-// filtros que no se pueden expresar como where() de Firestore (scope por
-// empresa, el post-filtro de jefe_inmediato, la búsqueda de texto) se
-// aplican en memoria sobre ese lote; si el lote filtrado no alcanza para
-// llenar la página, se pide otro lote empezando donde terminó el anterior
-// (nunca se vuelve al principio), hasta `maxIterations` veces — un tope de
-// seguridad para no barrer la colección entera si el filtro es muy
-// selectivo (esto es un límite real: una búsqueda de texto que sólo
-// matchea un ticket muy viejo puede no encontrarlo, igual que antes, pero
-// ahora el costo por página es acotado y no crece con la profundidad).
 async function listTickets(filters, user, { cursor = null, limit = 25 } = {}) {
   const clauses = [];
   if (filters.status) clauses.push(['status', '==', filters.status]);
@@ -1042,10 +922,6 @@ async function listTickets(filters, user, { cursor = null, limit = 25 } = {}) {
   const hasMore = collected.length > limit || !exhausted;
   const nextCursor = pageRows.length > 0 ? encodeCreatedAtCursor(pageRows[pageRows.length - 1]) : null;
 
-  // Total exacto sólo cuando es barato (count() de Firestore, sin leer
-  // documentos). Con búsqueda de texto libre no hay forma barata de
-  // contar sin escanear todo — se devuelve null y el cliente muestra
-  // "mostrando N" en vez de "N de M", más honesto que inventar un número.
   const total = search ? null : await countTicketsTotal(user, clauses, companyScoped);
 
   const decorated = await Promise.all(pageRows.map(decorateTicket));
@@ -1060,11 +936,11 @@ async function getTicketDetail(id, user) {
     queryCollection('ticket_assignments', [['ticket_id', '==', toId(id)]]),
     queryCollection('ticket_comments', [['ticket_id', '==', toId(id)]]),
     queryCollection('attachments', [['ticket_id', '==', toId(id)]]),
-    // Trazabilidad: audit_log ya registra creación, asignación, cambios de
-    // estado y comentarios de cada ticket (ver tickets.service.js →
-    // auditService.logAsync en cada acción). La leemos en orden cronológico
-    // para armar la línea de tiempo del ticket.
-    queryCollection('audit_log', [['target_type', '==', 'ticket'], ['target_id', '==', toId(id)]], { orderBy: 'created_at', direction: 'asc', limit: 200 }),
+    queryCollection(
+      'audit_log',
+      [['target_type', '==', 'ticket'], ['target_id', '==', toId(id)]],
+      { orderBy: 'created_at', direction: 'asc', limit: 200 }
+    ),
   ]);
   const relatedAssignments = assignments;
   const relatedComments = comments;
@@ -1107,18 +983,6 @@ async function getTicketDetail(id, user) {
   };
 }
 
-// Nomenclatura por empresa: cada empresa define su propio code_prefix
-// (ej. "N7", "C1", "ESP") y los tickets se numeran con un contador continuo
-// por empresa, nunca se reinicia por mes o anio, con 6 digitos: N7-000001,
-// N7-000002... Si la empresa no tiene prefijo configurado (legacy, o no
-// asignada), se usa "TKT" como fallback para no romper la creacion.
-//
-// Antes esto leia el codigo maximo existente con ese prefijo y escribia en
-// un segundo paso separado (no atomico): dos creaciones de ticket casi
-// simultaneas para la misma empresa podian leer el mismo maximo y terminar
-// con el mismo codigo. Ahora reutiliza el contador atomico de
-// firestore.getNextId (transaccion sobre metadata/counters), namespaced por
-// prefijo para que cada empresa tenga su propia secuencia sin colisiones.
 async function generateUniqueCode(codePrefix) {
   const base = `${codePrefix || 'TKT'}-`;
   const seq = await firestore.getNextId(`ticket_code:${base}`);
@@ -1249,14 +1113,6 @@ async function assignTicket(id, to_user_id, user, notes) {
     throw err;
   }
 
-  // fromUserId/newStatus dependen del estado ACTUAL del ticket
-  // (assigned_to/status). Leer eso fuera de una transaccion y escribir
-  // despues en dos pasos separados (createDoc + updateDoc) dejaba una
-  // ventana: dos reasignaciones casi simultaneas podian leer el mismo
-  // estado viejo, y la que escribe segunda pisa a la primera sin avisar —
-  // igual se dispara la notificacion de "asignado" aunque la asignacion
-  // real haya quedado sobreescrita. runTransaction relee el doc justo antes
-  // de escribir y reintenta solo si hubo un cambio concurrente.
   const db = firestore.getFirestore();
   const ticketRef = db.collection('tickets').doc(String(id));
   const assignmentId = String(await firestore.getNextId('ticket_assignments'));
@@ -1302,14 +1158,6 @@ async function changeTicketStatus(id, next, comment, user) {
     reabierto: ['en_proceso', 'asignado'],
   };
 
-  // La validacion de transicion (transitions[ticket.status].includes(next))
-  // dependia de un ticket leido antes, separado de la escritura posterior
-  // (updateDoc). Dos cambios de estado simultaneos (ej. uno cierra mientras
-  // otro reabre) podian validar ambos contra el mismo estado viejo y la
-  // segunda escritura pisaba a la primera en silencio. La transaccion relee
-  // el doc justo antes de escribir y revalida la transicion contra ese
-  // estado fresco; si cambio entre el intento y el commit, Firestore
-  // reintenta la funcion automaticamente.
   const db = firestore.getFirestore();
   const ticketRef = db.collection('tickets').doc(String(id));
   const commentId = comment ? String(await firestore.getNextId('ticket_comments')) : null;
@@ -1346,15 +1194,11 @@ async function changeTicketStatus(id, next, comment, user) {
   return getTicketDetail(id, user);
 }
 
-/**
- * Genera métricas del sistema para dashboard global.
- * Optimiza consultas para 1,000,000+ tickets usando conteos indexados.
- * Documentado por Miguel Flores.
- */
-async function getStats() {
+async function getStats(companyId = null) {
   const statusValues = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
   const priorityValues = ['baja', 'media', 'alta'];
   const areaValues = ['operaciones', 'logistica', 'mantenimiento', 'sistemas', 'otro'];
+  const companyClause = companyId != null ? [['company_id', '==', toId(companyId)]] : [];
 
   const now = new Date();
   const dates = [];
@@ -1364,17 +1208,17 @@ async function getStats() {
   }
 
   const [total, open, closed, resolved, reopened, byStatus, byPriority, byArea, last30Days, categories, closedSample] = await Promise.all([
-    countCollection('tickets'),
-    countCollection('tickets', [['status', '!=', 'cerrado']]),
-    countCollection('tickets', [['status', '==', 'cerrado']]),
-    countCollection('tickets', [['status', '==', 'solucionado']]),
-    countCollection('tickets', [['status', '==', 'reabierto']]),
-    countGroupByValues('tickets', [], 'status', statusValues),
-    countGroupByValues('tickets', [], 'priority', priorityValues),
-    countGroupByValues('tickets', [], 'area', areaValues),
-    countByDay('tickets', 'created_at', dates),
-    queryCollection('categories', [], { select: ['id', 'name'] }),
-    queryCollection('tickets', [['status', '==', 'cerrado']], { orderBy: 'created_at', direction: 'desc', limit: 5000, select: ['created_at', 'closed_at'] }),
+    countCollection('tickets', companyClause),
+    countCollection('tickets', [...companyClause, ['status', '!=', 'cerrado']]),
+    countCollection('tickets', [...companyClause, ['status', '==', 'cerrado']]),
+    countCollection('tickets', [...companyClause, ['status', '==', 'solucionado']]),
+    countCollection('tickets', [...companyClause, ['status', '==', 'reabierto']]),
+    countGroupByValues('tickets', companyClause, 'status', statusValues),
+    countGroupByValues('tickets', companyClause, 'priority', priorityValues),
+    countGroupByValues('tickets', companyClause, 'area', areaValues),
+    countByDay('tickets', 'created_at', dates, companyClause),
+    queryCollection('categories', companyClause, { select: ['id', 'name'] }),
+    queryCollection('tickets', [...companyClause, ['status', '==', 'cerrado']], { orderBy: 'created_at', direction: 'desc', limit: 5000, select: ['created_at', 'closed_at'] }),
   ]);
 
   const totals = { total, open, closed, resolved, reopened };
@@ -1389,7 +1233,7 @@ async function getStats() {
   const categoryCounts = await Promise.all(categories.map(async (cat) => ({
     id: toId(cat.id),
     name: cat.name,
-    c: await countCollection('tickets', [['category_id', '==', toId(cat.id)]]),
+    c: await countCollection('tickets', [...companyClause, ['category_id', '==', toId(cat.id)]]),
   })));
   const topCategories = categoryCounts.filter((item) => item.id != null).sort((a, b) => b.c - a.c).slice(0, 5);
 
@@ -1404,14 +1248,6 @@ async function getStats() {
   };
 }
 
-// completeTotals — calcula los campos que stats.service.js:enrichTotals()
-// necesita (recibido/asignado/en_proceso/solucionado/reabierto/urgent/
-// closed_today) a partir de los tickets YA filtrados por usuario/área que
-// cada rama de getStatsForUser trae en memoria. Sin esto, si faltaba
-// aunque sea uno de esos campos, enrichTotals() caía a un fallback que
-// consulta TODA la colección `tickets` sin ningún filtro por usuario ni
-// empresa — un supervisor_campo (o admin_area/jefe_inmediato) veía
-// "Urgentes"/"Cerrados hoy"/"Reabiertos" de TODO el sistema, no los suyos.
 function completeTotals(tickets) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1432,11 +1268,6 @@ function completeTotals(tickets) {
   };
 }
 
-/**
- * Genera métricas para el usuario autenticado según su rol.
- * Usa consultas específicas por usuario y área, evitando escaneos de tickets.
- * Documentado por Miguel Flores.
- */
 async function getStatsForUser(userId, user) {
   const uid = toId(userId);
   const companyScoped = user.role !== 'sac' && user.activeCompanyId != null;
@@ -1508,7 +1339,6 @@ async function getStatsForUser(userId, user) {
   return {};
 }
 
-/* ---------- Companies (Firestore) ---------- */
 function normalizeCompany(row) {
   if (!row) return null;
   return {
@@ -1557,14 +1387,9 @@ async function getCompanyById(id, { requester } = {}) {
   return normalizeCompany(row);
 }
 
-// createCompany y updateCompany resuelven slug/code_prefix unicos DENTRO de
-// una transaccion de Firestore (leyendo cada candidato con tx.get justo
-// antes de escribir), en vez de un query de chequeo seguido de un write
-// separado. Antes, dos altas/ediciones simultaneas con el mismo nombre o
-// prefijo podian leer "libre" al mismo tiempo y las dos escribir el mismo
-// slug/code_prefix — dos empresas con "N7" hubieran mezclado su numeracion
-// de tickets en la misma secuencia.
-async function createCompany({ name, slug, logo_url, location, responsible_user_id, color, code_prefix, is_default } = {}) {
+async function createCompany(
+  { name, slug, logo_url, location, responsible_user_id, color, code_prefix, is_default } = {}
+) {
   const seedSlug = slug || (name || '').toLowerCase().replace(/[^a-z0-9-_]+/g, '-');
   const seed = seedSlug && seedSlug.length > 0 ? seedSlug : `empresa-${Date.now()}`;
   const db = firestore.getFirestore();
@@ -1708,6 +1533,7 @@ module.exports = {
   getActionTypes,
   getActiveAuditUsers,
   getTicketById,
+  getTicketWithArea,
   getTicketDetail,
   createTicket,
   listTickets,
@@ -1729,3 +1555,4 @@ module.exports = {
   updateCompany,
   softDeleteCompany,
 };
+

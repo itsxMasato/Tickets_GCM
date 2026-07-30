@@ -1,9 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-/**
- * Utilidades para sincronizar filtros con la URL (query string).
- * Permite que los filtros sean persistentes y compartibles.
- */
-
+/* Documentado por: Miguel Flores */
 export function setFilterInUrl(filterName, value) {
   const current = new URLSearchParams(window.location.hash.split('?')[1] || '');
   if (value && value !== '') {
@@ -36,10 +31,6 @@ export function getAllFiltersFromUrl() {
   return filters;
 }
 
-/**
- * Sincroniza cambios de filtros hacia la URL de forma automática.
- * Devuelve una función cleanup para desuscribirse.
- */
 export function autoSyncFiltersToUrl(filterElements) {
   const handlers = {};
   
@@ -59,3 +50,4 @@ export function autoSyncFiltersToUrl(filterElements) {
     }
   };
 }
+

@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
@@ -19,9 +19,6 @@ const TYPE_LABEL = {
   ticket_transferred:    'Para tu revisión',
 };
 
-// Verbo de la acción rápida por tipo — mismo criterio que el mock
-// ("Abrir Ticket" / "Responder" / "Ver Detalles"), pero derivado del tipo
-// real de la notificación en vez de estar hardcodeado por fila.
 const TYPE_CTA = {
   ticket_created:        'Abrir ticket',
   ticket_assigned:       'Abrir ticket',
@@ -53,10 +50,6 @@ function pillFor(type) {
   ]);
 }
 
-// KPI con estilo propio por tarjeta (icono arriba, valor grande abajo) —
-// distinto del kpi-card genérico de borde lateral que usan otras vistas:
-// acá cada card tiene su propio tratamiento (borde coral para "no leídas",
-// fondo navy para "tipo frecuente"), tal como lo pide este mock puntual.
 function kpiCard({ label, value, hint = '', icon, variant = 'default' }) {
   const isCoral = variant === 'coral';
   const isDark = variant === 'dark';
@@ -82,7 +75,6 @@ export async function renderNotifications({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
   let limit = LOAD_STEP;
 
-  // Header
   root.appendChild(h('div.flex.flex-col.justify-between.gap-4', { class: 'md:flex-row md:items-end' }, [
     h('div', {}, [
       h('div.flex.items-center.gap-2.flex-wrap', {}, [
@@ -100,14 +92,10 @@ export async function renderNotifications({ user }) {
     ]),
   ]));
 
-  // KPIs y Lista — declarados antes de los filtros porque setActive()
-  // recarga y necesita acceder a ellos.
   const kpis = h('div.grid.grid-cols-2.gap-3', { class: 'lg:grid-cols-4' });
   const list = h('div.flex.flex-col.gap-3', {});
   const loadMoreWrap = h('div.flex.justify-center.mt-2', {});
 
-  // Filtros — píldora segmentada, mismo lenguaje visual que el resto de
-  // la app (bg-surface envolvente + activo en blanco con sombra).
   const filterWrap = h('div.flex.items-center.gap-1.bg-surface.rounded-xl.p-1.w-fit', {});
   const FILTERS = [
     { key: 'all',     label: 'Todas' },
@@ -198,13 +186,15 @@ export async function renderNotifications({ user }) {
       ].join(' '),
       onclick: () => onClick(n),
     }, [
-      // Columna izquierda: tipo + estado
-      h('div.flex.flex-row.items-center.gap-2.flex-wrap', { class: 'md:flex-col md:items-start md:min-w-[130px] md:flex-none' }, [
-        pillFor(n.type),
-        h('span.text-slate-500', { class: 'text-[11px]', title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
-        n.read ? null : h('span.rounded-full.bg-accent', { class: 'w-1.5 h-1.5' }),
-      ]),
-      // Cuerpo
+      h(
+        'div.flex.flex-row.items-center.gap-2.flex-wrap',
+        { class: 'md:flex-col md:items-start md:min-w-[130px] md:flex-none' },
+        [
+          pillFor(n.type),
+          h('span.text-slate-500', { class: 'text-[11px]', title: formatDateTime(n.created_at) }, relativeFromNow(n.created_at)),
+          n.read ? null : h('span.rounded-full.bg-accent', { class: 'w-1.5 h-1.5' }),
+        ]
+      ),
       h('div.flex-1.min-w-0.space-y-1', {}, [
         h('div.flex.items-start.justify-between.gap-2.flex-wrap', {}, [
           h('h4.font-bold.text-brand-ink', { class: n.read ? 'font-semibold' : '' }, n.title),
@@ -225,7 +215,6 @@ export async function renderNotifications({ user }) {
   function draw(items) {
     drawKpis(items);
 
-    // Lista
     list.innerHTML = '';
     loadMoreWrap.innerHTML = '';
     if (!items.length) {
@@ -251,11 +240,9 @@ export async function renderNotifications({ user }) {
         h('div.flex-1.h-px.bg-surface-border'),
       ]));
     }
-    for (const n of readItems) list.appendChild(notificationCard(n));
+    for (const n of readItems)
+      list.appendChild(notificationCard(n));
 
-    // "Cargar más" — mismo endpoint, sólo pide un límite mayor (el backend
-    // no tiene cursor de paginación todavía, así que esto es lo honesto:
-    // no finge páginas que no existen, simplemente trae más resultados).
     if (items.length >= limit) {
       loadMoreWrap.appendChild(h('button.btn.btn-ghost', {
         onclick: () => { limit += LOAD_STEP; reload(); },
@@ -272,14 +259,12 @@ export async function renderNotifications({ user }) {
 
   await reload();
 
-  // ── Tiempo real ─────────────────────────────────────────────────────────────
   const ac1 = subscribeToRealtimeEvents(['notification:new'], () => reload());
   const ac2 = subscribeToRealtimeEvents(['ticket:created', 'ticket:assigned', 'ticket:status_changed', 'ticket:commented', 'attachment:added', 'ticket:updated'], () => reload());
 
-  // Cleanup al desmontar la vista
   root._cleanup = () => { ac1.abort(); ac2.abort(); };
-  // Guardar referencia para que el router la limpie
   root._gcmCleanup = root._cleanup;
 
   return root;
 }
+

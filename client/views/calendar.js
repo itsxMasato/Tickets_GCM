@@ -1,4 +1,4 @@
-﻿/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { go } from '../router.js';
@@ -75,10 +75,6 @@ function formatTime(value) {
 
 const HOUR_START = 7;
 const HOUR_END = 20;
-// Alto de fila en px — debe ser el mismo valor que --gantt-row-h en
-// styles.css (.gantt-board-grid), porque el posicionamiento absoluto de
-// los eventos (renderEventBlock) calcula su `top`/`height` a partir de
-// este número, no de la altura real del DOM.
 const ROW_HEIGHT = 56;
 
 function formatHourLabel(hour) {
@@ -105,19 +101,10 @@ export async function renderCalendar({ query, user }) {
   ]);
   root.appendChild(header);
 
-  // Layout: en >=768px sidebar (320px) + gantt; en mobile se apila (sidebar
-  // debajo). El grid de 1 columna ya hace el apilamiento; lo que ajustamos
-  // es el ancho del sidebar (sin max-w en mobile) y el comportamiento del
-  // card de tickets (sin sticky en mobile — no hay nada al lado).
   const layout = h('div', { className: 'grid grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)] gap-5' });
   const sidebar = h('div', { className: 'min-w-0 md:max-w-[320px] flex flex-col gap-4' });
   const calendarSection = h('div', { className: 'min-w-0 flex flex-col gap-4' });
 
-  // En mobile el card de tickets NO debe ser sticky: ocupa el ancho
-  // completo y la grid de gantt va debajo. En desktop vuelve a sticky
-  // para acompañar el scroll del gantt.
-  // KPI resumen semanal — tiles con fondo tintado (bg-surface), como el
-  // bento del mock. Va primero en el sidebar, antes de los tickets.
   const statsCard = h('div.card', {}, [
     h('h2.text-xs.font-semibold.text-slate-500.uppercase.tracking-wider.mb-3', {}, 'Resumen semanal'),
     h('div.grid.grid-cols-2.gap-2', {}, [
@@ -144,8 +131,6 @@ export async function renderCalendar({ query, user }) {
         h('p.text-sm.text-slate-500', {}, 'Gestión estratégica de mantenimientos preventivos y correctivos semanal.'),
       ]),
       h('div.gantt-board-actions', {}, [
-        // Segmento prev/Hoy/next en una sola píldora — "Hoy" queda resaltado
-        // en blanco con sombra, como el selector de rango del mock.
         h('div.flex.items-center.bg-surface.p-1.rounded-lg', {}, [
           h('button.p-2.rounded-md.text-brand-ink.transition-all', { class: 'hover:bg-white', type: 'button', 'aria-label': 'Semana anterior', onclick: () => { weekStart = addDays(weekStart, -7); updateHash(); } }, [svg(h, ICON.chevronL, 'w-4 h-4')]),
           h('button.px-4.py-2.rounded-md.font-medium.text-sm.text-brand.bg-white.shadow-sm', { type: 'button', onclick: () => { weekStart = startOfWeek(new Date()); updateHash(); } }, 'Hoy'),
@@ -168,14 +153,6 @@ export async function renderCalendar({ query, user }) {
 
   const boardShell = h('div.gantt-board-shell', {});
   boardShell.appendChild(weekInfo);
-  // gantt-board-grid-wrapper activa el hint de scroll (gradiente) en CSS
-  // para <768px. min-w-[640px] fuerza a la grid interna a mantener sus
-  // proporciones (7 columnas × 100px mínimo) y al wrapper a scrollear
-  // horizontalmente — sin esto, en 320px las celdas se aplastan.
-  //
-  // Estructura en 2 niveles (ver comentario en styles.css .gantt-event-overlay):
-  // headerRow (fila de días) queda fuera de hourGridWrap porque no participa
-  // del posicionamiento absoluto de los eventos.
   const boardGridWrapper = h('div.gantt-board-grid-wrapper.overflow-x-auto', {});
   const headerRow = h('div.gantt-board-header-row', { style: { minWidth: '640px' } });
   const hourGridWrap = h('div.gantt-hour-grid-wrap', { style: { minWidth: '640px' } });
@@ -283,10 +260,6 @@ export async function renderCalendar({ query, user }) {
 
     visibleTickets.forEach((ticket) => {
       const priorityMeta = getPriorityMeta(ticket.priority);
-      // Borde izquierdo coloreado por prioridad — mismo lenguaje visual que
-      // el mock (.priority-baja/media/alta/urgente), derivado del hex real
-      // del ticket en vez de clases fijas, para no depender de que el valor
-      // de prioridad exista como clase CSS de antemano.
       const card = h('button.flex.items-start.justify-between.gap-2.w-full.rounded-lg.p-3.text-left.bg-white.transition-shadow', {
         class: 'cursor-grab active:cursor-grabbing hover:shadow-md',
         style: { borderLeft: `4px solid ${priorityMeta.hex}`, borderTop: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' },
@@ -314,17 +287,11 @@ export async function renderCalendar({ query, user }) {
 
     const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
 
-    // Fila de días — grid propio, separado del grid de horas (ver comentario
-    // en styles.css .gantt-board-header-row / .gantt-event-overlay).
     headerRow.appendChild(h('div.gantt-board-time-head', {}, 'H/D'));
     days.forEach((date) => {
       headerRow.appendChild(h('div.gantt-board-column-head', {}, `${DAY_LABELS[(date.getDay() + 6) % 7]} ${date.getDate()}`));
     });
 
-    // Grid de horas: sólo celdas invisibles (dibujan la grilla + capturan el
-    // drop del drag&drop). Los eventos ya NO se insertan acá — se dibujan
-    // aparte, en la capa absoluta (ver más abajo), para poder mostrar su
-    // duración real sin quedar acotados a la celda de su hora de inicio.
     for (let hour = HOUR_START; hour <= HOUR_END; hour += 1) {
       boardGrid.appendChild(h('div.gantt-board-time-label', {}, formatHourLabel(hour)));
       days.forEach((date) => {
@@ -337,9 +304,6 @@ export async function renderCalendar({ query, user }) {
       });
     }
 
-    // Capa de eventos: por día, resolvemos solapes (varios eventos en el
-    // mismo rango horario) repartiendo el ancho de la columna entre ellos,
-    // y posicionamos cada bloque según su horario real.
     days.forEach((date, dayIndex) => {
       const key = dayKey(date);
       const dayEvents = events
@@ -351,10 +315,6 @@ export async function renderCalendar({ query, user }) {
     });
   }
 
-  // Asignación de columnas por solape (estilo "greedy interval coloring"):
-  // cada evento toma la primera columna libre; si no hay ninguna libre
-  // abre una nueva. `cols` = máximo de columnas simultáneas usadas ese día,
-  // para que el ancho se reparta igual entre todos los bloques del día.
   function layoutDayEvents(dayEvents) {
     const active = [];
     const placed = [];
@@ -378,12 +338,6 @@ export async function renderCalendar({ query, user }) {
     return date.getHours() + date.getMinutes() / 60;
   }
 
-  // Bloque de evento posicionado por coordenadas reales (no acotado a la
-  // celda de su hora de inicio) — top/height vienen de start_at/end_at,
-  // left/width de la columna del día (dayIndex) y de cuántos eventos se
-  // solapan ese día (col/cols). Los porcentajes son relativos a
-  // .gantt-event-overlay, que en CSS ya arranca después de la columna de
-  // horas (left:100px) — por eso acá no hace falta sumar ese offset.
   function renderEventBlock(event, dayIndex, col, cols) {
     const startDate = parseDateTime(event.start_at);
     const endDate = event.end_at ? parseDateTime(event.end_at) : new Date(startDate.getTime() + 60 * 60 * 1000);
@@ -491,9 +445,6 @@ export async function renderCalendar({ query, user }) {
     }
   }
 
-  // Ajustar duración de un evento ya colocado — evita tener que arrastrar el
-  // mismo ticket celda por celda para cubrir varias horas: se coloca una vez
-  // (1h por defecto) y acá se extiende el bloque a la duración real.
   const DURATION_QUICK_OPTIONS = [1, 2, 3, 4, 8];
   const DURATION_MIN = 0.5;
   const DURATION_MAX = 12;
@@ -630,3 +581,4 @@ export async function renderCalendar({ query, user }) {
   await load();
   return { view: root };
 }
+

@@ -1,4 +1,4 @@
-﻿/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { statusBadge, priorityBadge } from './badge.js';
 import { relativeFromNow, PRIORITY_LABEL } from '../utils/format.js';
@@ -26,3 +26,4 @@ export function ticketCard(t) {
     ]) : null,
   ]);
 }
+

@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const express = require('express');
 const router = express.Router();
 const categoriesService = require('../services/categories.service');
@@ -22,16 +22,17 @@ router.post('/', requireAuth, requireRole('sac'), async (req, res, next) => {
 
 router.patch('/:id', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
-    const cat = await categoriesService.update(parseInt(req.params.id, 10), req.body || {});
+    const cat = await categoriesService.update(parseInt(req.params.id, 10), req.body || {}, req.user);
     res.json({ category: cat });
   } catch (err) { next(err); }
 });
 
 router.delete('/:id', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
-    await categoriesService.remove(parseInt(req.params.id, 10));
+    await categoriesService.remove(parseInt(req.params.id, 10), req.user);
     res.status(204).send();
   } catch (err) { next(err); }
 });
 
 module.exports = router;
+

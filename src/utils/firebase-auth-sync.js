@@ -1,3 +1,4 @@
+/* Documentado por: Miguel Flores */
 'use strict';
 
 async function syncFirebaseAuthUser({ authClient, user, password, currentEmail }) {
@@ -59,3 +60,4 @@ async function syncFirebaseAuthUser({ authClient, user, password, currentEmail }
 }
 
 module.exports = { syncFirebaseAuthUser };
+

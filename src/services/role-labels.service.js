@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firebaseAdmin = require('../firebaseAdmin');
 const validators = require('../utils/validators');
 const auditService = require('./audit.service');
@@ -7,8 +7,6 @@ const auditService = require('./audit.service');
 const COLLECTION = 'role_labels';
 const LABEL_MAX = 80;
 
-// Lista los 4 labels editables. Los roles sin doc en Firestore caen al
-// default de validators.ROLE_LABEL (fuente oficial de defaults del backend).
 async function list() {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();
@@ -55,10 +53,6 @@ async function update(role, body, user) {
     throw err;
   }
 
-  // Validación dura del label.
-  //  - string requerido
-  //  - trim 1..LABEL_MAX caracteres (sin espacios al inicio/fin)
-  //  - no aceptamos vacío ni solo espacios
   const raw = body && body.label;
   if (typeof raw !== 'string') {
     const err = new Error('El campo "label" es obligatorio y debe ser texto.');
@@ -82,17 +76,12 @@ async function update(role, body, user) {
 
   const previous = await get(role);
 
-  // Si el label nuevo coincide con el default, lo persistimos igual. Razón:
-  // predecibilidad — el SAC ve "Sin cambios personalizados" como estado
-  // explícito, no implícito. Borralo implicaría que recargar la página
-  // muestre el default aunque el usuario lo había fijado conscientemente.
   await db.collection(COLLECTION).doc(role).set({
     label: trimmed,
     updated_at: new Date().toISOString(),
     updated_by: user?.id || null,
   }, { merge: true });
 
-  // Audit + realtime sólo si realmente cambió.
   if (previous !== trimmed) {
     await auditService.logAsync({
       user_id: user?.id || null,
@@ -104,10 +93,6 @@ async function update(role, body, user) {
       new_value: trimmed,
     });
 
-    // Tiempo real: cualquier usuario autenticado necesita ver el cambio
-    // (sidebar, topbar, chat, ticket detail, users table). Por eso el emit
-    // es broadcast, no filtrado por rol. La sala 'tickets' también lo
-    // recibe para que cualquier vista que cachee labels pueda invalidar.
     const { emit } = require('../sockets');
     emit('role:label_updated', {
       role,
@@ -122,3 +107,4 @@ async function update(role, body, user) {
 }
 
 module.exports = { list, get, update, LABEL_MAX };
+

@@ -1,9 +1,6 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 const code = require('fs').readFileSync('C:\\Users\\flore\\OneDrive\\Desktop\\Tickets_GCM\\client\\views\\roles.js', 'utf8');
 try {
-  // Convert ESM to CJS-ish by wrapping — but this is module syntax. Just check the raw parse.
-  // Use the babel/esprima-like via acorn? Node's Function constructor won't parse import. Use a manual check.
-  // Try to parse with VM and bypass the import via stripping.
   const stripped = code.replace(/^import .*$/gm, '');
   new Function(stripped);
   console.log('No syntax error');
@@ -19,3 +16,4 @@ try {
     }
   }
 }
+

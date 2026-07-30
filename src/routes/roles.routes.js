@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const express = require('express');
 const router = express.Router();
 const rolesService = require('../services/roles.service');
@@ -29,9 +29,6 @@ router.patch('/:role', requireAuth, requireRole('sac'), async (req, res, next) =
   } catch (err) { next(err); }
 });
 
-// DELETE /api/roles/:role — elimina un rol con reasignación de usuarios.
-// Body: { reassignTo: 'admin_area' }. Rechazado si 'sac' o si hay
-// usuarios sin reasignación.
 router.delete('/:role', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     await rolesService.deleteRole(req.params.role, req.body || {}, req.user);
@@ -39,11 +36,6 @@ router.delete('/:role', requireAuth, requireRole('sac'), async (req, res, next) 
   } catch (err) { next(err); }
 });
 
-// DELETE /api/roles/permissions/:key — elimina un permiso del sistema,
-// sustituyéndolo en los roles que lo tenían activo. Body:
-// { replacement: 'createTicket' }.
-// El segmento literal 'permissions' gana sobre el param ':role' —
-// /api/roles/permissions/manageUsers matchea esta ruta, no la anterior.
 router.delete('/permissions/:key', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     await rolesService.deletePermission(req.params.key, req.body || {}, req.user);
@@ -52,3 +44,4 @@ router.delete('/permissions/:key', requireAuth, requireRole('sac'), async (req, 
 });
 
 module.exports = router;
+

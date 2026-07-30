@@ -1,10 +1,6 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 
-/**
- * Crea un campo de búsqueda con debounce para búsqueda en tiempo real.
- * Llama al callback con el texto de búsqueda después de un tiempo sin escribir.
- */
 export function instantSearchInput(onSearch, initialValue = '') {
   const input = h('input.input', { 
     type: 'search', 
@@ -26,9 +22,6 @@ export function instantSearchInput(onSearch, initialValue = '') {
   return input;
 }
 
-/**
- * Crea un contador visual de resultados de búsqueda/filtrado.
- */
 export function resultCounter(count, total) {
   if (total === 0) {
     return h('span.text-xs.text-slate-500', {}, 'Sin resultados');
@@ -38,3 +31,4 @@ export function resultCounter(count, total) {
   }
   return h('span.text-xs.text-slate-500', {}, `${count} de ${total} resultado${total !== 1 ? 's' : ''}`);
 }
+

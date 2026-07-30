@@ -1,6 +1,6 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 #!/usr/bin/env node
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const Database = require('better-sqlite3');
 const path = require('path');
 const cfg = require('../src/config');
@@ -11,7 +11,6 @@ console.log('DB:', cfg.dbPath);
 const createSqlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
 const createSql = createSqlRow && createSqlRow.sql ? createSqlRow.sql : '';
 
-// If the current users table doesn't include the canonical roles, rebuild it safely.
 if (!/admin_area/.test(createSql) || !/jefe_inmediato/.test(createSql)) {
   console.log('Rebuilding users table to canonical schema and migrating roles...');
   const tx = db.transaction(() => {
@@ -39,7 +38,6 @@ if (!/admin_area/.test(createSql) || !/jefe_inmediato/.test(createSql)) {
     db.prepare('DROP TABLE users').run();
     db.prepare("ALTER TABLE users_new RENAME TO users").run();
 
-    // update sqlite_sequence for users
     const maxIdRow = db.prepare('SELECT MAX(id) AS m FROM users').get();
     const maxId = maxIdRow ? (maxIdRow.m || 0) : 0;
     try { db.prepare('INSERT OR REPLACE INTO sqlite_sequence(name, seq) VALUES (?, ?)').run('users', maxId); } catch (e) {}
@@ -81,3 +79,4 @@ console.log('Final users:');
 console.table(db.prepare('SELECT id,username,full_name,role,area,active FROM users').all());
 
 db.close();
+

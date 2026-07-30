@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-"use strict";
+/* Documentado por: Miguel Flores */
+"use strict"
 
 const firestoreData = require('../firestoreData');
 const { ROLE_VALUES } = require('../orm/enums');
@@ -12,11 +12,6 @@ const {
 } = require('../utils/validators');
 const auditService = require('./audit.service');
 
-// Emite un evento de membresía. Llega a:
-//   - room 'sac' (platform admin, donde está Miguel hoy).
-//   - room `company:{company_id}` para miembros futuros de esa empresa.
-//   - room `user:{user_id}` para notificar al propio usuario (vía socket
-//     de su sesión, con el `user.id` que asigna sockets/index.js).
 function emitMembership(event, membership, companyId, userId) {
   try {
     const { emit } = require('../sockets');
@@ -27,28 +22,8 @@ function emitMembership(event, membership, companyId, userId) {
         ...(userId ? [`user:${userId}`] : []),
       ],
     });
-  } catch (e) {
-    /* socket no inicializado aún */
-  }
+  } catch (e) {}
 }
-
-/**
- * memberships.service — CRUD de membresías usuario ↔ empresa.
- *
- * Reglas:
- *   - Multi-membresía: un usuario puede pertenecer a N empresas con rol
- *     y área distintos en cada una. La membresía es la fuente operativa
- *     de "qué puede hacer este user en esta empresa".
- *   - listByUser: el propio user o platform admin.
- *   - listByCompany: miembros de la empresa (o platform admin).
- *   - create/update/softDelete: solo platform admin en Fase 2.
- *     Fase 7 habilitará `manageUsers` por empresa (override de role_permissions).
- *   - role: valida contra ROLE_VALUES.
- *   - UNIQUE (user_id, company_id): se valida antes para devolver 409 limpio.
- *   - is_default: si true, transacción para desmarcar el resto del mismo user.
- *   - Soft-delete / desactivar: NO se puede borrar/desactivar la ÚLTIMA
- *     membresía activa del user (quedaría sin tenant).
- */
 
 function serialize(row) {
   if (!row) return null;
@@ -95,18 +70,14 @@ async function getMembershipRowsForUser(userId, { activeOnly = false } = {}) {
         rows.push(...candidateRows);
         break;
       }
-    } catch (_) {
-      // Continuar al siguiente fallback si la consulta falla.
-    }
+    } catch (_) {}
   }
 
   if (!rows.length) {
     try {
       const fallbackRows = await firestoreData.queryCollection('user_company_memberships', [], { limit: 1000 });
       if (Array.isArray(fallbackRows)) rows.push(...fallbackRows);
-    } catch (_) {
-      // Ignorar y usar el siguiente fallback.
-    }
+    } catch (_) {}
   }
 
   if (!rows.length) {
@@ -127,12 +98,6 @@ async function findMembershipForUserAndCompany(userId, companyId, { activeOnly =
   return rows.find((row) => normalizeMembershipId(row.company_id) === normalizedCompanyId) || null;
 }
 
-/**
- * resolveDefaultCompanyId — empresa que se activa automáticamente al iniciar
- * sesión cuando el user tiene una o más membresías activas: la marcada
- * `is_default`, o si no hay ninguna marcada, la primera. `null` si no tiene
- * membresías (mantiene el comportamiento global/legacy de antes de esto).
- */
 async function resolveDefaultCompanyId(userId) {
   const rows = await getMembershipRowsForUser(userId, { activeOnly: true });
   if (!rows.length) return null;
@@ -140,27 +105,16 @@ async function resolveDefaultCompanyId(userId) {
   return Number((defaultRow || rows[0]).company_id);
 }
 
-/**
- * isActiveMemberOfCompany — usado para validar el switch de empresa activa:
- * el requester debe tener una membresía activa en esa empresa.
- */
 async function isActiveMemberOfCompany(userId, companyId) {
   const membership = await findMembershipForUserAndCompany(userId, companyId, { activeOnly: true });
   return !!membership;
 }
 
-/**
- * listByUser — devuelve las membresías del user con la empresa denormalizada.
- * El propio user, platform admin, o SAC (gestiona usuarios/empresas).
- */
 async function listByUser(userId, { requester } = {}) {
   const targetUserId = Number(userId);
-  if (!requester) throw forbiddenError('Debe iniciar sesión.');
-  // Number(...) normaliza: el id "propio" puede llegar como string desde un
-  // doc crudo de Firestore (p.ej. login/firebase pasan el user sin pasar por
-  // requireAuth todavía) — comparar sin normalizar rompía el self-access
-  // ("21" !== 21) y devolvía membresías vacías justo al iniciar sesión.
-  if (!requester.isPlatformAdmin && requester.role !== 'sac' && Number(requester.id) !== targetUserId) {
+  if (!requester)
+    throw forbiddenError('Debe iniciar sesión.');
+  if (!requester.isPlatformAdmin && Number(requester.id) !== targetUserId) {
     throw forbiddenError('Solo puede ver sus propias membresías.');
   }
   await loadUserOrThrow(targetUserId);
@@ -176,14 +130,10 @@ async function listByUser(userId, { requester } = {}) {
   });
 }
 
-/**
- * listByCompany — miembros de una empresa, con datos básicos del user.
- * El requester debe ser miembro o platform admin.
- */
 async function listByCompany(companyId, { activeOnly = true, requester } = {}) {
   if (!requester) throw forbiddenError('Debe iniciar sesión.');
   const cid = Number(companyId);
-  if (!requester.isPlatformAdmin && requester.role !== 'sac') {
+  if (!requester.isPlatformAdmin) {
     const rows = await getMembershipRowsForUser(requester.id, { activeOnly: true });
     const hasAccess = rows.some((row) => normalizeMembershipId(row.company_id) === String(cid));
     if (!hasAccess) throw forbiddenError('No es miembro de esta empresa.');
@@ -201,15 +151,7 @@ async function listByCompany(companyId, { activeOnly = true, requester } = {}) {
   });
 }
 
-/**
- * create — crea una membresía. Solo platform admin (Fase 2).
- *   - role: obligatorio, debe estar en ROLE_VALUES.
- *   - is_default: si true, desmarca el resto del mismo user (transacción).
- */
 async function create(userId, input, requester, options = {}) {
-  // Allow platform admin as usual. Additionally, support an internal
-  // bypass when `options.allowSACCreate` está activo y el requester
-  // tiene rol 'sac' (usado por flows admin que crean usuario + membresía).
   if (!requester || (!requester.isPlatformAdmin && !(options && options.allowSACCreate && requester.role === 'sac'))) {
     throw forbiddenError('Solo el administrador de plataforma puede asignar membresías.');
   }
@@ -223,9 +165,9 @@ async function create(userId, input, requester, options = {}) {
   const isDefault = !!(input && input.is_default);
 
   const dup = await findMembershipForUserAndCompany(user.id, company.id, { activeOnly: false });
-  if (dup) { throw conflictError(`El usuario ya tiene una membresía en "${company.name}".`); }
+  if (dup)
+    { throw conflictError(`El usuario ya tiene una membresía en "${company.name}".`); }
 
-  // If is_default, clear others for this user
   if (isDefault) {
     const others = await firestoreData.queryCollection('user_company_memberships', [['user_id', '==', user.id], ['is_default', '==', 1]]);
     for (const o of others) await firestoreData.updateDoc('user_company_memberships', o.id, { is_default: 0 });
@@ -257,21 +199,9 @@ async function create(userId, input, requester, options = {}) {
   return out;
 }
 
-/**
- * update — actualiza role, is_default, active. Solo platform admin.
- * Si desactiva, valida que no sea la última activa del user.
- */
-/**
- * assertCompanyKeepsCoverage — evita que una empresa quede sin ningun
- * miembro activo, o sin ningun admin_area activo, al desactivar o
- * recategorizar una membresia. Antes solo se chequeaba que no fuera la
- * ULTIMA membresia activa del USUARIO en todo el sistema: una empresa podia
- * quedar completamente sin nadie que trabaje sus tickets mientras el
- * usuario afectado seguia teniendo membresias en OTRAS empresas, sin
- * ningun aviso ni bloqueo.
- */
 async function assertCompanyKeepsCoverage(before, { becomesInactive = false, newRole } = {}) {
-  if (!before.active) return; // ya estaba inactiva: no cambia la cobertura de la empresa
+  if (!before.active)
+    return;
   const changesRole = newRole !== undefined && newRole !== before.role;
   if (!becomesInactive && !changesRole) return;
 
@@ -279,7 +209,6 @@ async function assertCompanyKeepsCoverage(before, { becomesInactive = false, new
     const activeMembers = await firestoreData.countCollection('user_company_memberships', [
       ['company_id', '==', before.company_id], ['active', '==', 1],
     ]);
-    // El conteo incluye a `before` (todavia activa en la DB); restamos 1.
     if (activeMembers - 1 <= 0) {
       throw conflictError('No se puede desactivar: esta empresa quedaría sin ningún miembro activo.');
     }
@@ -296,9 +225,6 @@ async function assertCompanyKeepsCoverage(before, { becomesInactive = false, new
 }
 
 async function update(membershipId, input, requester, options = {}) {
-  // Mismo bypass interno que create(): companies.service.js necesita poder
-  // re-rolear a admin_area la membresia existente de un "Encargado" cuando
-  // el requester es SAC (no platform admin) creando/editando una empresa.
   if (!requester || (!requester.isPlatformAdmin && !(options && options.allowSACCreate && requester.role === 'sac'))) {
     throw forbiddenError('Solo el administrador de plataforma puede modificar membresías.');
   }
@@ -315,9 +241,6 @@ async function update(membershipId, input, requester, options = {}) {
   await assertCompanyKeepsCoverage(before, { becomesInactive: wantsActive === false, newRole: patch.role });
   if (wantsActive !== null) {
     if (!wantsActive) {
-      // Mismo criterio que softDelete(): el piso de "al menos una membresía
-      // activa" no aplica a un platform admin, que no depende de ninguna
-      // membresía para operar.
       const targetUser = await firestoreData.getUserById(before.user_id);
       if (!(targetUser && targetUser.is_platform_admin)) {
         const others = await firestoreData.countCollection('user_company_memberships', [['user_id', '==', before.user_id], ['active', '==', 1]]);
@@ -352,20 +275,12 @@ async function update(membershipId, input, requester, options = {}) {
   return out;
 }
 
-/**
- * softDelete — pone active=0. Solo platform admin.
- * Regla: no se puede desactivar la última membresía activa del user.
- */
 async function softDelete(membershipId, requester) {
   if (!requester || !requester.isPlatformAdmin) throw forbiddenError('Solo el administrador de plataforma puede eliminar membresías.');
   const before = await firestoreData.getDoc('user_company_memberships', Number(membershipId));
   if (!before) throw notFoundError('Membresía no encontrada.');
-  if (!before.active) return serialize(before);
-  // El piso de "al menos una membresía activa" protege a un usuario común de
-  // quedar sin ninguna empresa (sin tenant no puede hacer nada). Un platform
-  // admin no depende de ninguna membresía para operar (bypassea el requisito
-  // de empresa activa, ver tickets.service.js createTicket) — bloquearlo acá
-  // le impediría deshacer una membresía asignada por error.
+  if (!before.active)
+    return serialize(before);
   const targetUser = await firestoreData.getUserById(before.user_id);
   if (!(targetUser && targetUser.is_platform_admin)) {
     const others = await firestoreData.countCollection('user_company_memberships', [['user_id', '==', before.user_id], ['active', '==', 1]]);
@@ -401,3 +316,4 @@ module.exports = {
   findMembershipForUserAndCompany,
   _serialize: serialize,
 };
+

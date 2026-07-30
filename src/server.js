@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const http = require('http');
 const config = require('./config');
 const firebaseAdmin = require('./firebaseAdmin');
@@ -15,14 +15,11 @@ async function start() {
     process.exit(1);
   }
 
-  // 1) Crear app
   const { app, sessionMiddleware } = createApp();
   const httpServer = http.createServer(app);
 
-  // 3) Socket.IO
   sockets.setup(httpServer, sessionMiddleware);
 
-  // 4) Listen
   httpServer.listen(config.port, '0.0.0.0', () => {
     console.log(`[tickets-gcm] Servidor escuchando en http://0.0.0.0:${config.port}`);
     console.log(`[tickets-gcm] Entorno: ${config.env}`);
@@ -30,3 +27,4 @@ async function start() {
 }
 
 start();
+

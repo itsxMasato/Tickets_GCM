@@ -1,9 +1,8 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { go } from '../router.js';
 import { ICON } from '../utils/icons.js';
 
-// SVG helper que cierra sobre h (local)
 function svg(path, cls = 'w-4 h-4') {
   return h(`svg.${cls}`, {
     fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8',
@@ -12,14 +11,15 @@ function svg(path, cls = 'w-4 h-4') {
   });
 }
 
-// Botón de navegación atrás reutilizable
-export function backButton({ 
-  href = '/tickets',
-  label = 'Volver',
-  icon = ICON.back,
-  className = 'text-brand-ink hover:text-brand',
-  minHeight = 'min-h-[44px]',
-} = {}) {
+export function backButton(
+  { 
+    href = '/tickets',
+    label = 'Volver',
+    icon = ICON.back,
+    className = 'text-brand-ink hover:text-brand',
+    minHeight = 'min-h-[44px]',
+  } = {}
+) {
   return h(`button.flex.items-center.gap-1.text-sm.font-medium.${className}.inline-flex.${minHeight}.-ml-1.px-1.rounded`, 
     { onclick: () => go(href) }, 
     [
@@ -30,3 +30,4 @@ export function backButton({
 }
 
 export default backButton;
+

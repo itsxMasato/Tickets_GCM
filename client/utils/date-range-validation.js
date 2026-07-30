@@ -1,8 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-/**
- * Validación de rangos de fechas para filtros.
- */
-
+/* Documentado por: Miguel Flores */
 export function validateDateRange(dateFrom, dateTo) {
   if (!dateFrom || !dateTo) return { valid: true, message: null };
   
@@ -20,7 +16,6 @@ export function validateDateRange(dateFrom, dateTo) {
     };
   }
   
-  // Validar que no sea más de 1 año
   const diff = to.getTime() - from.getTime();
   const oneYearMs = 365 * 24 * 60 * 60 * 1000;
   if (diff > oneYearMs) {
@@ -33,9 +28,6 @@ export function validateDateRange(dateFrom, dateTo) {
   return { valid: true, message: null };
 }
 
-/**
- * Formatea un rango de fechas de forma legible.
- */
 export function formatDateRange(dateFrom, dateTo) {
   if (!dateFrom && !dateTo) return 'Sin filtro de fechas';
   
@@ -49,9 +41,6 @@ export function formatDateRange(dateFrom, dateTo) {
   if (dateTo) return `Hasta ${formatDate(dateTo)}`;
 }
 
-/**
- * Calculates the number of days in a date range.
- */
 export function calculateDays(dateFrom, dateTo) {
   if (!dateFrom || !dateTo) return null;
   
@@ -61,5 +50,6 @@ export function calculateDays(dateFrom, dateTo) {
   if (isNaN(from.getTime()) || isNaN(to.getTime())) return null;
   
   const diff = to.getTime() - from.getTime();
-  return Math.ceil(diff / (24 * 60 * 60 * 1000)) + 1; // Include both start and end day
+  return Math.ceil(diff / (24 * 60 * 60 * 1000)) + 1;
 }
+

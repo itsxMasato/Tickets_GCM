@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 const express = require('express');
 const serverless = require('@netlify/functions');
 const path = require('path');
@@ -77,3 +77,4 @@ app.use('/api', (req, res) => {
 });
 
 exports.handler = serverless.handler(app);
+

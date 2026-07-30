@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { setState } from '../store.js';
 import { api } from '../api.js';
@@ -6,19 +6,6 @@ import { toast } from '../utils/toast.js';
 import { reconnectSocket } from '../socket.js';
 import { hasMultipleCompanies } from '../utils/permissions.js';
 
-/**
- * company-switcher — selector de empresa activa en el topbar. Solo se
- * renderiza si el user tiene más de una membresía (ver
- * utils/permissions.js:hasMultipleCompanies). Al elegir una empresa:
- *   1. POST /api/auth/active-company (persiste en la sesión del server).
- *   2. Actualiza el store con el user devuelto (incluye active_company_id).
- *   3. Reconecta el socket (la sesión vieja ya se unió a las salas al
- *      conectar; solo un handshake nuevo une al socket a `company:{id}`).
- *   4. Dispara 'gcm:company-switched' — main.js re-despacha la ruta actual
- *      para que listas/dashboard abiertos refresquen con el nuevo scope.
- * Sin reload de página ni logout: mismo patrón de dropdown que
- * renderUserMenu/renderBell en topbar.js (trigger + panel + outside-click).
- */
 export function renderCompanySwitcher({ user }) {
   if (!hasMultipleCompanies(user)) return null;
 
@@ -103,3 +90,4 @@ export function renderCompanySwitcher({ user }) {
 
   return root;
 }
+

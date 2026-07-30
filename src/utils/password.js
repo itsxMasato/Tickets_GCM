@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const bcrypt = require('bcrypt');
 
 const COST = 10;
@@ -14,3 +14,4 @@ async function verifyPassword(plain, hash) {
 }
 
 module.exports = { hashPassword, verifyPassword };
+

@@ -1,5 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Wrapper fetch con manejo de errores y JSON
+/* Documentado por: Miguel Flores */
 function getApiBase() {
   const raw = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL
     ? import.meta.env.VITE_API_BASE_URL
@@ -29,20 +28,11 @@ function buildUrl(url) {
   return `${BASE}${url}`;
 }
 
-// assetUrl — igual que buildUrl pero exportado para armar <img src> de
-// archivos servidos por el backend (fotos de perfil). Necesario porque en
-// producción el frontend (Netlify) y el backend (Render) son orígenes
-// distintos: una ruta relativa como "/uploads/avatars/x.jpg" resolvería
-// contra Netlify y rompería la imagen.
 export function assetUrl(path) {
   if (!path) return path;
   return buildUrl(path);
 }
 
-// Rutas donde un 401 es el resultado ESPERADO del flujo (credenciales
-// invalidas al loguear, o el chequeo de sesion en frio al arrancar la app) —
-// no deben disparar el interceptor global, o el propio login rebotaria a
-// si mismo en un loop.
 const AUTH_BOOTSTRAP_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/auth/firebase', '/api/auth/resolve-login', '/api/auth/me'];
 
 async function request(method, url, options = {}) {
@@ -82,18 +72,9 @@ export const api = {
     logout: ()        => request('POST', '/api/auth/logout', {}),
     me:     ()        => request('GET',  '/api/auth/me'),
     verifyPassword: (body) => request('POST', '/api/auth/verify-password', { body }),
-    // Resuelve un username o email al email canónico registrado en Firebase Auth.
-    // El login view lo llama antes de signInWithEmailAndPassword para soportar
-    // tanto username corto ("Miguel") como email real ("miguel@gmail.com").
     resolveLogin: (body) => request('POST', '/api/auth/resolve-login', { body }),
-    // Canje de ID token de Firebase Auth por sesión local (cookie connect.sid).
-    // Usado en producción cuando el frontend está en Netlify y el backend en Render.
     firebase: (body)  => request('POST', '/api/auth/firebase', { body }),
-    // Cambia la empresa activa de la sesión (selector de empresa en el topbar,
-    // para usuarios con más de una membresía).
     setActiveCompany: (companyId) => request('POST', '/api/auth/active-company', { body: { company_id: companyId } }),
-    // Sube/reemplaza la foto de perfil propia. `formData` ya debe traer el
-    // archivo bajo el campo "file" (mismo convenio que tickets.upload).
     uploadAvatar: (formData) => request('POST', '/api/auth/avatar', { body: formData }),
   },
   users: {
@@ -146,8 +127,6 @@ export const api = {
       remove: (key, body) => request('DELETE', `/api/roles/permissions/${key}`, { body }),
     },
   },
-  // Empresas (multi-tenant). Solo platform admin opera el CRUD; el resto
-  // ve solo las empresas donde tiene membresía activa (filtro del backend).
   companies: {
     list:        (q = {})        => request('GET',    '/api/companies?' + new URLSearchParams(q)),
     get:         (id)            => request('GET',    `/api/companies/${id}`),
@@ -170,3 +149,4 @@ export const api = {
     remove:         (id)     => request('DELETE', `/api/calendar/events/${id}`),
   },
 };
+

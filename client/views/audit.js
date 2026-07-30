@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { formatDateTime, fileSize, STATUS_LABEL, PRIORITY_LABEL, ROLE_LABEL, AREA_LABEL } from '../utils/format.js';
@@ -17,14 +17,6 @@ const PAGE_SIZE = 20;
 
 const spinnerHtml = '<svg class="animate-spin w-5 h-5 text-brand-navy" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
 
-// Espejo de los `action_type` que realmente emite el backend (grep sobre
-// auditService.log/logAsync en src/services/*.js). Antes esta lista tenía
-// user_created/user_modified/user_deleted/category_created/category_modified/
-// category_deleted — ninguno de los cuales el backend emite hoy (auth.service.js
-// y categories.service.js no llaman a auditService todavía) — y le faltaban
-// los de calendario, empresas, membresías y roles, que sí ocurren y se
-// mostraban con la key cruda ("calendar_event_created") en vez de una
-// etiqueta legible.
 const ACTION_LABELS = {
   ticket_created:            'Ticket creado',
   ticket_assigned:           'Ticket asignado',
@@ -46,8 +38,6 @@ const ACTION_LABELS = {
   permission_deleted:        'Permiso eliminado',
 };
 
-// Fallback para cualquier action_type no listado arriba: en vez de mostrar
-// la key cruda ("some_new_action"), la convierte a texto legible.
 function humanizeActionType(actionType) {
   return String(actionType).replace(/[:_]/g, ' ').replace(/^./, (c) => c.toUpperCase());
 }
@@ -95,9 +85,6 @@ function formatTargetType(targetType) {
   return TARGET_TYPE_LABELS[targetType] || humanizeActionType(targetType);
 }
 
-// Etiquetas legibles para las claves más comunes que aparecen en
-// old_value/new_value. Fallback: convierte snake_case/camelCase a texto
-// natural para cualquier clave no listada (nueva acción, campo agregado).
 const FIELD_LABELS = {
   code: 'Código', title: 'Título', priority: 'Prioridad', status: 'Estado',
   assigned_to: 'Asignado a', ticket_id: 'Ticket', start_at: 'Inicio', end_at: 'Fin',
@@ -117,9 +104,6 @@ function prettifyKey(key) {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
-// Convierte un valor crudo (booleano, fecha, código de status/prioridad/rol,
-// bytes, arreglo…) al texto que un usuario no técnico puede leer, en vez de
-// dejar que el JSON crudo hable por sí mismo.
 function humanizeValue(key, value) {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Sí' : 'No';
@@ -134,9 +118,6 @@ function humanizeValue(key, value) {
   return String(value);
 }
 
-// Reduce old_value/new_value (objetos planos) a filas de "campo: antes → después",
-// omitiendo los campos que no cambiaron. Reemplaza el volcado de JSON crudo,
-// que un usuario no técnico lee como "no hay diseño, esto es un error".
 function buildChangeRows(oldValue, newValue) {
   const oldObj = oldValue && typeof oldValue === 'object' ? oldValue : {};
   const newObj = newValue && typeof newValue === 'object' ? newValue : {};
@@ -151,9 +132,6 @@ function buildChangeRows(oldValue, newValue) {
     .filter(Boolean);
 }
 
-// KPI con ícono en badge circular — estilo específico de esta pantalla
-// (distinto del kpi-card de borde lateral que usan otras vistas), tal como
-// lo pidió el mock.
 function kpiCard({ label, value, hint = '', icon, tone = '' }) {
   const TONE = {
     '':     'bg-brand/10 text-brand',
@@ -174,15 +152,10 @@ function kpiCard({ label, value, hint = '', icon, tone = '' }) {
 
 export async function renderAudit({ query, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
-  // Paginación por cursor — mismo patrón que tickets-list.js (ver la nota
-  // grande en firestoreData.listTickets sobre por qué offset/page no
-  // escala). `cursors[i]` es el cursor de la página i; `cursors[0]` es
-  // siempre null.
   let cursors = [null];
   let pageIndex = 0;
   let lastResult = { data: [], total: 0, limit: PAGE_SIZE, hasMore: false };
 
-  // ── Header ────────────────────────────────────────────────────────────
   let exportBtn;
   root.appendChild(h('div.flex.flex-col.justify-between.gap-4', { class: 'md:flex-row md:items-end' }, [
     h('div', {}, [
@@ -192,7 +165,6 @@ export async function renderAudit({ query, user }) {
     exportBtn = exportButton({ label: 'Exportar', kind: 'secondary', onExport: (format) => doExport(format) }),
   ]));
 
-  // ── Filtros ───────────────────────────────────────────────────────────
   const filterCard = h('div.card', {});
 
   const filters = {
@@ -237,15 +209,12 @@ export async function renderAudit({ query, user }) {
   filterCard.appendChild(h('div.flex.justify-end.gap-2.mt-4', {}, [clearBtn, applyBtn]));
   root.appendChild(filterCard);
 
-  // Mostrar filtros activos como chips
   const filtersChipsWrap = h('div.flex.gap-2.items-center.flex-wrap', {});
   root.appendChild(filtersChipsWrap);
 
-  // ── KPI Cards ─────────────────────────────────────────────────────────
   const kpiContainer = h('div.grid.grid-cols-1.gap-3', { class: 'md:grid-cols-3' });
   root.appendChild(kpiContainer);
 
-  // ── Tabla + paginación ───────────────────────────────────────────────
   const tableContainer = h('div', {});
   const pagerInfo = h('div.text-xs.text-slate-500', {}, '');
   const pagerPageLabel = h('div.text-xs.text-slate-500.font-medium', {}, '');
@@ -268,12 +237,8 @@ export async function renderAudit({ query, user }) {
   ]);
   root.appendChild(h('div.flex.flex-col', {}, [tableContainer, pager]));
 
-  // Helpers
   function renderKpis(data = {}) {
     kpiContainer.innerHTML = '';
-    // total llega null cuando hay búsqueda de texto activa (contar coincidencias
-    // exactas sin escanear todo el log no es barato — ver firestoreData.listAudit).
-    // Mostrar "0" ahí sugiere "sin resultados" cuando puede haber varios; "—" es honesto.
     const totalValue = data.total == null ? '—' : data.total.toLocaleString('es-ES');
     kpiContainer.appendChild(kpiCard({ label: 'Total de acciones', value: totalValue, icon: ICON.report, tone: '' }));
     kpiContainer.appendChild(kpiCard({ label: 'Tipo más frecuente', value: formatActionType(data.mostFrequentAction), icon: ICON.tag, tone: 'ocean' }));
@@ -367,9 +332,6 @@ export async function renderAudit({ query, user }) {
 
   function renderPager() {
     const { total, data, hasMore } = lastResult;
-    // total puede ser null con búsqueda de texto activa (no hay forma
-    // barata de contar coincidencias sin escanear todo — ver la nota en
-    // firestoreData.listAudit).
     pagerInfo.textContent = total == null
       ? `${(data || []).length} entradas en esta página`
       : `Mostrando ${(data || []).length} de ${total.toLocaleString('es-ES')} entradas`;
@@ -390,14 +352,12 @@ export async function renderAudit({ query, user }) {
     pagerPageLabel.textContent = '';
 
     try {
-      // Actualizar objeto de filtros
       filters.search = search.value.trim();
       filters.user_id = userSelect.value;
       filters.action_type = actionSelect.value;
       filters.date_from = dateFrom.value;
       filters.date_to = dateTo.value;
 
-      // Guardar filtros en URL
       setFilterInUrl('search', filters.search);
       setFilterInUrl('user_id', filters.user_id);
       setFilterInUrl('action_type', filters.action_type);
@@ -435,7 +395,6 @@ export async function renderAudit({ query, user }) {
       renderTable(lastResult.data);
       renderPager();
 
-      // Actualizar chips de filtros activos
       filtersChipsWrap.innerHTML = '';
       const chips = activeFiltersChips(filters, (filterKey) => {
         filters[filterKey] = '';
@@ -490,15 +449,10 @@ export async function renderAudit({ query, user }) {
         onConfirm: async (password) => { await verifyCurrentPassword(password); },
       });
       setBusy(true, 'Exportando…');
-      // Trae todas las páginas del filtro actual (no sólo la visible) por
-      // cursor, no por offset — igual que fetchAllTickets en exports.js:
-      // paginar con `page` volvía a leer todo desde el principio en cada
-      // vuelta (O(página²)) y cortaba en silencio a las 50 páginas.
       const EXPORT_MAX_ROWS = 20000;
       const all = [];
       let cursor = null;
       let truncated = false;
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const params = { ...filters, limit: 200 };
         if (cursor) params.cursor = cursor;
@@ -551,31 +505,25 @@ export async function renderAudit({ query, user }) {
     }
   }
 
-  // Inicializar filtros
   async function initializeFilters() {
     try {
-      // Cargar usuarios: primero intenta audit.activeUsers(), luego api.users.list()
       let users = [];
       try {
         const activeUsersResult = await api.audit.activeUsers();
         users = activeUsersResult?.users || [];
       } catch (e) {
-        // Fallback: cargar desde api.users.list()
         const usersResult = await api.users.list({ active: true });
         users = usersResult?.users || [];
       }
 
-      // Cargar tipos de acción
       let actions = [];
       try {
         const actionTypesResult = await api.audit.actionTypes();
         actions = actionTypesResult?.types || [];
       } catch (e) {
-        // Fallback: tipos que el backend realmente emite hoy (ver ACTION_LABELS).
         actions = Object.keys(ACTION_LABELS);
       }
 
-      // Poblar select de usuarios
       if (users && users.length > 0) {
         users
           .sort((a, b) => (a.full_name || a.name || '').localeCompare(b.full_name || b.name || ''))
@@ -584,15 +532,14 @@ export async function renderAudit({ query, user }) {
           });
       }
 
-      // Poblar select de tipos de acción
       if (actions && actions.length > 0) {
         actions.forEach(a => {
           actionSelect.appendChild(h('option', { value: a }, formatActionType(a)));
         });
       }
 
-      // Restaurar valores de URL si existen
-      if (filters.user_id) userSelect.value = filters.user_id;
+      if (filters.user_id)
+        userSelect.value = filters.user_id;
       if (filters.action_type) actionSelect.value = filters.action_type;
 
       await loadAudit();
@@ -607,7 +554,6 @@ export async function renderAudit({ query, user }) {
     }
   }
 
-  // Event listeners
   applyBtn.addEventListener('click', () => { pageIndex = 0; cursors = [null]; loadAudit(); });
   clearBtn.addEventListener('click', clearFilters);
   search.addEventListener('keydown', (e) => {
@@ -622,3 +568,4 @@ export async function renderAudit({ query, user }) {
 
   return { view: root };
 }
+

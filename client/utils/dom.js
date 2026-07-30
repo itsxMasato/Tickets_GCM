@@ -1,5 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Utilidades para crear nodos DOM con hiperscript ligero y escapar HTML
+/* Documentado por: Miguel Flores */
 export function escapeHtml(value) {
   if (value === null || value === undefined) return '';
   return String(value)
@@ -10,10 +9,6 @@ export function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-/**
- * h('div.cls#id', {onclick: fn, dataset: {x:1}}, [h('span', 'hola')])
- * Acepta string, node o array como hijos.
- */
 export function h(selector, props = {}, children = []) {
   const idMatch = selector.match(/#([\w-]+)/);
   const classMatch = selector.match(/\.([\w-]+)/g) || [];
@@ -42,13 +37,8 @@ export function h(selector, props = {}, children = []) {
       } else if (k === 'value' && (tag === 'input' || tag === 'textarea' || tag === 'select')) {
         el.value = v;
       } else if (k === 'checked' || k === 'disabled' || k === 'selected' || k === 'autofocus') {
-        // v === '' cuenta como "presente" (selected="" es válido en HTML) — todo
-        // el código que arma <option selected={cond ? '' : null}> (ticket-new,
-        // ticket-detail, users, companies, reports, tickets-list) depende de esto;
-        // con `if (v)` a secas, '' es falsy en JS y el atributo nunca se aplicaba,
-        // así que el <select> siempre mostraba la primera opción del DOM en vez
-        // del valor real (prioridad/categoría/rol actuales al editar, por ejemplo).
-        if (v || v === '') el.setAttribute(k, '');
+        if (v || v === '')
+          el.setAttribute(k, '');
       } else {
         el.setAttribute(k, v);
       }
@@ -72,15 +62,14 @@ function appendChildren(el, children) {
   }
 }
 
-// Reemplaza el contenido de un contenedor con un nodo o string
 export function mount(container, node) {
   container.innerHTML = '';
   if (node) container.appendChild(node);
 }
 
-// Devuelve el primer nodo a partir de un template HTML
 export function html(strings, ...values) {
   const tpl = document.createElement('template');
   tpl.innerHTML = strings.reduce((acc, s, i) => acc + s + (i < values.length ? escapeHtml(values[i] ?? '') : ''), '').trim();
   return tpl.content.firstElementChild;
 }
+

@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 const Database = require('better-sqlite3');
 const paths = ['data/tickets.db', 'data/test_tickets.db'];
 for (const p of paths) {
@@ -26,3 +26,4 @@ for (const p of paths) {
     console.error('ERROR', p, err.message);
   }
 }
+

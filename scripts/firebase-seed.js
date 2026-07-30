@@ -1,11 +1,10 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
 #!/usr/bin/env node
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const firebaseAdmin = require('../src/firebaseAdmin');
 
 async function run() {
   try {
-    // Inicializar (usa FIREBASE_SERVICE_ACCOUNT o FIREBASE_SERVICE_ACCOUNT_PATH o ADC)
     firebaseAdmin.init();
     if (!firebaseAdmin.isInitialized()) {
       console.error('[seed] Firebase Admin no inicializado: ', firebaseAdmin.getInitializationError());
@@ -30,7 +29,6 @@ async function run() {
 
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-    // Crear categorías iniciales si no existen
     const catSnap = await db.collection('categories').limit(1).get();
     if (catSnap.empty) {
       console.log('[seed] Creando categorías por defecto...');
@@ -53,3 +51,4 @@ async function run() {
 }
 
 run();
+

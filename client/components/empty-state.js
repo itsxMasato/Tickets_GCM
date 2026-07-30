@@ -1,7 +1,6 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 
-// Iconos SVG por tipo de empty-state (24x24, currentColor, stroke 1.8) — sin emojis.
 const ICON = {
   ticket:    'M3 7h18M3 12h18M3 17h12',
   bell:      'M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0',
@@ -20,16 +19,15 @@ function svgIcon(name, cls = 'w-10 h-10') {
   });
 }
 
-// Renderiza un contenedor con icono SVG grande + título + mensaje + acción opcional.
-// Antes mostraba emojis, que son inconsistentes entre plataformas (causan "fallo en blanco" en
-// Windows sin fuentes de emoji). Se reemplazó por SVG para homogeneidad visual.
-export function emptyState({
-  icon = 'ticket',
-  title = 'Sin datos',
-  message = 'No hay información para mostrar',
-  action = null, // { label, onclick }
-  className = '',
-} = {}) {
+export function emptyState(
+  {
+    icon = 'ticket',
+    title = 'Sin datos',
+    message = 'No hay información para mostrar',
+    action = null,
+    className = '',
+  } = {}
+) {
   const content = [
     h('div.flex.items-center.justify-center.w-16.h-16.mx-auto.mb-4.rounded-full.bg-surface.text-brand-ocean', {}, [svgIcon(icon)]),
     h('h3.text-base.font-semibold.text-brand-ink.mb-1', {}, title),
@@ -45,7 +43,6 @@ export function emptyState({
   return h(`div.flex.flex-col.items-center.justify-center.py-12.px-6.text-center.${className}`, {}, content);
 }
 
-// Empty states predefinidos por tipo
 export const EMPTY_STATES = {
   tickets: {
     icon: 'ticket',
@@ -85,3 +82,4 @@ export const EMPTY_STATES = {
 };
 
 export default emptyState;
+

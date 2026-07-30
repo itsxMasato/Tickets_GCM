@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 import { ICON } from '../utils/icons.js';
 
@@ -11,21 +11,13 @@ function svg(path, cls = 'w-4 h-4') {
   });
 }
 
-// exportButton — dropdown "Exportar" con elección de formato (Excel / PDF).
-// Antes el formato venía fijo por prop (`format: 'excel'`) y cada vista
-// sólo ofrecía uno solo; ahora el usuario elige en el momento. Mismo patrón
-// de trigger+panel+outside-click que company-switcher.js/topbar.js
-// (renderBell/renderUserMenu) para que el dropdown se sienta consistente
-// con el resto de la app.
-//
-// `onExport(format)` recibe 'excel' | 'pdf' y hace todo el resto (password
-// gate, fetch de datos, generación) — el componente sólo decide QUÉ
-// formato se pidió.
-export function exportButton({
-  label = 'Exportar',
-  kind = 'secondary', // 'primary' | 'secondary' | 'ghost'
-  onExport,
-} = {}) {
+export function exportButton(
+  {
+    label = 'Exportar',
+    kind = 'secondary',
+    onExport,
+  } = {}
+) {
   const cls = kind === 'primary' ? 'btn-primary' : kind === 'ghost' ? 'btn-ghost' : 'btn-secondary';
 
   const menu = h('div.absolute.right-0.top-full.mt-2.w-48.bg-white.rounded-xl.shadow-pop.border.border-surface-border.py-1.hidden.z-40.overflow-hidden', {
@@ -77,10 +69,6 @@ export function exportButton({
     document.removeEventListener('keydown', onKey);
   };
 
-  // Exponer para que el caller pueda deshabilitar/renombrar el trigger
-  // durante el export (antes: exportBtn.disabled = true / .querySelector('span')
-  // — como root ahora es el wrapper del dropdown y no el <button> en sí,
-  // se exponen como métodos explícitos en vez de monkey-parchear querySelector).
   Object.defineProperty(root, 'disabled', {
     get() { return trigger.disabled; },
     set(v) { trigger.disabled = v; trigger.classList.toggle('opacity-60', v); trigger.classList.toggle('cursor-not-allowed', v); },
@@ -94,3 +82,4 @@ export function exportButton({
 }
 
 export default exportButton;
+

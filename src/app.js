@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const express = require('express');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
@@ -10,18 +10,11 @@ const fs = require('fs');
 const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
 
-// Store de sesión persistente. En producción (Render) no podemos usar
-// MemoryStore porque se pierde al reiniciar el servicio — todos los
-// usuarios quedarían deslogueados. Usamos SQLite para que las sesiones
-// sobrevivan redeploys.
-//
-// Importante: el directorio debe existir antes de instanciar SQLiteStore,
-// sino falla con SQLITE_CANTOPEN. En Render el filesystem es efímero y
-// `data/` no se commitea (está en .gitignore), así que lo creamos al
-// arranque. En dev local ya existe.
-const sessionDir = config.env === 'production'
-  ? '/tmp/sessions'  // Render: /tmp siempre existe y es escribible
-  : path.resolve(__dirname, '..', 'data');
+const sessionDir = process.env.SESSION_DIR
+  ? process.env.SESSION_DIR
+  : config.env === 'production'
+    ? "/tmp/sessions"
+    : path.resolve(__dirname, '..', 'data');
 try {
   fs.mkdirSync(sessionDir, { recursive: true });
 } catch (e) {
@@ -35,10 +28,6 @@ const sessionStore = new SQLiteStore({
   table: 'sessions',
 });
 
-// Origen permitido para CORS. En producción el frontend vive en Netlify
-// y el backend en Render; la cookie de sesión cruza dominios, así que
-// necesitamos CORS con credentials: true y sameSite: 'none' en la cookie
-// (ver sessionMiddleware abajo).
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -56,19 +45,10 @@ const ALLOWED_ORIGINS = Array.from(new Set([
 function createApp() {
   const app = express();
 
-  // En producción Render envía la petición HTTPS a través de un proxy interno.
-  // Necesitamos confiar en el proxy para que express-session sepa que la
-  // conexión es segura y pueda enviar cookies Secure correctamente.
   if (config.env === 'production') {
     app.set('trust proxy', 1);
   }
 
-  // CORS debe ir ANTES de sessionMiddleware para que las respuestas a
-  // preflight OPTIONS (POST con credentials) incluyan los headers correctos.
-  //
-  // Logging defensivo: si un origen es rechazado, lo dejamos en consola para
-  // diagnosticar deploys desactualizados (Render free tier a veces sirve una
-  // versión vieja tras un sleep). El fix de código solo aplica tras redeploy.
   app.use(cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
@@ -85,7 +65,7 @@ function createApp() {
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    maxAge: 86400, // cache preflight 24h
+    maxAge: 86400,
   }));
 
   app.use(express.json({ limit: '1mb' }));
@@ -98,18 +78,14 @@ function createApp() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      // 'none' permite que la cookie viaje cross-site (Netlify → Render).
-      // Requiere secure: true — los browsers rechazan 'none' sin HTTPS.
-      // En dev local (config.env !== 'production') mantenemos 'lax' porque
-      // secure: true sobre HTTP hace que el browser descarte la cookie.
       sameSite: config.env === 'production' ? 'none' : 'lax',
       secure: config.env === 'production',
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 días
+      partitioned: config.env === 'production',
+      maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   });
   app.use(sessionMiddleware);
 
-  // Evita caché agresiva de videos estáticos con el mismo nombre.
   app.use('/videos', express.static(path.join(__dirname, '..', 'public', 'videos'), {
     maxAge: 0,
     setHeaders(res) {
@@ -117,9 +93,6 @@ function createApp() {
     },
   }));
 
-  // Fotos de perfil: servidas públicas (sin requireAuth) porque se muestran
-  // en <img> por toda la UI — a diferencia de los adjuntos de tickets, que
-  // se descargan vía una ruta autenticada porque son sensibles al ticket.
   app.use('/uploads/avatars', express.static(require('./middleware/upload').avatarDir, {
     maxAge: '7d',
   }));
@@ -133,7 +106,6 @@ function createApp() {
     res.json({ ok: true, service: 'tickets-gcm', env: config.env });
   });
 
-  // Rutas API
   app.use('/api/auth', require('./routes/auth.routes'));
   app.use('/api/users', require('./routes/users.routes'));
   app.use('/api/categories', require('./routes/categories.routes'));
@@ -144,20 +116,15 @@ function createApp() {
   app.use('/api/role-labels', require('./routes/role-labels.routes'));
   app.use('/api/calendar', require('./routes/calendar.routes'));
 
-  // Fase 2 — multi-tenant
   app.use('/api/companies',       require('./routes/companies.routes'));
   const membershipsRoutes = require('./routes/memberships.routes');
   app.use('/api/users',      membershipsRoutes.userMemberships);
   app.use('/api/companies',  membershipsRoutes.companyMemberships);
 
-  // 404 para API
   app.use('/api', (req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ruta no encontrada.' } });
   });
 
-  // Fallback SPA: cualquier ruta no-API y no-asset devuelve la app cliente
-  // (sirve `public/dist/index.html` si existe; si no, `public/index.html`).
-  // Evita el "fallo en blanco" en producción cuando se hace deep-link a una ruta interna.
   const fs = require('fs');
   const distIndex = path.join(__dirname, '..', 'public', 'dist', 'index.html');
   const rootIndex = path.join(__dirname, '..', 'public', 'index.html');
@@ -174,3 +141,4 @@ function createApp() {
 }
 
 module.exports = createApp;
+

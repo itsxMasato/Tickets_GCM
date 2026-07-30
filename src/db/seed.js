@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const { getDb, closeDb } = require('./connection');
 
 const CATEGORIES = [
@@ -29,3 +29,4 @@ module.exports = seed;
 if (require.main === module) {
   seed().then(() => closeDb()).catch((err) => { console.error(err); process.exit(1); });
 }
+

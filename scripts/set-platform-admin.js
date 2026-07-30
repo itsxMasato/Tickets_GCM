@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
-// Marca/desmarca a un usuario como platform admin (bypass cross-tenant total,
-// ver docs/MULTITENANT.md §5.3 y §7.5 "Rollback de emergencia").
+/* Documentado por: Miguel Flores */
+'use strict'
 const firebaseAdmin = require('../src/firebaseAdmin');
 
 async function run() {
@@ -36,3 +34,4 @@ async function run() {
 }
 
 run();
+

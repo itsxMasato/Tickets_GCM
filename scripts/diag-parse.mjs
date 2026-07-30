@@ -1,3 +1,4 @@
+/* Documentado por: Miguel Flores */
 import { parse } from 'acorn';
 import fs from 'fs';
 const src = fs.readFileSync('client/components/topbar.js', 'utf8');
@@ -8,7 +9,6 @@ try {
   console.log('PARSE ERROR:', e.message);
   console.log('loc:', JSON.stringify(e.loc));
   console.log('pos:', e.pos);
-  // Print ±2 lines around loc
   const lines = src.split('\n');
   const ln = e.loc?.line || 0;
   for (let i = Math.max(0, ln-3); i < Math.min(lines.length, ln+2); i++) {
@@ -16,3 +16,4 @@ try {
     console.log(`${marker} ${i+1}: ${lines[i]}`);
   }
 }
+

@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 const express = require('express');
 const router = express.Router();
 const notificationsService = require('../services/notifications.service');
@@ -13,7 +13,6 @@ router.get('/', requireAuth, async (req, res, next) => {
       onlyUnread: unread === 'true',
     };
     const list = await notificationsService.listForUser(req.user.id, opts);
-    // [DIAG-2026-07-15] Temporal: diagnosticar por qué la campanita llega vacía.
     console.log('[diag:bell] GET /api/notifications', {
       userId: req.user.id,
       role: req.user.role,
@@ -43,3 +42,4 @@ router.post('/mark-read', requireAuth, async (req, res, next) => {
 });
 
 module.exports = router;
+

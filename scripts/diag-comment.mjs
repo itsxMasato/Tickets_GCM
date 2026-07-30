@@ -1,4 +1,4 @@
-// Test 1: backticks in // comment - is it valid JS?
+/* Documentado por: Miguel Flores */
 import { transformSync } from 'esbuild';
 const tests = [
   { name: 'backticks in // comment', code: '// `foo` bar\nconst x = 1;' },
@@ -13,3 +13,4 @@ for (const t of tests) {
     console.log(t.name, 'ERR:', e.errors?.[0]?.text, e.errors?.[0]?.location);
   }
 }
+

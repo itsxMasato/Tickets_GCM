@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
@@ -17,7 +17,6 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
   const filesInput = h('input.hidden', { type: 'file', multiple: true, 'aria-label': 'Adjuntar archivos', onchange: (e) => addFiles(e.target.files) });
   const dropZone = h('div.relative.border.border-slate-200.rounded-lg.bg-white.transition', { 'data-composer': '' });
   const preview = h('div.hidden.px-3.py-2.border-b.border-slate-200.bg-slate-50.flex.flex-wrap.gap-2.text-xs', {});
-  // text-slate-500 — WCAG AA: el counter "0/4000" es body text, no decoración.
   const counter = h('div.text-slate-500.px-1', { class: 'text-[10px]' }, '0/4000');
   const textarea = h('textarea.w-full.resize-none.px-3.py-2.rounded-md.text-sm.bg-transparent', {
     class: 'focus:outline-none',
@@ -67,8 +66,6 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
         h('span.text-slate-500.flex-none', {}, [svg(isImage(f.type) ? 'image' : 'file', 'w-3.5 h-3.5')]),
         h('span.font-medium.text-slate-700.truncate', { class: 'max-w-[160px]' }, f.name),
         h('span.text-slate-500', {}, `· ${fileSize(f.size)}`),
-        // text-slate-500 — el × de quitar archivo es un control visual sobre fondo slate-50;
-        // subir contraste para que no compita con el texto del nombre de archivo.
         h('button.text-slate-500.rounded', {
           class: 'hover:text-accent min-w-[24px] min-h-[24px]',
           onclick: () => removeAt(i),
@@ -79,7 +76,6 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
     });
   }
 
-  // Drag & drop
   function setDragVisual(on) {
     dropZone.classList.toggle('ring-2', on);
     dropZone.classList.toggle('ring-brand-ocean', on);
@@ -148,3 +144,4 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
 
   return dropZone;
 }
+

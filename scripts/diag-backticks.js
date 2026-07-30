@@ -1,5 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-// Count backticks outside strings/comments to find unbalanced template literals.
+/* Documentado por: Miguel Flores */
 const fs = require('fs');
 const src = fs.readFileSync('client/components/topbar.js', 'utf8');
 let inS = null, inT = false, inLC = false, inBC = false;
@@ -23,3 +22,4 @@ while (i < src.length) {
 console.log('backticks that OPEN a template literal:', btOutside);
 console.log('still inside template at EOF?', inT);
 console.log('last opening backtick at line:', lastBtLine);
+

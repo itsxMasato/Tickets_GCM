@@ -1,5 +1,5 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 
 const MONTH_NAMES = [
   'ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -50,3 +50,4 @@ function hoursBetween(a, b) {
 }
 
 module.exports = { now, nowSql, formatDateTime, relativeFromNow, hoursBetween };
+

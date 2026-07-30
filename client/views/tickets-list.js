@@ -1,4 +1,4 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
+/* Documentado por: Miguel Flores */
 import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { statusBadge } from '../components/badge.js';
@@ -21,9 +21,6 @@ import { getRoleLabel } from '../utils/role-labels.js';
 const STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
 
-// Tono por KPI del bento superior — mismo lenguaje visual que /reports
-// (acento lateral + chip de ícono + color del valor) para que ambas vistas
-// de datos se sientan del mismo sistema.
 const KPI_TONE = {
   '':      { border: 'border-l-4 border-l-surface-border-strong', icon: 'bg-surface-alt text-brand', value: 'text-brand-ink' },
   ocean:   { border: 'border-l-4 border-l-brand-ocean',           icon: 'bg-brand-ocean/10 text-brand-ocean', value: 'text-brand-ocean' },
@@ -50,11 +47,6 @@ function formatHours(hours) {
   return `${Number(hours).toFixed(1)} h`;
 }
 
-// Ícono de prioridad en vez de badge — alta densidad de la tabla de
-// tickets. Urgente/alta llevan ícono de alerta (colores alineados con
-// prio-urgente/prio-alta en styles.css); baja/media un punto simple para no
-// competir visualmente con las prioridades que sí requieren atención.
-// title + aria-label mantienen el dato accesible aunque el color no se perciba.
 function priorityIcon(p) {
   const label = PRIORITY_LABEL[p] || p || '—';
   if (p === 'urgente' || p === 'alta') {
@@ -69,7 +61,6 @@ function priorityIcon(p) {
 export async function renderTicketsList({ query, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
-  // Header
   let exportBtn;
   const listTitle = h('h1.text-2xl.font-bold.text-brand.tracking-tight', { class: 'md:text-3xl' }, isJefe(user) ? 'Tickets listos para cerrar' : 'Tickets');
   const listSub = h('p.text-sm.text-slate-500.mt-1', {}, '');
@@ -82,13 +73,9 @@ export async function renderTicketsList({ query, user }) {
   ]);
   root.appendChild(header);
 
-  // Bento de KPIs — snapshot operativo (no reactivo a los filtros de la
-  // tabla, igual que el resto de la app usa api.stats.*): tiempo promedio de
-  // resolución, urgentes, cerrados hoy y reabiertos.
   const statsRow = h('div.grid.grid-cols-2.gap-3', { class: 'md:grid-cols-4' });
   root.appendChild(statsRow);
 
-  // Filtros — apilados en mobile, en fila en desktop.
   const initialStatus = isJefe(user) && !query.status ? 'solucionado' : query.status || '';
   const filters = {
     status: initialStatus,
@@ -100,12 +87,6 @@ export async function renderTicketsList({ query, user }) {
     date_to: query.date_to || '',
     limit: 20,
   };
-  // Paginación por cursor (ver firestoreData.listTickets): no hay "salto a
-  // página N" porque Firestore no soporta offset barato a gran escala.
-  // `cursors[i]` es el cursor usado para pedir la página i; `cursors[0]`
-  // siempre es null (primera página). Avanzar ("Siguiente") empuja el
-  // nextCursor devuelto por el server; retroceder ("Anterior") sólo mueve
-  // el índice — el cursor ya lo teníamos, no hay que recordar filas viejas.
   const state = { filters, result: { tickets: [], total: 0, hasMore: false }, cursors: [null], pageIndex: 0 };
   const filtersBar = h('div.card.flex.flex-col.gap-3', { class: 'md:flex-row md:flex-wrap md:items-end' });
   const searchInput = h('input.input', { type: 'search', placeholder: 'Buscar código, título, descripción…', value: filters.search });
@@ -127,8 +108,6 @@ export async function renderTicketsList({ query, user }) {
   const applyBtn = h('button.btn.btn-primary', { onclick: () => applyFilters() }, 'Filtrar');
   const resetBtn = h('button.btn.btn-ghost', { onclick: () => { clearFiltersInUrl(); Object.assign(filters, { status: '', priority: '', search: '', area: '', assigned_to: '', date_from: '', date_to: '' }); searchInput.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; fromInput.value=''; toInput.value=''; state.cursors = [null]; state.pageIndex = 0; render(); } }, 'Limpiar');
 
-  // Enter en cualquier input/select de filtro dispara applyFilters() — sin
-  // esto el usuario tiene que tabular hasta el botón "Filtrar" para confirmar.
   for (const el of [searchInput, statusSel, prioSel, areaSel, assignedSel, fromInput, toInput]) {
     el.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); applyFilters(); }
@@ -150,22 +129,14 @@ export async function renderTicketsList({ query, user }) {
   const quickFiltersWrap = h('div.flex.flex-wrap.gap-2', {});
   root.appendChild(quickFiltersWrap);
 
-  // Mostrar filtros activos como chips
   const filtersChipsWrap = h('div.flex.gap-2.items-center.flex-wrap', {});
   root.appendChild(filtersChipsWrap);
 
-  // Lista (tabla desktop / cards mobile) + paginación numerada. `table-zebra`
-  // va en el wrapper (no en la tabla): mountDataList reemplaza el <table>
-  // interno en cada repaint, pero el wrapper mismo persiste, así que la
-  // clase sigue aplicando via selector descendiente en styles.css.
   const listWrap = h('div.table-zebra', {});
   const pagWrap = h('div.px-4.py-3.bg-surface.flex.items-center.justify-between.gap-3.flex-wrap.rounded-b-xl', {});
   const listContainer = h('div.card-tight.overflow-hidden', {}, [listWrap, pagWrap]);
   root.appendChild(listContainer);
 
-  // Columnas para la tabla desktop. "Usuario" = quién reportó el ticket
-  // (created_by_name); "Asignado" = quién lo está atendiendo
-  // (assigned_to_name) — son personas distintas en el modelo de datos.
   const TABLE_COLUMNS = [
     { key: 'code',          label: 'Ticket' },
     { key: 'title',         label: 'Asunto' },
@@ -177,9 +148,6 @@ export async function renderTicketsList({ query, user }) {
     { key: 'actions',       label: '' },
   ];
 
-  // Cache de badges serializados: statusBadge devuelve HTMLElement y
-  // necesitamos su .outerHTML para la tabla. Se cachean por valor para no
-  // reconstruir el DOM en cada draw.
   const statusBadgeCache = new Map();
   function statusBadgeHtml(s) {
     if (statusBadgeCache.has(s)) return statusBadgeCache.get(s);
@@ -205,7 +173,6 @@ export async function renderTicketsList({ query, user }) {
     `;
   }
 
-  // Cell mobile por ticket.
   function mobileCard(t) {
     const open = () => go(`/tickets/${t.id}`);
     const card = h('button.card.text-left.flex.flex-col.gap-2.p-3.transition', {
@@ -236,9 +203,6 @@ export async function renderTicketsList({ query, user }) {
     return card;
   }
 
-  // Fila HTML para la tabla desktop. Toda la fila es clickeable (role=link +
-  // tabindex) y además lleva un chevron que aparece al hover para reforzar
-  // la afordancia — ambos abren el mismo ticket, no hay menú extra fingido.
   function tableRow(t) {
     return `
       <tr class="cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:ring-inset group" data-id="${escapeHtml(String(t.id))}" tabindex="0" role="link" aria-label="Abrir ticket ${escapeHtml(t.code)}: ${escapeHtml(t.title)}">
@@ -264,9 +228,6 @@ export async function renderTicketsList({ query, user }) {
   let currentTotal = 0;
   let currentLimit = 20;
 
-  // Re-engancha los listeners de teclado/click en las filas desktop. Sólo
-  // aplica en >= 768px (data-list reemplaza el HTML al cruzar el breakpoint);
-  // cada repaint debe re-vincular los handlers porque el DOM es nuevo.
   function wireTableRows() {
     const rows = listWrap.querySelectorAll('tr[data-id]');
     rows.forEach((tr) => {
@@ -281,8 +242,6 @@ export async function renderTicketsList({ query, user }) {
     });
   }
 
-  // data-list llama onMatchMediaChange después de un repaint; re-enganchamos
-  // las filas para que el handler de teclado siga funcionando en desktop.
   function onMatchMediaChange(isMobile) {
     if (!isMobile) wireTableRows();
   }
@@ -318,9 +277,6 @@ export async function renderTicketsList({ query, user }) {
     quickFiltersWrap.appendChild(h('div.flex.flex-wrap.gap-2', {}, buttons));
   }
 
-  // applyFilters — lee los inputs de filtro, los guarda en la URL, y
-  // siempre vuelve a la primera página: un cursor de la búsqueda anterior
-  // no tiene sentido con filtros nuevos.
   async function applyFilters() {
     filters.search = searchInput.value.trim();
     filters.status = statusSel.value;
@@ -330,7 +286,6 @@ export async function renderTicketsList({ query, user }) {
     filters.date_from = fromInput.value;
     filters.date_to = toInput.value;
 
-    // Guardar filtros en la URL para que sean compartibles
     setFilterInUrl('search', filters.search);
     setFilterInUrl('status', filters.status);
     setFilterInUrl('priority', filters.priority);
@@ -344,10 +299,6 @@ export async function renderTicketsList({ query, user }) {
     render();
   }
 
-  // goToPage — 'next'/'prev'. Nunca refetchea desde el principio: 'next'
-  // avanza usando el nextCursor que ya trajo el server; 'prev' sólo mueve
-  // el índice a un cursor que ya conocíamos (visitado antes en esta
-  // sesión de navegación).
   async function goToPage(direction) {
     if (direction === 'next') {
       if (!state.result.hasMore || !state.result.nextCursor) return;
@@ -373,8 +324,6 @@ export async function renderTicketsList({ query, user }) {
     }
   }
 
-  // Bento de KPIs — snapshot operativo del rol (independiente de los
-  // filtros de la tabla), mismos endpoints que /dashboard.
   async function loadStats() {
     try {
       const data = user.role === 'sac' ? await api.stats.dashboard() : await api.stats.me();
@@ -394,7 +343,6 @@ export async function renderTicketsList({ query, user }) {
   }
 
   async function render() {
-    // Estado de carga: pintamos skeleton y vaciamos paginación.
     ensureDataList();
     dataList.update({ loading: true, items: [] });
     pagWrap.innerHTML = '';
@@ -408,14 +356,11 @@ export async function renderTicketsList({ query, user }) {
       renderQuickFilters();
       draw();
     } catch (e) {
-      // En error, mostramos el mensaje dentro del listWrap (no del tableWrap antiguo).
       listWrap.innerHTML = '';
       listWrap.appendChild(h('div.card.p-6.text-center.text-sm.text-red-600', {}, escapeHtml(e.message)));
     }
   }
 
-  // Crea el data-list la primera vez. En repaints, update() reusa la misma
-  // instancia y mantiene el listener de matchMedia.
   function ensureDataList() {
     if (dataList) return;
     dataList = mountDataList({
@@ -434,8 +379,6 @@ export async function renderTicketsList({ query, user }) {
     currentTotal = total;
     currentLimit = limit;
 
-    // total puede ser null (búsqueda de texto activa: no hay forma barata
-    // de contar coincidencias sin escanear todo, ver firestoreData.listTickets).
     const totalLabel = total == null ? `${tickets.length}+` : String(total);
     listSub.textContent = isJefe(user)
       ? `Mostrando ${totalLabel} ticket${total === 1 ? '' : 's'} en estado solucionado para revisión y cierre.`
@@ -444,19 +387,14 @@ export async function renderTicketsList({ query, user }) {
     ensureDataList();
     dataList.update({ loading: false, items: tickets });
 
-    // Si estamos en desktop, enganchamos los handlers de click/teclado en
-    // las filas que mountDataList acaba de inyectar.
     if (typeof window !== 'undefined' && window.matchMedia && !window.matchMedia('(max-width: 767.95px)').matches) {
-      // Doble rAF: primero el repaint del data-list, luego enganchamos.
       requestAnimationFrame(() => requestAnimationFrame(wireTableRows));
     }
 
     drawPager(tickets.length, total, hasMore, state.pageIndex);
 
-    // Actualizar chips de filtros activos
     filtersChipsWrap.innerHTML = '';
     const chips = activeFiltersChips(filters, (filterKey) => {
-      // Limpiar filtro individual
       filters[filterKey] = '';
       const inputMap = {
         'search': searchInput,
@@ -474,11 +412,6 @@ export async function renderTicketsList({ query, user }) {
     if (chips) filtersChipsWrap.appendChild(chips);
   }
 
-  // Paginación Anterior/Siguiente (no numerada): con paginación por cursor
-  // no existe "saltar a la página N" barato a gran escala — ver la nota en
-  // firestoreData.listTickets. Muestra "Mostrando N" siempre, y "de M"
-  // sólo cuando el total es barato de calcular (no hay búsqueda de texto
-  // activa; ver total:null en el resultado).
   function drawPager(shown, total, hasMore, pageIndex) {
     pagWrap.innerHTML = '';
     if (!shown) return;
@@ -549,7 +482,6 @@ export async function renderTicketsList({ query, user }) {
   await populateAssignedUsers();
   await Promise.all([render(), loadStats()]);
 
-  // ── Tiempo real: refrescar la tabla y los KPIs cuando algo cambia ──────────
   const evs = ['ticket:created', 'ticket:updated', 'ticket:assigned',
                'ticket:status_changed', 'ticket:commented', 'attachment:added'];
   const ac = new AbortController();
@@ -559,3 +491,4 @@ export async function renderTicketsList({ query, user }) {
 
   return { view: root, cleanup: () => ac.abort() };
 }
+

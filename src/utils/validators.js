@@ -1,10 +1,8 @@
-/* Documentado por Miguel Flores. Marca de agua: sistema desarrollado por Miguel Flores. */
-'use strict';
+/* Documentado por: Miguel Flores */
+'use strict'
 
-// Roles del negocio GCM
 const ROLES = ['supervisor_campo', 'sac', 'admin_area', 'jefe_inmediato'];
 
-// Estados del flujo GCM
 const TICKET_STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
@@ -115,3 +113,4 @@ module.exports = {
   notFoundError,
   conflictError,
 };
+
