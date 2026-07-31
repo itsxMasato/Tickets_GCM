@@ -4,6 +4,12 @@ import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
 import { isImage, fileSize } from '../utils/format.js';
 import { ICON } from '../utils/icons.js';
+/**
+ * Crea un ícono SVG a partir del path definido en ICON para el nombre dado.
+ * @param {string} name - clave del ícono dentro de ICON
+ * @param {string} [cls='w-4 h-4'] - clases CSS de tamaño para el SVG
+ * @returns {HTMLElement} elemento svg
+ */
 function svg(name, cls = 'w-4 h-4') {
   return h('svg', {
     class: cls,
@@ -13,6 +19,16 @@ function svg(name, cls = 'w-4 h-4') {
   });
 }
 
+/**
+ * Renderiza el compositor de mensajes de un ticket: textarea con contador de
+ * caracteres, botón de adjuntar con drag & drop, cola de archivos pendientes y
+ * botón de enviar que publica el comentario y sube los adjuntos a la API.
+ * @param {Object} params - parámetros del compositor
+ * @param {string|number} params.ticketId - id del ticket al que se envían mensajes/adjuntos
+ * @param {Function} [params.onSent] - callback invocado por cada comentario o adjunto enviado
+ * @param {boolean} [params.disabled=false] - deshabilita el textarea y los botones
+ * @returns {HTMLElement} elemento div con el compositor completo
+ */
 export function chatComposer({ ticketId, onSent, disabled = false }) {
   const filesInput = h('input.hidden', { type: 'file', multiple: true, 'aria-label': 'Adjuntar archivos', onchange: (e) => addFiles(e.target.files) });
   const dropZone = h('div.relative.border.border-slate-200.rounded-lg.bg-white.transition', { 'data-composer': '' });
@@ -52,11 +68,25 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
   const queue = [];
   const uploading = { current: 0, total: 0 };
 
+  /**
+   * Agrega archivos a la cola de adjuntos pendientes y refresca la previsualización.
+   * @param {FileList|Array<File>} fileList - archivos a encolar
+   * @returns {void}
+   */
   function addFiles(fileList) {
     for (const f of fileList) queue.push(f);
     renderPreview();
   }
+  /**
+   * Quita un archivo de la cola de adjuntos por su índice y refresca la previsualización.
+   * @param {number} i - índice del archivo dentro de la cola
+   * @returns {void}
+   */
   function removeAt(i) { queue.splice(i, 1); renderPreview(); }
+  /**
+   * Redibuja la previsualización de archivos adjuntos pendientes de envío.
+   * @returns {void}
+   */
   function renderPreview() {
     preview.innerHTML = '';
     if (queue.length === 0) { preview.classList.add('hidden'); return; }
@@ -76,6 +106,11 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
     });
   }
 
+  /**
+   * Activa o desactiva el resaltado visual de la zona de drop mientras se arrastran archivos.
+   * @param {boolean} on - true para mostrar el resaltado
+   * @returns {void}
+   */
   function setDragVisual(on) {
     dropZone.classList.toggle('ring-2', on);
     dropZone.classList.toggle('ring-brand-ocean', on);
@@ -84,6 +119,11 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
   ;['dragleave', 'drop'].forEach((ev) => dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); setDragVisual(false); }));
   dropZone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
 
+  /**
+   * Actualiza el ícono y texto del botón de enviar según si hay un envío en curso.
+   * @param {boolean} sending - true mientras se está enviando el mensaje/adjuntos
+   * @returns {void}
+   */
   function setSendingState(sending) {
     if (sending) {
       sendBtn.disabled = true;
@@ -96,6 +136,11 @@ export function chatComposer({ ticketId, onSent, disabled = false }) {
     }
   }
 
+  /**
+   * Envía el mensaje de texto (si hay) y sube los archivos en cola a la API,
+   * notificando cada resultado mediante onSent y mostrando toasts de error si fallan.
+   * @returns {Promise<void>}
+   */
   async function send() {
     const text = textarea.value.trim();
     if (!text && queue.length === 0) return;

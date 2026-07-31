@@ -2,6 +2,15 @@
 'use strict'
 const orm = require('../orm');
 
+/**
+ * Middleware de Express que exige que el usuario autenticado sea administrador de plataforma.
+ * Responde 401 sin sesión. Si el flag no está cacheado en la sesión, lo resuelve consultando
+ * el usuario vía ORM y lo guarda en `req.session.isPlatformAdmin`. Responde 403 si no es admin.
+ * @param {Request} req
+ * @param {Response} res
+ * @param {Function} next
+ * @returns {Promise<void>}
+ */
 async function requirePlatformAdmin(req, res, next) {
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Debe iniciar sesión.' } });

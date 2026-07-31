@@ -12,6 +12,11 @@ const CATEGORIES = [
   'Otro',
 ];
 
+/**
+ * Siembra datos iniciales en la base SQLite legacy: no crea usuarios por defecto, y si la
+ * tabla de categorías está vacía, inserta el set de categorías predefinidas (CATEGORIES).
+ * @returns {Promise<void>}
+ */
 async function seed() {
   const db = getDb();
   console.log('[seed] No se crean usuarios por defecto.');

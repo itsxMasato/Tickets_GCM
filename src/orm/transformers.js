@@ -3,6 +3,12 @@
 
 const { ValueTransformer } = require('typeorm');
 
+/**
+ * Crea un ValueTransformer de TypeORM para columnas BIT no nulas: convierte booleanos JS
+ * a 0/1 al escribir en la base (to) y de vuelta a boolean al leer (from), tratando
+ * null/undefined como false al leer.
+ * @returns {ValueTransformer} transformer con métodos to/from
+ */
 function bitBoolean() {
   return {
     to(value) {
@@ -16,6 +22,11 @@ function bitBoolean() {
   };
 }
 
+/**
+ * Igual que bitBoolean() pero preserva null/undefined en vez de convertirlos a false,
+ * para columnas BIT nullable.
+ * @returns {ValueTransformer} transformer con métodos to/from
+ */
 function bitNullableBoolean() {
   return {
     to(value) {

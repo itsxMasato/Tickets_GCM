@@ -4,6 +4,9 @@
 const { EntitySchema } = require('typeorm');
 const { bitBoolean } = require('../transformers');
 
+// Entidad ORM: tabla `companies`. Empresas/tenants del sistema multitenant. Campos
+// principales: name, slug (único), logo_url/color de marca, code_prefix (para códigos de
+// ticket), responsible_user_id, active (borrado lógico) e is_default.
 module.exports = new EntitySchema({
   name: 'Company',
   tableName: 'companies',

@@ -1,6 +1,12 @@
 /* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
 
+/**
+ * Crea un badge visual que muestra la cantidad de filtros activos aplicados.
+ * Devuelve null si no hay ningún filtro activo (excluyendo paginación).
+ * @param {Object} filters - objeto de filtros actuales (clave/valor)
+ * @returns {HTMLElement|null} badge con el conteo de filtros, o null si no hay filtros activos
+ */
 export function filterBadge(filters) {
   const active = Object.entries(filters)
     .filter(([k, v]) => v && v !== '' && k !== 'page' && k !== 'limit')
@@ -13,6 +19,11 @@ export function filterBadge(filters) {
   ]);
 }
 
+/**
+ * Cuenta cuántos filtros están activos, excluyendo los parámetros de paginación.
+ * @param {Object} filters - objeto de filtros actuales (clave/valor)
+ * @returns {number} cantidad de filtros con valor activo
+ */
 export function countActiveFilters(filters) {
   return Object.entries(filters)
     .filter(([k, v]) => v && v !== '' && k !== 'page' && k !== 'limit')

@@ -19,6 +19,12 @@ const TRANSITIONS = {
   reabierto:   ['en_proceso', 'asignado'],
 };
 
+/**
+ * Determina si un usuario puede editar los metadatos (título, descripción, prioridad, categoría) de un ticket: admins de plataforma siempre, SAC de la misma empresa, o el supervisor de campo creador mientras el ticket siga en estado "recibido".
+ * @param {Object} ticket - ticket a evaluar
+ * @param {Object} user - usuario que intenta editar
+ * @returns {Boolean} true si puede editar los metadatos
+ */
 function canEditMeta(ticket, user) {
   if (user.isPlatformAdmin)
     return true;
@@ -30,20 +36,43 @@ function canEditMeta(ticket, user) {
   return false;
 }
 
+/**
+ * Determina si un usuario puede asignar un ticket a un responsable: admins de plataforma siempre, o SAC/jefe inmediato de la misma empresa.
+ * @param {Object} ticket - ticket a evaluar
+ * @param {Object} user - usuario que intenta asignar
+ * @returns {Boolean} true si puede asignar el ticket
+ */
 function canAssign(ticket, user) {
   if (user.isPlatformAdmin) return true;
   if (user.role === 'sac' || user.role === 'jefe_inmediato') return sameCompany(ticket, user);
   return false;
 }
 
+/**
+ * Determina si el rol del usuario tiene permiso para cerrar tickets (jefe inmediato o SAC).
+ * @param {Object} user - usuario a evaluar
+ * @returns {Boolean} true si puede cerrar tickets
+ */
 function canClose(user) {
   return user.role === 'jefe_inmediato' || user.role === 'sac';
 }
 
+/**
+ * Determina si el rol del usuario tiene permiso para reabrir tickets (jefe inmediato o SAC).
+ * @param {Object} user - usuario a evaluar
+ * @returns {Boolean} true si puede reabrir tickets
+ */
 function canReopen(user) {
   return user.role === 'jefe_inmediato' || user.role === 'sac';
 }
 
+/**
+ * Determina si un usuario puede cambiar el estado de un ticket al estado destino indicado, según reglas específicas por rol: admin de plataforma siempre; SAC de la misma empresa; jefe inmediato solo para cerrar/reabrir tickets de su área; admin de área solo sobre tickets que tiene asignados y solo hacia en_proceso/solucionado.
+ * @param {Object} ticket - ticket a evaluar
+ * @param {Object} user - usuario que intenta cambiar el estado
+ * @param {String} next - estado destino propuesto
+ * @returns {Boolean} true si la transición está permitida para ese usuario
+ */
 function canChangeStatus(ticket, user, next) {
   if (user.isPlatformAdmin) return true;
   if (user.role === 'sac') return sameCompany(ticket, user);
@@ -59,6 +88,11 @@ function canChangeStatus(ticket, user, next) {
   return false;
 }
 
+/**
+ * Enriquece un ticket con el área resuelta (asignado/creador) y la etiqueta legible de su estado.
+ * @param {Object} ticket - ticket crudo a decorar
+ * @returns {Object|null} ticket decorado, o null si no se recibió ticket
+ */
 function decorate(ticket) {
   if (!ticket) return null;
   return {
@@ -68,6 +102,12 @@ function decorate(ticket) {
   };
 }
 
+/**
+ * Crea un nuevo ticket para la empresa activa del usuario, notifica a todos los usuarios SAC y registra la creación en auditoría.
+ * @param {Object} payload - datos del ticket (title, description, priority, category_id)
+ * @param {Object} user - usuario que crea el ticket
+ * @returns {Promise<Object>} ticket creado decorado
+ */
 async function createTicket(payload, user) {
   if (user.activeCompanyId == null && !user.isPlatformAdmin) {
     throw validationError('Tu usuario no tiene una empresa activa asignada. Contactá al administrador antes de crear un ticket.');
@@ -106,6 +146,12 @@ async function createTicket(payload, user) {
   return decorated;
 }
 
+/**
+ * Lista tickets paginados aplicando filtros y el alcance de visibilidad del usuario.
+ * @param {Object} filters - filtros de búsqueda y paginación (incluye limit, cursor)
+ * @param {Object} user - usuario que realiza la consulta
+ * @returns {Promise<Object>} resultado paginado con tickets decorados
+ */
 async function listTickets(filters, user) {
   const limit = Math.min(100, Math.max(1, parseInt(filters.limit || '25', 10)));
   const cursor = typeof filters.cursor === 'string' && filters.cursor ? filters.cursor : null;
@@ -113,6 +159,12 @@ async function listTickets(filters, user) {
   return { ...result, tickets: result.tickets.map(decorate) };
 }
 
+/**
+ * Obtiene el detalle de un ticket por id, validando que el usuario tenga permiso para verlo.
+ * @param {String|Number} id - id del ticket
+ * @param {Object} user - usuario que solicita el ticket
+ * @returns {Promise<Object>} ticket decorado
+ */
 async function getTicket(id, user) {
   const ticket = await firestoreData.getTicketDetail(id, user);
   if (!ticket) throw notFoundError('Ticket no encontrado.');
@@ -120,6 +172,13 @@ async function getTicket(id, user) {
   return decorate(ticket);
 }
 
+/**
+ * Actualiza los metadatos de un ticket (título, descripción, prioridad, categoría), validando permisos del usuario y notificando el cambio en tiempo real.
+ * @param {String|Number} id - id del ticket a actualizar
+ * @param {Object} payload - campos a actualizar
+ * @param {Object} user - usuario que realiza la actualización
+ * @returns {Promise<Object>} ticket actualizado decorado
+ */
 async function updateTicket(id, payload, user) {
   const ticket = await firestoreData.getTicketById(id);
   if (!ticket) throw notFoundError('Ticket no encontrado.');
@@ -141,6 +200,13 @@ async function updateTicket(id, payload, user) {
   return decorated;
 }
 
+/**
+ * Asigna un ticket a un usuario responsable, notifica al nuevo encargado, registra auditoría y emite el cambio en tiempo real.
+ * @param {String|Number} id - id del ticket a asignar
+ * @param {Object} payload - datos de la asignación (to_user_id, notes)
+ * @param {Object} user - usuario que realiza la asignación
+ * @returns {Promise<Object>} ticket actualizado decorado
+ */
 async function assignTicket(id, payload, user) {
   const ticket = await firestoreData.getTicketById(id);
   if (!ticket) throw notFoundError('Ticket no encontrado.');
@@ -190,6 +256,13 @@ async function assignTicket(id, payload, user) {
   return decorated;
 }
 
+/**
+ * Cambia el estado de un ticket validando permisos y la matriz de transiciones permitidas (TRANSITIONS), notificando a las partes relevantes según el nuevo estado (encargado, jefe de área al solucionar, SAC al cerrar, encargado al reabrir), registrando auditoría y emitiendo el cambio en tiempo real.
+ * @param {String|Number} id - id del ticket
+ * @param {Object} payload - datos del cambio (status, comment)
+ * @param {Object} user - usuario que realiza el cambio de estado
+ * @returns {Promise<Object>} ticket actualizado decorado
+ */
 async function changeStatus(id, payload, user) {
   const next = optionalEnum(payload.status, 'estado', TICKET_STATUS);
   if (!next) throw validationError('Debe indicar un estado válido.');
@@ -288,6 +361,13 @@ async function changeStatus(id, payload, user) {
   return decorated;
 }
 
+/**
+ * Agrega un comentario a un ticket, notifica a la contraparte (encargado o creador, según quién comenta) y registra auditoría.
+ * @param {String|Number} id - id del ticket
+ * @param {Object} payload - datos del comentario (comment)
+ * @param {Object} user - usuario que comenta
+ * @returns {Promise<Object>} comentario creado
+ */
 async function addComment(id, payload, user) {
   const comment = requireString(payload.comment, 'comentario', 4000);
 
@@ -324,6 +404,13 @@ async function addComment(id, payload, user) {
   return row;
 }
 
+/**
+ * Sube un adjunto a un ticket, notifica a la contraparte, registra auditoría y emite el evento en tiempo real.
+ * @param {String|Number} id - id del ticket
+ * @param {Object} file - archivo subido (filename, originalname, mimetype, size)
+ * @param {Object} user - usuario que sube el adjunto
+ * @returns {Promise<Object>} adjunto creado con datos del usuario
+ */
 async function addAttachment(id, file, user) {
   const ticket = await firestoreData.getTicketWithArea(id);
   if (!ticket) throw notFoundError('Ticket no encontrado.');
@@ -366,6 +453,16 @@ async function addAttachment(id, file, user) {
   return row;
 }
 
+/**
+ * Emite por socket.io un evento relacionado a tickets, dirigido opcionalmente a un usuario específico, al rol SAC y/o a una sala. Silencia errores de socket.
+ * @param {String} event - nombre del evento a emitir
+ * @param {Object} payload - datos del evento
+ * @param {Object} [opts] - opciones de enrutamiento del socket
+ * @param {String} [opts.room] - sala a la que emitir
+ * @param {String} [opts.role] - si es 'sac', emite también a la sala del rol SAC
+ * @param {String|Number} [opts.user] - id de usuario destinatario específico
+ * @returns {void}
+ */
 function emit(event, payload, { room, role, user } = {}) {
   try {
     const io = require('../sockets').getIO();

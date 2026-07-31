@@ -1,6 +1,17 @@
 /* Documentado por: Miguel Flores */
 'use strict';
 
+/**
+ * Sincroniza un usuario de la app con Firebase Authentication: busca si ya existe una cuenta
+ * de Firebase Auth con el email actual o el anterior (por si cambió), y la actualiza; si no
+ * existe ninguna, crea una cuenta nueva (requiere password en ese caso).
+ * @param {Object} params
+ * @param {Object} params.authClient - cliente de Firebase Admin Auth (getUserByEmail/updateUser/createUser)
+ * @param {Object} params.user - usuario de la app (email, full_name, username)
+ * @param {string} [params.password] - contraseña a setear/usar al crear la cuenta
+ * @param {string} [params.currentEmail] - email previo del usuario, para detectar cambios de email
+ * @returns {Promise<{email: string, uid: string, created: boolean}>} resultado de la sincronización
+ */
 async function syncFirebaseAuthUser({ authClient, user, password, currentEmail }) {
   if (!authClient || typeof authClient.getUserByEmail !== 'function') {
     throw new Error('authClient must implement getUserByEmail');
@@ -19,6 +30,12 @@ async function syncFirebaseAuthUser({ authClient, user, password, currentEmail }
     updatePayload.password = password;
   }
 
+  /**
+   * Busca un usuario de Firebase Auth por email, devolviendo null si no existe
+   * (en vez de propagar el error auth/user-not-found).
+   * @param {string} email - email a buscar
+   * @returns {Promise<Object|null>} usuario de Firebase Auth encontrado, o null
+   */
   async function findByEmail(email) {
     try {
       return await authClient.getUserByEmail(email);

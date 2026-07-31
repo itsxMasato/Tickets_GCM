@@ -12,6 +12,14 @@ const {
 } = require('../utils/validators');
 const auditService = require('./audit.service');
 
+/**
+ * Emite por socket.io un evento relacionado a una membresía, dirigido al rol SAC y a las salas de la empresa y el usuario afectados. Silencia errores de socket.
+ * @param {String} event - nombre del evento a emitir
+ * @param {Object} membership - membresía involucrada
+ * @param {String|Number} companyId - id de la empresa, usado para armar la sala del socket
+ * @param {String|Number} userId - id del usuario, usado para armar la sala del socket
+ * @returns {void}
+ */
 function emitMembership(event, membership, companyId, userId) {
   try {
     const { emit } = require('../sockets');
@@ -25,6 +33,11 @@ function emitMembership(event, membership, companyId, userId) {
   } catch (e) {}
 }
 
+/**
+ * Convierte un registro de membresía de Firestore al formato plano expuesto por la API.
+ * @param {Object} row - registro crudo de membresía
+ * @returns {Object|null} membresía serializada, o null si no se recibió registro
+ */
 function serialize(row) {
   if (!row) return null;
   return {
@@ -39,26 +52,53 @@ function serialize(row) {
   };
 }
 
+/**
+ * Carga una empresa por id, lanzando error si no existe.
+ * @param {String|Number} companyId - id de la empresa
+ * @returns {Promise<Object>} empresa encontrada
+ */
 async function loadCompanyOrThrow(companyId) {
   const c = await firestoreData.getCompanyById(Number(companyId), { requester: null });
   if (!c) throw notFoundError('Empresa no encontrada.');
   return c;
 }
 
+/**
+ * Carga un usuario por id, lanzando error si no existe.
+ * @param {String|Number} userId - id del usuario
+ * @returns {Promise<Object>} usuario encontrado
+ */
 async function loadUserOrThrow(userId) {
   const u = await firestoreData.getUserById(Number(userId));
   if (!u) throw notFoundError('Usuario no encontrado.');
   return u;
 }
 
+/**
+ * Interpreta un valor crudo de flag "activo" almacenado en Firestore, aceptando variantes numéricas, booleanas y de texto.
+ * @param {*} value - valor crudo del flag
+ * @returns {Boolean} true si el valor representa "activo"
+ */
 function isActiveFlag(value) {
   return value === 1 || value === true || value === '1' || value === 'true';
 }
 
+/**
+ * Normaliza un id a String para poder compararlo de forma consistente sin importar su tipo original.
+ * @param {*} value - id a normalizar
+ * @returns {String|null} id normalizado como string, o null si el valor era nulo
+ */
 function normalizeMembershipId(value) {
   return value == null ? null : String(value);
 }
 
+/**
+ * Obtiene las membresías de un usuario probando varias estrategias de consulta en Firestore (con filtros progresivamente más laxos) para tolerar índices o datos inconsistentes, y filtra el resultado final por el usuario y el flag de activo solicitado.
+ * @param {String|Number} userId - id del usuario
+ * @param {Object} [options] - opciones de consulta
+ * @param {Boolean} [options.activeOnly=false] - si true, devuelve solo membresías activas
+ * @returns {Promise<Array>} membresías crudas del usuario
+ */
 async function getMembershipRowsForUser(userId, { activeOnly = false } = {}) {
   const normalizedUserId = normalizeMembershipId(userId);
   const rows = [];
@@ -92,12 +132,25 @@ async function getMembershipRowsForUser(userId, { activeOnly = false } = {}) {
   });
 }
 
+/**
+ * Busca la membresía de un usuario en una empresa específica.
+ * @param {String|Number} userId - id del usuario
+ * @param {String|Number} companyId - id de la empresa
+ * @param {Object} [options] - opciones de búsqueda
+ * @param {Boolean} [options.activeOnly=false] - si true, solo considera membresías activas
+ * @returns {Promise<Object|null>} membresía encontrada, o null si no existe
+ */
 async function findMembershipForUserAndCompany(userId, companyId, { activeOnly = false } = {}) {
   const normalizedCompanyId = normalizeMembershipId(companyId);
   const rows = await getMembershipRowsForUser(userId, { activeOnly });
   return rows.find((row) => normalizeMembershipId(row.company_id) === normalizedCompanyId) || null;
 }
 
+/**
+ * Resuelve el id de la empresa por defecto de un usuario a partir de sus membresías activas, usando la primera activa como respaldo si ninguna está marcada como default.
+ * @param {String|Number} userId - id del usuario
+ * @returns {Promise<Number|null>} id de la empresa por defecto, o null si el usuario no tiene membresías activas
+ */
 async function resolveDefaultCompanyId(userId) {
   const rows = await getMembershipRowsForUser(userId, { activeOnly: true });
   if (!rows.length) return null;
@@ -105,11 +158,24 @@ async function resolveDefaultCompanyId(userId) {
   return Number((defaultRow || rows[0]).company_id);
 }
 
+/**
+ * Verifica si un usuario tiene una membresía activa en una empresa determinada.
+ * @param {String|Number} userId - id del usuario
+ * @param {String|Number} companyId - id de la empresa
+ * @returns {Promise<Boolean>} true si el usuario es miembro activo de la empresa
+ */
 async function isActiveMemberOfCompany(userId, companyId) {
   const membership = await findMembershipForUserAndCompany(userId, companyId, { activeOnly: true });
   return !!membership;
 }
 
+/**
+ * Lista todas las membresías (activas e inactivas) de un usuario junto con datos básicos de cada empresa, validando que el solicitante sea el propio usuario o un administrador de plataforma.
+ * @param {String|Number} userId - id del usuario cuyas membresías se listan
+ * @param {Object} [options] - opciones de la consulta
+ * @param {Object} [options.requester] - usuario que realiza la consulta
+ * @returns {Promise<Array>} membresías del usuario con datos de empresa embebidos
+ */
 async function listByUser(userId, { requester } = {}) {
   const targetUserId = Number(userId);
   if (!requester)
@@ -130,6 +196,14 @@ async function listByUser(userId, { requester } = {}) {
   });
 }
 
+/**
+ * Lista las membresías de una empresa junto con datos básicos de cada usuario, validando que el solicitante sea miembro de la empresa o administrador de plataforma.
+ * @param {String|Number} companyId - id de la empresa
+ * @param {Object} [options] - opciones de listado
+ * @param {Boolean} [options.activeOnly=true] - si true, excluye membresías inactivas
+ * @param {Object} [options.requester] - usuario que realiza la consulta
+ * @returns {Promise<Array>} membresías de la empresa con datos de usuario embebidos
+ */
 async function listByCompany(companyId, { activeOnly = true, requester } = {}) {
   if (!requester) throw forbiddenError('Debe iniciar sesión.');
   const cid = Number(companyId);
@@ -151,6 +225,15 @@ async function listByCompany(companyId, { activeOnly = true, requester } = {}) {
   });
 }
 
+/**
+ * Crea una nueva membresía de un usuario en una empresa con un rol determinado, evitando duplicados y gestionando el flag de membresía por defecto. Registra auditoría y notifica en tiempo real.
+ * @param {String|Number} userId - id del usuario a vincular
+ * @param {Object} input - datos de la membresía (company_id, role, is_default)
+ * @param {Object} requester - usuario que realiza la operación (administrador de plataforma, o SAC si `options.allowSACCreate`)
+ * @param {Object} [options] - opciones adicionales
+ * @param {Boolean} [options.allowSACCreate] - permite que un usuario SAC cree la membresía
+ * @returns {Promise<Object>} membresía creada serializada
+ */
 async function create(userId, input, requester, options = {}) {
   if (!requester || (!requester.isPlatformAdmin && !(options && options.allowSACCreate && requester.role === 'sac'))) {
     throw forbiddenError('Solo el administrador de plataforma puede asignar membresías.');
@@ -199,6 +282,14 @@ async function create(userId, input, requester, options = {}) {
   return out;
 }
 
+/**
+ * Valida que, tras desactivar o cambiar el rol de una membresía, la empresa no quede sin miembros activos ni sin ningún administrador de área activo.
+ * @param {Object} before - membresía tal como está antes del cambio
+ * @param {Object} [options] - cambios propuestos
+ * @param {Boolean} [options.becomesInactive=false] - si la membresía pasará a estar inactiva
+ * @param {String} [options.newRole] - nuevo rol propuesto, si cambia
+ * @returns {Promise<void>}
+ */
 async function assertCompanyKeepsCoverage(before, { becomesInactive = false, newRole } = {}) {
   if (!before.active)
     return;
@@ -224,6 +315,15 @@ async function assertCompanyKeepsCoverage(before, { becomesInactive = false, new
   }
 }
 
+/**
+ * Actualiza el rol, estado activo o flag de membresía por defecto de una membresía existente, validando que la empresa mantenga cobertura mínima de miembros y administradores. Registra auditoría y notifica en tiempo real.
+ * @param {String|Number} membershipId - id de la membresía a actualizar
+ * @param {Object} input - campos a actualizar (role, active, is_default)
+ * @param {Object} requester - usuario que realiza la operación (administrador de plataforma, o SAC si `options.allowSACCreate`)
+ * @param {Object} [options] - opciones adicionales
+ * @param {Boolean} [options.allowSACCreate] - permite que un usuario SAC actualice la membresía
+ * @returns {Promise<Object>} membresía actualizada serializada
+ */
 async function update(membershipId, input, requester, options = {}) {
   if (!requester || (!requester.isPlatformAdmin && !(options && options.allowSACCreate && requester.role === 'sac'))) {
     throw forbiddenError('Solo el administrador de plataforma puede modificar membresías.');
@@ -275,6 +375,12 @@ async function update(membershipId, input, requester, options = {}) {
   return out;
 }
 
+/**
+ * Desactiva (soft delete) una membresía, impidiendo eliminar la última membresía activa de un usuario y validando la cobertura mínima de la empresa. Registra auditoría y notifica en tiempo real.
+ * @param {String|Number} membershipId - id de la membresía a eliminar
+ * @param {Object} requester - usuario que realiza la operación, debe ser administrador de plataforma
+ * @returns {Promise<Object>} membresía resultante tras la baja
+ */
 async function softDelete(membershipId, requester) {
   if (!requester || !requester.isPlatformAdmin) throw forbiddenError('Solo el administrador de plataforma puede eliminar membresías.');
   const before = await firestoreData.getDoc('user_company_memberships', Number(membershipId));

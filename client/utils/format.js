@@ -1,6 +1,11 @@
 /* Documentado por: Miguel Flores */
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
+/**
+ * Formatea una fecha ISO como fecha y hora legible en español (ej. "05 jul 2026 · 14:30").
+ * @param {string} iso - fecha en formato ISO o SQL (con espacio en vez de 'T')
+ * @returns {string} fecha y hora formateadas, o cadena vacía si es inválida
+ */
 export function formatDateTime(iso) {
   if (!iso) return '';
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
@@ -13,6 +18,11 @@ export function formatDateTime(iso) {
   return `${day} ${mon} ${year} · ${hh}:${mm}`;
 }
 
+/**
+ * Formatea una fecha ISO como fecha legible en español, sin hora (ej. "05 jul 2026").
+ * @param {string} iso - fecha en formato ISO o SQL (con espacio en vez de 'T')
+ * @returns {string} fecha formateada, o cadena vacía si es inválida
+ */
 export function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
@@ -20,6 +30,12 @@ export function formatDate(iso) {
   return `${String(d.getDate()).padStart(2, '0')} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/**
+ * Devuelve una descripción relativa en español de cuánto tiempo pasó desde una fecha ISO
+ * (ej. "hace 5 min"), cayendo a formatDate si pasó más de 30 días.
+ * @param {string} iso - fecha en formato ISO o SQL (con espacio en vez de 'T')
+ * @returns {string} texto relativo, o cadena vacía si es inválida
+ */
 export function relativeFromNow(iso) {
   if (!iso) return '';
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
@@ -36,6 +52,11 @@ export function relativeFromNow(iso) {
   return formatDate(iso);
 }
 
+/**
+ * Formatea un tamaño en bytes a una unidad legible (B, KB, MB o GB).
+ * @param {number} bytes - tamaño en bytes
+ * @returns {string} tamaño formateado con su unidad
+ */
 export function fileSize(bytes) {
   if (!bytes) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -69,5 +90,10 @@ export const AREA_LABEL = {
   otro:          'Otro',
 };
 
+/**
+ * Determina si un tipo MIME corresponde a una imagen.
+ * @param {string} mime - tipo MIME a evaluar
+ * @returns {boolean} true si el mime empieza con "image/"
+ */
 export function isImage(mime) { return /^image\//i.test(mime || ''); }
 

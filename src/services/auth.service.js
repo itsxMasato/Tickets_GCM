@@ -26,6 +26,13 @@ const LIMITS = {
 
 const VALID_AREAS = ['operaciones', 'logistica', 'mantenimiento', 'sistemas', 'otro'];
 
+/**
+ * Emite por socket.io un evento relacionado a un usuario (creación, actualización, desactivación). Silencia errores de socket.
+ * @param {String} event - nombre del evento a emitir
+ * @param {Object} user - usuario involucrado
+ * @param {Object} [opts] - datos adicionales del payload (ej. changes, fanoutSac)
+ * @returns {void}
+ */
 function emitUser(event, user, opts = {}) {
   try {
     const { emit } = require('../sockets');
@@ -36,10 +43,20 @@ function emitUser(event, user, opts = {}) {
   } catch (e) {}
 }
 
+/**
+ * Determina si un valor de estado de usuario representa "activo", interpretando las distintas formas en que puede venir almacenado (0, false, '0', 'false' se consideran inactivo).
+ * @param {*} value - valor crudo del campo active
+ * @returns {Boolean} true si el usuario está activo
+ */
 function isUserActive(value) {
   return value === 0 || value === false || value === '0' || value === 'false' ? false : true;
 }
 
+/**
+ * Convierte un registro de usuario de Firestore al formato plano expuesto por la API, normalizando el flag de administrador de plataforma.
+ * @param {Object} row - registro crudo de usuario
+ * @returns {Object|null} usuario serializado, o null si no se recibió registro
+ */
 function serialize(row) {
   if (!row)
     return null;
@@ -61,6 +78,11 @@ function serialize(row) {
   };
 }
 
+/**
+ * Reduce un objeto de usuario a los campos seguros para exponer (sin password_hash), normalizando el flag de administrador de plataforma.
+ * @param {Object} user - usuario a sanear
+ * @returns {Object} usuario saneado
+ */
 function sanitize(user) {
   const isPlatformAdmin = user && (user.isPlatformAdmin === true || user.is_platform_admin === true || user.is_platform_admin === 1 || user.isPlatformAdmin === 1 || user.isPlatformAdmin === '1' || user.is_platform_admin === '1');
   return {
@@ -77,6 +99,12 @@ function sanitize(user) {
   };
 }
 
+/**
+ * Autentica a un usuario por usuario/contraseña, validando que exista, esté activo y que la contraseña coincida.
+ * @param {String} username - nombre de usuario o identificador
+ * @param {String} password - contraseña en texto plano
+ * @returns {Promise<Object>} usuario autenticado saneado
+ */
 async function login(username, password) {
   if (!username || !password) {
     throw validationError('Debe ingresar usuario y contraseña.');
@@ -92,6 +120,12 @@ async function login(username, password) {
   return sanitize(user);
 }
 
+/**
+ * Verifica que la contraseña ingresada corresponda al usuario indicado (ej. para reautenticación antes de una acción sensible).
+ * @param {String|Number} userId - id del usuario
+ * @param {String} password - contraseña en texto plano a verificar
+ * @returns {Promise<Boolean>} true si la contraseña es correcta
+ */
 async function verifyPasswordForUser(userId, password) {
   if (!password) {
     throw validationError('Debe ingresar su contraseña.');
@@ -107,12 +141,30 @@ async function verifyPasswordForUser(userId, password) {
   return true;
 }
 
+/**
+ * Obtiene un usuario por id, serializado para la API.
+ * @param {String|Number} id - id del usuario
+ * @returns {Promise<Object>} usuario serializado
+ */
 async function getById(id) {
   const user = await firestoreData.getUserById(id);
   if (!user) throw notFoundError('Usuario no encontrado.');
   return serialize(user);
 }
 
+/**
+ * Crea un nuevo usuario validando todos sus campos, sincroniza la cuenta en Firebase Auth, opcionalmente crea su membresía de empresa, gestiona la transferencia del rol de administrador inicial (bootstrap) si corresponde, y notifica la creación en tiempo real.
+ * @param {Object} params - datos del nuevo usuario
+ * @param {String} params.username - nombre de usuario
+ * @param {String} params.password - contraseña en texto plano
+ * @param {String} params.full_name - nombre completo
+ * @param {String} params.role - rol asignado
+ * @param {String} [params.area] - área asignada
+ * @param {String} [params.email] - email del usuario
+ * @param {String|Number} [params.company_id] - empresa a la que se lo vincula
+ * @param {Object} requester - usuario que realiza la creación
+ * @returns {Promise<Object>} usuario creado serializado
+ */
 async function createUser({ username, password, full_name, role, area, email, company_id } = {}, requester) {
   const cleanUsername = requireString(username, 'Usuario', LIMITS.username.max);
   if (cleanUsername.length < LIMITS.username.min) {
@@ -178,7 +230,7 @@ async function createUser({ username, password, full_name, role, area, email, co
       }).catch(() => {});
     });
 
-    const row = await getById(created.id);
+    let row = await getById(created.id);
     if (company_id) {
       try {
         await membershipsService.create(created.id, { company_id: Number(company_id), role }, requester, { allowSACCreate: true });
@@ -188,6 +240,7 @@ async function createUser({ username, password, full_name, role, area, email, co
       }
     }
 
+    row = await transferBootstrapAdminIfNeeded(requester, row);
     emitUser('user:created', row);
     return row;
   } catch (err) {
@@ -198,6 +251,56 @@ async function createUser({ username, password, full_name, role, area, email, co
   }
 }
 
+/**
+ * Si el usuario que crea el nuevo registro es la cuenta de administrador inicial (bootstrap) y el usuario creado es SAC, transfiere el rol de administrador de plataforma al nuevo usuario y elimina la cuenta bootstrap (incluida su cuenta de Firebase Auth). Registra la operación en auditoría.
+ * @param {Object} requester - usuario que realiza la creación
+ * @param {Object} createdUser - usuario recién creado
+ * @returns {Promise<Object>} usuario creado, posiblemente actualizado tras la transferencia
+ */
+async function transferBootstrapAdminIfNeeded(requester, createdUser) {
+  if (!requester || createdUser.role !== 'sac') return createdUser;
+
+  const requesterFull = await firestoreData.getUserById(requester.id);
+  if (!requesterFull || !requesterFull.is_bootstrap) return createdUser;
+
+  try {
+    await firestoreData.updateUser(createdUser.id, { is_platform_admin: true });
+
+    const email = deriveAuthEmail(requesterFull);
+    if (email) {
+      const auth = require('../firebaseAdmin').getAuth();
+      try {
+        const authUser = await auth.getUserByEmail(email);
+        await auth.deleteUser(authUser.uid);
+      } catch (e) {
+        if (e.code !== 'auth/user-not-found') throw e;
+      }
+    }
+    await firestoreData.deleteUser(requesterFull.id);
+
+    auditService.logAsync({
+      user_id: null,
+      action_type: 'bootstrap_admin_removed',
+      target_type: 'user',
+      target_id: requesterFull.id,
+      target_code: requesterFull.username,
+      description: `Cuenta de administrador inicial "${requesterFull.username}" eliminada automáticamente; el rol de administrador de plataforma pasó a "${createdUser.username}".`,
+    }).catch(() => {});
+
+    return await getById(createdUser.id);
+  } catch (err) {
+    console.warn('[auth.service] no se pudo completar la transferencia del administrador inicial:', err.stack || err.message);
+    return createdUser;
+  }
+}
+
+/**
+ * Actualiza los datos de un usuario aplicando reglas de negocio: impide auto-desactivación y auto-cambio de rol, protege al único SAC y al único administrador de plataforma, gestiona permisos de administrador de plataforma, sincroniza cambios con Firebase Auth y notifica el cambio (o la desactivación) en tiempo real.
+ * @param {String|Number} id - id del usuario a actualizar
+ * @param {Object} [changes] - campos a actualizar (full_name, role, area, active, password, email, username, company_id, is_platform_admin)
+ * @param {Object} currentUser - usuario que realiza la actualización
+ * @returns {Promise<Object>} usuario actualizado serializado
+ */
 async function updateUser(
   id,
   { full_name, role, area, active, password, email, username, company_id, is_platform_admin } = {},
@@ -387,6 +490,12 @@ async function updateUser(
   return after;
 }
 
+/**
+ * Actualiza la URL del avatar de un usuario y notifica el cambio en tiempo real.
+ * @param {String|Number} userId - id del usuario
+ * @param {String} avatarUrl - nueva URL del avatar
+ * @returns {Promise<Object>} usuario actualizado serializado
+ */
 async function updateAvatar(userId, avatarUrl) {
   const before = await getById(userId);
   const row = await firestoreData.updateUser(userId, { avatar_url: avatarUrl });
@@ -395,6 +504,12 @@ async function updateAvatar(userId, avatarUrl) {
   return after;
 }
 
+/**
+ * Lista usuarios aplicando filtros opcionales de rol, estado activo y área, acotado según el alcance del solicitante.
+ * @param {Object} [filters] - filtros de listado (role, active, area)
+ * @param {Object} [requester] - usuario que realiza la consulta, usado para acotar el alcance
+ * @returns {Promise<Array>} usuarios serializados
+ */
 async function listUsers({ role, active, area } = {}, requester = null) {
   const rows = await firestoreData.listUsers({ role, active, area }, requester);
   return rows.map(serialize);

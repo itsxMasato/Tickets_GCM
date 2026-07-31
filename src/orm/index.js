@@ -3,6 +3,10 @@
 
 require('reflect-metadata');
 
+// Punto de entrada de la capa ORM (TypeORM/SQL Server): reexporta el DataSource, las
+// utilidades de repositorio, todas las entidades y los enums compartidos, para que el
+// resto de la app importe todo desde `src/orm` en vez de conocer la estructura interna.
+
 const datasource = require('./datasource');
 const Entities = require('./entities');
 const factory = require('./repositories/repository-factory');

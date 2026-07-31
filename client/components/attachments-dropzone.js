@@ -29,6 +29,11 @@ const FILE_ICON = {
   file:  'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6',
 };
 
+/**
+ * Determina qué ícono y color de Tailwind corresponden a un tipo MIME de archivo.
+ * @param {string} mime - tipo MIME del archivo
+ * @returns {{d: string, cls: string}} path del ícono SVG y clase de color
+ */
 function iconFor(mime) {
   if (isImage(mime))    return { d: FILE_ICON.image, cls: 'text-brand-ocean' };
   if (mime === 'application/pdf') return { d: FILE_ICON.pdf,   cls: 'text-accent' };
@@ -38,6 +43,11 @@ function iconFor(mime) {
   return { d: FILE_ICON.file, cls: 'text-slate-500' };
 }
 
+/**
+ * Genera una previsualización en base64 (data URL) de un archivo si es una imagen.
+ * @param {File} file - archivo a previsualizar
+ * @returns {Promise<string|null>} data URL de la imagen, o null si no es imagen o falla la lectura
+ */
 function readPreviewDataURL(file) {
   return new Promise((resolve) => {
     if (!isImage(file.type)) return resolve(null);
@@ -48,6 +58,17 @@ function readPreviewDataURL(file) {
   });
 }
 
+/**
+ * Crea una zona de arrastrar/soltar para adjuntar archivos, con validación de
+ * tipo y tamaño, previsualización de imágenes, pegado desde el portapapeles
+ * (Ctrl+V) y lista de archivos inválidos rechazados.
+ * @param {Object} [options] - opciones de configuración
+ * @param {Function} [options.onChange] - callback invocado con la lista de archivos válidos cada vez que cambia
+ * @param {boolean} [options.disabled=false] - deshabilita la interacción con la zona de drop
+ * @param {string} [options.label='Adjuntar archivos'] - texto principal mostrado en la zona
+ * @param {string} [options.hint] - texto de ayuda sobre tipos y tamaño permitidos
+ * @returns {{root: HTMLElement, getFiles: Function, clear: Function, destroy: Function}} controlador del dropzone
+ */
 export function attachmentsDropzone(
   {
     onChange,
@@ -86,6 +107,10 @@ export function attachmentsDropzone(
     h('div.text-slate-500.mt-1', { class: 'text-[10px]' }, 'Arrastra · pega con Ctrl+V · o haz click para elegir'),
   ]);
 
+  /**
+   * Abre el selector nativo de archivos si el dropzone no está deshabilitado.
+   * @returns {void}
+   */
   function openPicker() { if (!disabled) fileInput.click(); }
   drop.addEventListener('click', openPicker);
   drop.addEventListener('keydown', (e) => {
@@ -93,11 +118,31 @@ export function attachmentsDropzone(
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); }
   });
 
+  /**
+   * Activa o desactiva el resaltado visual de la zona de drop.
+   * @param {boolean} on - true para mostrar el resaltado
+   * @returns {void}
+   */
   function setDragVisual(on) {
     drop.classList.toggle('gcm-dropzone-active', on);
   }
+  /**
+   * Maneja el evento de arrastrar un archivo sobre la zona de drop, mostrando el resaltado.
+   * @param {DragEvent} e - evento de arrastre
+   * @returns {void}
+   */
   function onDragOver(e) { if (disabled) return; e.preventDefault(); e.stopPropagation(); setDragVisual(true); }
+  /**
+   * Maneja el evento de salir del área de drop, quitando el resaltado.
+   * @param {DragEvent} e - evento de arrastre
+   * @returns {void}
+   */
   function onDragLeave(e) { e.preventDefault(); e.stopPropagation(); setDragVisual(false); }
+  /**
+   * Maneja el evento de soltar archivos sobre la zona de drop, agregándolos a la cola.
+   * @param {DragEvent} e - evento de soltado
+   * @returns {void}
+   */
   function onDrop(e) {
     e.preventDefault(); e.stopPropagation();
     setDragVisual(false);
@@ -109,6 +154,12 @@ export function attachmentsDropzone(
   drop.addEventListener('dragleave', onDragLeave);
   drop.addEventListener('drop', onDrop);
 
+  /**
+   * Maneja el pegado desde el portapapeles (Ctrl+V): si contiene archivos y el
+   * foco no está en un campo de texto, los agrega a la cola de adjuntos.
+   * @param {ClipboardEvent} e - evento de pegado
+   * @returns {void}
+   */
   function onPaste(e) {
     if (disabled) return;
     const t = e.target;
@@ -130,6 +181,12 @@ export function attachmentsDropzone(
   }
   document.addEventListener('paste', onPaste);
 
+  /**
+   * Valida (tipo y tamaño) y agrega archivos entrantes a la cola de adjuntos,
+   * generando su previsualización si son imágenes y notificando el cambio mediante onChange.
+   * @param {FileList|Array<File>} fileListLike - archivos a procesar
+   * @returns {void}
+   */
   function addFiles(fileListLike) {
     if (disabled) return;
     const incoming = Array.from(fileListLike || []);
@@ -155,12 +212,21 @@ export function attachmentsDropzone(
     onChange?.(files.map((f) => f.file));
   }
 
+  /**
+   * Quita un archivo de la cola de adjuntos por su índice y notifica el cambio.
+   * @param {number} i - índice del archivo a quitar
+   * @returns {void}
+   */
   function removeAt(i) {
     files.splice(i, 1);
     renderFileList();
     onChange?.(files.map((f) => f.file));
   }
 
+  /**
+   * Redibuja la lista visual de archivos adjuntos válidos (con previsualización o ícono).
+   * @returns {void}
+   */
   function renderFileList() {
     counter.textContent = `${files.length} ${files.length === 1 ? 'archivo' : 'archivos'}`;
     fileList.innerHTML = '';
@@ -193,6 +259,10 @@ export function attachmentsDropzone(
     });
   }
 
+  /**
+   * Redibuja la lista visual de archivos rechazados por validación, con su motivo de rechazo.
+   * @returns {void}
+   */
   function renderInvalids() {
     invalidList.innerHTML = '';
     if (invalids.length === 0) {
@@ -205,7 +275,15 @@ export function attachmentsDropzone(
     });
   }
 
+  /**
+   * Devuelve los archivos File actualmente en la cola de adjuntos válidos.
+   * @returns {Array<File>} lista de archivos adjuntos
+   */
   function getFiles() { return files.map((f) => f.file); }
+  /**
+   * Limpia la cola de archivos adjuntos y de inválidos, y notifica el cambio.
+   * @returns {void}
+   */
   function clear() {
     files.length = 0;
     invalids.length = 0;
@@ -213,6 +291,10 @@ export function attachmentsDropzone(
     renderInvalids();
     onChange?.([]);
   }
+  /**
+   * Elimina el listener global de pegado (paste) registrado por el dropzone.
+   * @returns {void}
+   */
   function destroy() {
     document.removeEventListener('paste', onPaste);
   }

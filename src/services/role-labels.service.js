@@ -7,6 +7,10 @@ const auditService = require('./audit.service');
 const COLLECTION = 'role_labels';
 const LABEL_MAX = 80;
 
+/**
+ * Devuelve las etiquetas personalizadas (o por defecto) de todos los roles del sistema.
+ * @returns {Promise<Object>} mapa de rol a etiqueta
+ */
 async function list() {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();
@@ -26,6 +30,11 @@ async function list() {
   return out;
 }
 
+/**
+ * Obtiene la etiqueta personalizada de un rol, o la etiqueta por defecto si no fue personalizada o el rol no es válido.
+ * @param {String} role - código del rol
+ * @returns {Promise<String>} etiqueta del rol
+ */
 async function get(role) {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();
@@ -42,6 +51,14 @@ async function get(role) {
   return validators.ROLE_LABEL[role] || role;
 }
 
+/**
+ * Actualiza la etiqueta visible de un rol, valida el texto recibido, registra auditoría y notifica el cambio por socket si hubo diferencia real.
+ * @param {String} role - código del rol a renombrar
+ * @param {Object} body - cuerpo de la solicitud con el nuevo label
+ * @param {String} body.label - nueva etiqueta del rol
+ * @param {Object} user - usuario que realiza el cambio
+ * @returns {Promise<String>} etiqueta final guardada
+ */
 async function update(role, body, user) {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();

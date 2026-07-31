@@ -13,6 +13,12 @@ export const stickyHeaderStyles = `
   }
 `;
 
+/**
+ * Activa el comportamiento "sticky" en una barra de filtros: la fija al hacer scroll
+ * y le agrega sombra extra cuando la página está desplazada.
+ * @param {HTMLElement} filterBarElement - elemento de la barra de filtros a hacer sticky
+ * @returns {void}
+ */
 export function enableStickyFilters(filterBarElement) {
   filterBarElement.classList.add('filters-bar-sticky');
   
@@ -31,6 +37,11 @@ export function enableStickyFilters(filterBarElement) {
   });
 }
 
+/**
+ * Revierte el comportamiento sticky aplicado por enableStickyFilters, quitando sus clases CSS.
+ * @param {HTMLElement} filterBarElement - elemento de la barra de filtros a restaurar
+ * @returns {void}
+ */
 export function disableStickyFilters(filterBarElement) {
   filterBarElement.classList.remove('filters-bar-sticky', 'scrolled');
 }

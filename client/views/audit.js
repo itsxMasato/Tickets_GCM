@@ -38,10 +38,20 @@ const ACTION_LABELS = {
   permission_deleted:        'Permiso eliminado',
 };
 
+/**
+ * Convierte un código de tipo de acción interno en un texto legible (reemplaza separadores y capitaliza).
+ * @param {string} actionType - código interno del tipo de acción
+ * @returns {string} texto humanizado
+ */
 function humanizeActionType(actionType) {
   return String(actionType).replace(/[:_]/g, ' ').replace(/^./, (c) => c.toUpperCase());
 }
 
+/**
+ * Devuelve la etiqueta legible de un tipo de acción de auditoría, usando el diccionario de etiquetas o humanizando el código.
+ * @param {string} actionType - código interno del tipo de acción
+ * @returns {string} etiqueta legible
+ */
 function formatActionType(actionType) {
   if (!actionType) return '—';
   return ACTION_LABELS[actionType] || humanizeActionType(actionType);
@@ -68,6 +78,11 @@ const ACTION_COLORS = {
   permission_deleted:        'bg-rose-100 text-rose-700 border-rose-200',
 };
 
+/**
+ * Devuelve las clases de color del badge correspondiente a un tipo de acción de auditoría.
+ * @param {string} actionType - código interno del tipo de acción
+ * @returns {string} clases CSS del badge
+ */
 function badgeColor(actionType) {
   return ACTION_COLORS[actionType] || 'bg-slate-100 text-slate-700 border-slate-200';
 }
@@ -81,6 +96,11 @@ const TARGET_TYPE_LABELS = {
   user: 'Usuario',
 };
 
+/**
+ * Devuelve la etiqueta legible del tipo de objetivo de una acción de auditoría (ticket, rol, empresa, etc.).
+ * @param {string} targetType - código interno del tipo de objetivo
+ * @returns {string} etiqueta legible
+ */
 function formatTargetType(targetType) {
   return TARGET_TYPE_LABELS[targetType] || humanizeActionType(targetType);
 }
@@ -97,6 +117,11 @@ const FIELD_LABELS = {
   fields_changed: 'Campos modificados', context: 'Contexto',
 };
 
+/**
+ * Devuelve la etiqueta legible de un nombre de campo, usando el diccionario de etiquetas o formateando el nombre crudo.
+ * @param {string} key - nombre del campo
+ * @returns {string} etiqueta legible
+ */
 function prettifyKey(key) {
   return FIELD_LABELS[key] || String(key)
     .replace(/_/g, ' ')
@@ -104,6 +129,12 @@ function prettifyKey(key) {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
+/**
+ * Formatea el valor de un campo de auditoría para mostrarlo de forma legible según su tipo (booleano, fecha, estado, etc.).
+ * @param {string} key - nombre del campo al que pertenece el valor
+ * @param {*} value - valor crudo a formatear
+ * @returns {string} valor formateado para mostrar
+ */
 function humanizeValue(key, value) {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Sí' : 'No';
@@ -118,6 +149,12 @@ function humanizeValue(key, value) {
   return String(value);
 }
 
+/**
+ * Compara el valor anterior y el nuevo de un registro de auditoría y arma la lista de campos que cambiaron.
+ * @param {Object} oldValue - valor anterior del registro
+ * @param {Object} newValue - valor nuevo del registro
+ * @returns {Array<Object>} filas con los campos modificados (clave, si tenía valor anterior/nuevo y sus valores crudos)
+ */
 function buildChangeRows(oldValue, newValue) {
   const oldObj = oldValue && typeof oldValue === 'object' ? oldValue : {};
   const newObj = newValue && typeof newValue === 'object' ? newValue : {};
@@ -132,6 +169,16 @@ function buildChangeRows(oldValue, newValue) {
     .filter(Boolean);
 }
 
+/**
+ * Arma una tarjeta de indicador (KPI) con icono, valor y etiqueta para el resumen de la bitácora de auditoría.
+ * @param {Object} params - datos del KPI
+ * @param {string} params.label - etiqueta del indicador
+ * @param {*} params.value - valor a mostrar
+ * @param {string} [params.hint] - texto de ayuda junto al valor
+ * @param {string} params.icon - icono a mostrar
+ * @param {string} [params.tone] - variante de color del KPI
+ * @returns {HTMLElement} tarjeta KPI
+ */
 function kpiCard({ label, value, hint = '', icon, tone = '' }) {
   const TONE = {
     '':     'bg-brand/10 text-brand',
@@ -150,6 +197,13 @@ function kpiCard({ label, value, hint = '', icon, tone = '' }) {
   ]);
 }
 
+/**
+ * Arma la vista de bitácora de auditoría: filtros, KPIs, tabla paginada de acciones y exportación.
+ * @param {Object} params - parámetros de entrada de la ruta
+ * @param {Object} params.query - parámetros de query string de la URL (filtros iniciales)
+ * @param {Object} params.user - usuario autenticado actual
+ * @returns {Promise<{view: HTMLElement}>} nodo raíz de la vista
+ */
 export async function renderAudit({ query, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
   let cursors = [null];
@@ -237,6 +291,11 @@ export async function renderAudit({ query, user }) {
   ]);
   root.appendChild(h('div.flex.flex-col', {}, [tableContainer, pager]));
 
+  /**
+   * Dibuja las tarjetas KPI (total de acciones, tipo más frecuente, usuarios con actividad) con los datos recibidos.
+   * @param {Object} [data] - datos agregados de la bitácora para el filtro actual
+   * @returns {void}
+   */
   function renderKpis(data = {}) {
     kpiContainer.innerHTML = '';
     const totalValue = data.total == null ? '—' : data.total.toLocaleString('es-ES');
@@ -245,6 +304,11 @@ export async function renderAudit({ query, user }) {
     kpiContainer.appendChild(kpiCard({ label: 'Usuarios con actividad', value: data.activeUserCount || 0, hint: 'según el filtro actual', icon: ICON.users, tone: 'good' }));
   }
 
+  /**
+   * Abre el modal de detalle de un registro de auditoría, mostrando sus datos generales y los campos que cambiaron.
+   * @param {Object} record - registro de auditoría seleccionado
+   * @returns {void}
+   */
   function openDetailModal(record) {
     const rows = [
       ['Fecha', formatDateTime(record.created_at)],
@@ -281,6 +345,11 @@ export async function renderAudit({ query, user }) {
     });
   }
 
+  /**
+   * Dibuja la tabla de registros de auditoría de la página actual, o el estado vacío si no hay resultados.
+   * @param {Array<Object>} [records] - registros de auditoría a mostrar
+   * @returns {void}
+   */
   function renderTable(records = []) {
     tableContainer.innerHTML = '';
 
@@ -330,6 +399,10 @@ export async function renderAudit({ query, user }) {
     tableContainer.appendChild(table);
   }
 
+  /**
+   * Actualiza el texto del resumen de entradas mostradas y el estado de los botones de paginación.
+   * @returns {void}
+   */
   function renderPager() {
     const { total, data, hasMore } = lastResult;
     pagerInfo.textContent = total == null
@@ -340,6 +413,10 @@ export async function renderAudit({ query, user }) {
     nextBtn.disabled = !hasMore;
   }
 
+  /**
+   * Solicita a la API los registros de auditoría según los filtros y la página actual, y dibuja KPIs, tabla y paginador.
+   * @returns {Promise<void>}
+   */
   async function loadAudit() {
     tableContainer.innerHTML = `
       <div class="card flex items-center justify-center gap-3 py-12 text-slate-600">
@@ -421,6 +498,10 @@ export async function renderAudit({ query, user }) {
     }
   }
 
+  /**
+   * Limpia todos los filtros de la bitácora (controles y URL) y vuelve a cargar el listado desde la primera página.
+   * @returns {void}
+   */
   function clearFilters() {
     clearFiltersInUrl();
     search.value = '';
@@ -434,8 +515,19 @@ export async function renderAudit({ query, user }) {
     loadAudit();
   }
 
+  /**
+   * Pide confirmación de contraseña y exporta la bitácora de auditoría filtrada a Excel o PDF (con límite de filas).
+   * @param {string} format - formato de exportación ('pdf' o 'excel')
+   * @returns {Promise<void>}
+   */
   async function doExport(format) {
     const formatLabel = format === 'pdf' ? 'PDF' : 'Excel';
+    /**
+     * Activa/desactiva el estado de carga del botón de exportación y actualiza su etiqueta.
+     * @param {boolean} busy - true para mostrar estado ocupado
+     * @param {string} [label] - texto a mostrar en el botón
+     * @returns {void}
+     */
     const setBusy = (busy, label = 'Exportar') => {
       exportBtn.disabled = busy;
       exportBtn.setLabel(label);
@@ -505,6 +597,10 @@ export async function renderAudit({ query, user }) {
     }
   }
 
+  /**
+   * Carga las opciones de los selects de usuario y tipo de acción (con fallback si fallan los endpoints dedicados) y dispara la primera carga de la bitácora.
+   * @returns {Promise<void>}
+   */
   async function initializeFilters() {
     try {
       let users = [];

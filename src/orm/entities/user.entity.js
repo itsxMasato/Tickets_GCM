@@ -5,6 +5,9 @@ const { EntitySchema } = require('typeorm');
 const { ROLE_VALUES } = require('../enums');
 const { bitBoolean } = require('../transformers');
 
+// Entidad ORM: tabla `users`. Representa a los usuarios del sistema (independiente del rol).
+// Campos principales: username/password_hash para login local, full_name, email opcional,
+// is_platform_admin (flag de administrador de plataforma multitenant) y active (borrado lógico).
 module.exports = new EntitySchema({
   name: 'User',
   tableName: 'users',

@@ -5,6 +5,10 @@ const { EntitySchema } = require('typeorm');
 const { ROLE_VALUES } = require('../enums');
 const { bitBoolean } = require('../transformers');
 
+// Entidad ORM: tabla `user_company_memberships`. Relación N:M entre usuarios y empresas
+// en el esquema multitenant: a qué empresa pertenece un usuario, con qué rol (role),
+// si está activa, si es la empresa por defecto (is_default) y last_seen_at. Único por
+// (user_id, company_id).
 module.exports = new EntitySchema({
   name: 'UserCompanyMembership',
   tableName: 'user_company_memberships',

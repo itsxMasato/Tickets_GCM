@@ -2,6 +2,17 @@
 import { h } from '../utils/dom.js';
 import { ICON, svg } from '../utils/icons.js';
 
+/**
+ * Renderiza el bloque de marca (logo, nombre, tagline y ubicación) usado en la
+ * pantalla de login, enlazado a la página de inicio.
+ * @param {Object} [options] - opciones de configuración
+ * @param {string} [options.name='GCM Tickets'] - nombre del producto
+ * @param {string} [options.tagline='Sala de control'] - lema o subtítulo
+ * @param {string} [options.location='Acceso corporativo seguro'] - texto de ubicación/contexto
+ * @param {string} [options.logoSrc='/img/Logo.png'] - ruta de la imagen del logo
+ * @param {string} [options.href='/'] - enlace de destino del bloque de marca
+ * @returns {HTMLElement} elemento anchor con el logotipo y textos
+ */
 export function BrandLockup(
   {
     name = 'GCM Tickets',
@@ -29,6 +40,29 @@ export function BrandLockup(
   return inner;
 }
 
+/**
+ * Renderiza un campo de formulario de login con label, ícono opcional, input y
+ * texto de ayuda, soportando estados de error (aria-invalid) y accesibilidad.
+ * @param {Object} params - configuración del campo
+ * @param {string} params.id - id del input (y del label asociado)
+ * @param {string} params.label - texto del label
+ * @param {string} [params.type='text'] - tipo de input HTML
+ * @param {string} [params.icon] - nombre del ícono a mostrar dentro del campo
+ * @param {string} [params.autocomplete] - valor del atributo autocomplete
+ * @param {string} [params.placeholder=''] - texto placeholder del input
+ * @param {boolean} [params.autofocus=false] - si el input debe enfocarse automáticamente
+ * @param {string} [params.value=''] - valor inicial del input
+ * @param {string} [params.inputmode] - valor del atributo inputmode
+ * @param {string} [params.autocapitalize] - valor del atributo autocapitalize
+ * @param {string} [params.autocorrect] - valor del atributo autocorrect
+ * @param {boolean} [params.spellcheck] - valor del atributo spellcheck
+ * @param {boolean} [params.required=true] - si el campo es obligatorio
+ * @param {string} [params.helper=''] - texto de ayuda debajo del input
+ * @param {Function} [params.onInput] - callback del evento input
+ * @param {string} [params.describedBy] - id del elemento que describe el campo (aria-describedby)
+ * @param {boolean} [params.invalid=false] - marca el campo como inválido (aria-invalid)
+ * @returns {{node: HTMLElement, input: HTMLElement}} nodo contenedor del campo y referencia al input
+ */
 export function LoginField(
   {
     id,
@@ -92,6 +126,21 @@ export function LoginField(
   return { node, input };
 }
 
+/**
+ * Renderiza el campo de contraseña del login: incluye ícono de candado, botón
+ * para mostrar/ocultar el valor y aviso opcional de Bloq Mayús activado.
+ * @param {Object} params - configuración del campo
+ * @param {string} [params.id='password'] - id del input
+ * @param {string} [params.label='Contraseña'] - texto del label
+ * @param {string} [params.placeholder] - texto placeholder del input
+ * @param {string} [params.autocomplete='current-password'] - valor del atributo autocomplete
+ * @param {boolean} [params.autofocus=false] - si el input debe enfocarse automáticamente
+ * @param {boolean} [params.capsWarning=true] - si se debe mostrar el aviso de Bloq Mayús
+ * @param {boolean} [params.required=true] - si el campo es obligatorio
+ * @param {string} [params.describedBy] - id del elemento que describe el campo (aria-describedby)
+ * @param {boolean} [params.invalid=false] - marca el campo como inválido (aria-invalid)
+ * @returns {{node: HTMLElement, input: HTMLElement}} nodo contenedor del campo y referencia al input
+ */
 export function PasswordField(
   {
     id = 'password',
@@ -152,6 +201,11 @@ export function PasswordField(
   }, [svg(h, 'capsLock', 'w-3.5 h-3.5'), h('span', {}, 'Bloq Mayús está activado.')]);
 
   if (capsWarning) {
+    /**
+     * Muestra u oculta el aviso de Bloq Mayús según el estado del modificador CapsLock.
+     * @param {KeyboardEvent} e - evento de teclado
+     * @returns {void}
+     */
     const checkCaps = (e) => {
       const on = e.getModifierState && e.getModifierState('CapsLock');
       caps.classList.toggle('hidden', !on);
@@ -165,6 +219,14 @@ export function PasswordField(
   return { node, input };
 }
 
+/**
+ * Renderiza el checkbox de "recordarme" del formulario de login.
+ * @param {Object} [params] - configuración del checkbox
+ * @param {string} [params.id='remember'] - id del input checkbox
+ * @param {string} [params.label='Recordarme en este equipo'] - texto de la etiqueta
+ * @param {boolean} [params.checked=false] - estado inicial marcado/desmarcado
+ * @returns {HTMLElement} elemento label que envuelve el checkbox y su texto
+ */
 export function LoginCheckbox({ id = 'remember', label = 'Recordarme en este equipo', checked = false }) {
   const row = h('label.login-checkbox-row', { for: id });
   const cb = h('input.login-checkbox', {
@@ -178,6 +240,16 @@ export function LoginCheckbox({ id = 'remember', label = 'Recordarme en este equ
   return row;
 }
 
+/**
+ * Renderiza el botón principal de envío del formulario de login, con ícono y
+ * texto que cambian a estado "cargando" mientras se verifica el acceso.
+ * @param {Object} params - configuración del botón
+ * @param {string} [params.label='Ingresar'] - texto del botón en estado normal
+ * @param {string} [params.loadingLabel='Verificando…'] - texto del botón en estado de carga
+ * @param {boolean} [params.loading=false] - si el botón debe mostrar el estado de carga
+ * @param {string} [params.type='submit'] - atributo type del botón HTML
+ * @returns {HTMLElement} elemento button
+ */
 export function PrimaryButton(
   { label = 'Ingresar', loadingLabel = 'Verificando…', loading = false, type = 'submit' }
 ) {
@@ -187,6 +259,10 @@ export function PrimaryButton(
     disabled: loading || undefined,
   });
 
+  /**
+   * Redibuja el contenido interno del botón (ícono y texto) según el estado de carga.
+   * @returns {void}
+   */
   const render = () => {
     btn.innerHTML = '';
     if (loading) {
@@ -202,6 +278,11 @@ export function PrimaryButton(
   return btn;
 }
 
+/**
+ * Crea manualmente (vía DOM API, sin `h`) el ícono SVG de spinner animado usado
+ * en el botón principal mientras se verifica el login.
+ * @returns {SVGElement} elemento svg del spinner
+ */
 function makeSpinnerSVG() {
   const NS = 'http://www.w3.org/2000/svg';
   const s = document.createElementNS(NS, 'svg');
@@ -219,6 +300,15 @@ function makeSpinnerSVG() {
   return s;
 }
 
+/**
+ * Renderiza un cartel de alerta del formulario de login (error, warning o info)
+ * con el rol ARIA y nivel de aria-live apropiados según su variante.
+ * @param {Object} params - configuración del banner
+ * @param {string} params.message - texto del mensaje a mostrar
+ * @param {string} [params.variant='error'] - tipo de banner ('error', 'warning' o 'info')
+ * @param {string} [params.id] - id del elemento, útil para aria-describedby
+ * @returns {HTMLElement} elemento div con el banner
+ */
 export function Banner({ message, variant = 'error', id }) {
   const cls = {
     error:   'login-banner login-banner-error',
@@ -236,10 +326,25 @@ export function Banner({ message, variant = 'error', id }) {
   ]);
 }
 
+/**
+ * Renderiza un separador visual con texto centrado (ej. "o continúa con").
+ * @param {Object} [params] - configuración del divisor
+ * @param {string} [params.label='o continúa con'] - texto del separador
+ * @returns {HTMLElement} elemento div del separador
+ */
 export function Divider({ label = 'o continúa con' }) {
   return h('div.login-divider', {}, [h('span', {}, label)]);
 }
 
+/**
+ * Renderiza un ítem de "capacidad" del sistema (ícono, título y subtítulo opcional),
+ * usado en la pantalla de login para listar funcionalidades destacadas.
+ * @param {Object} params - configuración del ítem
+ * @param {string} params.title - título de la capacidad
+ * @param {string} [params.subtitle] - descripción breve opcional
+ * @param {string} [params.icon='check'] - nombre del ícono a mostrar
+ * @returns {HTMLElement} elemento div con el ítem de capacidad
+ */
 export function Capability({ title, subtitle, icon = 'check' }) {
   return h('div.login-cap', {}, [
     h('span.login-cap-icon', { 'aria-hidden': 'true' }, [svg(h, icon, 'w-3.5 h-3.5')]),
@@ -250,6 +355,14 @@ export function Capability({ title, subtitle, icon = 'check' }) {
   ]);
 }
 
+/**
+ * Renderiza el indicador de estado del sistema (operativo o parcial) mostrado
+ * en la pantalla de login, con la fecha desde la que aplica si se provee.
+ * @param {Object} [params] - configuración del indicador
+ * @param {string} [params.status='ok'] - estado del sistema ('ok' o 'degraded')
+ * @param {string|Date} [params.since] - fecha desde la cual aplica el estado
+ * @returns {HTMLElement} elemento div con el indicador de estado
+ */
 export function SystemStatus({ status = 'ok', since } = {}) {
   const dotClass = status === 'degraded' ? 'login-status-dot degraded' : 'login-status-dot ok';
   const label = status === 'degraded' ? 'Servicio parcial' : 'Sistema operativo';
@@ -260,6 +373,12 @@ export function SystemStatus({ status = 'ok', since } = {}) {
   ]);
 }
 
+/**
+ * Formatea una fecha como mes y año abreviados en español (ej. "jul 2026"),
+ * usado para mostrar desde cuándo aplica el estado del sistema.
+ * @param {string|Date} since - fecha a formatear
+ * @returns {string} fecha formateada, o cadena vacía si es inválida
+ */
 function formatSince(since) {
   let d;
   try { d = since instanceof Date ? since : new Date(since); } catch { return ''; }
@@ -271,6 +390,12 @@ function formatSince(since) {
   }
 }
 
+/**
+ * Renderiza la fila de enlaces de soporte de la pantalla de login (ej. centro de ayuda).
+ * @param {Object} [params] - configuración de la fila
+ * @param {string} [params.helpHref='/ayuda'] - enlace al centro de ayuda; si es falsy no se muestra
+ * @returns {HTMLElement} elemento div con los enlaces de soporte
+ */
 export function SupportRow({ helpHref = '/ayuda' } = {}) {
   const items = [];
   if (helpHref) {

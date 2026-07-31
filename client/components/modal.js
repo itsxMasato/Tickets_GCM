@@ -11,6 +11,18 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+/**
+ * Abre un modal genérico en el nodo #modal-root: gestiona overlay, foco atrapado
+ * (focus trap), cierre con Escape o click fuera, tamaño configurable y restauración
+ * del foco al elemento previamente enfocado al cerrarse.
+ * @param {Object} params - configuración del modal
+ * @param {string} params.title - título mostrado en el encabezado
+ * @param {HTMLElement|string} params.body - contenido del cuerpo del modal
+ * @param {Function} [params.actions] - función que recibe `cleanup` y devuelve los botones de acción del footer
+ * @param {Function} [params.onClose] - callback invocado al cerrarse el modal
+ * @param {string} [params.size='md'] - tamaño del modal ('sm', 'md', 'lg' o 'xl')
+ * @returns {{modal: HTMLElement, cleanup: Function}|undefined} referencia al modal y función para cerrarlo, o undefined si no existe #modal-root
+ */
 export function openModal({ title, body, actions, onClose, size = 'md' }) {
   const root = document.getElementById('modal-root');
   if (!root) return;
@@ -21,6 +33,11 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
     ? document.activeElement
     : null;
 
+  /**
+   * Obtiene los elementos enfocables actualmente visibles dentro del modal,
+   * usados para el focus trap del Tab.
+   * @returns {Array<HTMLElement>} lista de elementos enfocables
+   */
   const getFocusable = () => {
     if (!modalContent) return [];
     return Array.from(modalContent.querySelectorAll(FOCUSABLE_SELECTOR))
@@ -28,6 +45,11 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
   };
 
   let modalContent = null;
+  /**
+   * Cierra el modal: quita su nodo del DOM, remueve el listener de teclado y
+   * devuelve el foco al elemento que lo tenía antes de abrirse.
+   * @returns {void}
+   */
   const cleanup = () => {
     if (root.firstElementChild) root.firstElementChild.remove();
     document.removeEventListener('keydown', onKey, true);
@@ -36,6 +58,12 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
     }
   };
 
+  /**
+   * Maneja el teclado global del modal: cierra con Escape y atrapa el foco (focus trap)
+   * con Tab/Shift+Tab dentro de los elementos enfocables del modal.
+   * @param {KeyboardEvent} e - evento de teclado
+   * @returns {void}
+   */
   const onKey = (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -112,6 +140,18 @@ export function openModal({ title, body, actions, onClose, size = 'md' }) {
   return { modal, cleanup };
 }
 
+/**
+ * Abre un modal de confirmación simple con mensaje y botones de aceptar/cancelar,
+ * ejecutando onConfirm si el usuario confirma la acción.
+ * @param {Object} params - configuración del modal de confirmación
+ * @param {string} [params.title='Confirmar'] - título del modal
+ * @param {string} params.message - mensaje a mostrar (soporta HTML simple)
+ * @param {string} [params.confirmText='Confirmar'] - texto del botón de confirmar
+ * @param {string} [params.cancelText='Cancelar'] - texto del botón de cancelar
+ * @param {boolean} [params.danger=false] - si true, usa estilo de acción destructiva
+ * @param {Function} [params.onConfirm] - callback ejecutado al confirmar
+ * @returns {{modal: HTMLElement, cleanup: Function}|undefined} referencia al modal abierto
+ */
 export function confirmModal({ title = 'Confirmar', message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false, onConfirm }) {
   let modal;
   const tone = danger ? 'bg-accent/10 text-accent' : 'bg-brand-ocean/10 text-brand-ocean';
@@ -122,6 +162,11 @@ export function confirmModal({ title = 'Confirmar', message, confirmText = 'Conf
   if (typeof message === 'string' && /<\/?\w+/.test(message)) {
     body.lastChild.innerHTML = message;
   }
+  /**
+   * Construye los botones de acción (cancelar/confirmar) del footer del modal de confirmación.
+   * @param {Function} close - función para cerrar el modal
+   * @returns {Array<HTMLElement>} botones de acción
+   */
   const actions = (close) => [
     h('button.btn.btn-secondary.flex-1', { onclick: close, type: 'button' }, cancelText),
     h('button.flex-1', { class: danger ? 'btn btn-accent' : 'btn btn-primary', onclick: async () => { close(); await onConfirm?.(); }, type: 'button' }, confirmText),
@@ -130,6 +175,19 @@ export function confirmModal({ title = 'Confirmar', message, confirmText = 'Conf
   return modal;
 }
 
+/**
+ * Abre un modal que exige confirmar la contraseña del usuario antes de ejecutar
+ * una acción sensible. Muestra/oculta la contraseña, valida que no esté vacía,
+ * llama a onConfirm con el valor ingresado y muestra el error si la validación falla.
+ * @param {Object} params - configuración del modal
+ * @param {string} [params.title='Confirmar acción'] - título del modal
+ * @param {string} [params.message] - mensaje explicativo de la acción a confirmar
+ * @param {string} [params.confirmText='Confirmar'] - texto del botón de confirmar
+ * @param {string} [params.cancelText='Cancelar'] - texto del botón de cancelar
+ * @param {boolean} [params.danger=false] - si true, usa estilo de acción destructiva
+ * @param {Function} [params.onConfirm] - callback async que recibe la contraseña ingresada y valida
+ * @returns {Promise<boolean>} promesa que resuelve true si se confirmó correctamente, false si se canceló
+ */
 export function passwordConfirmModal({
   title = 'Confirmar acción',
   message = 'Ingresa tu contraseña para continuar.',
@@ -183,6 +241,12 @@ export function passwordConfirmModal({
     h('p.text-xs.text-slate-500', {}, 'Esta acción quedará registrada en el historial de seguridad de su cuenta.'),
   ]);
 
+  /**
+   * Construye los botones de acción (cancelar/confirmar) del footer del modal de
+   * confirmación con contraseña, guardando la referencia a `close` para usarla luego.
+   * @param {Function} close - función para cerrar el modal
+   * @returns {Array<HTMLElement>} botones de acción
+   */
   const actions = (close) => {
     closeModal = close;
     return [
@@ -222,6 +286,11 @@ export function passwordConfirmModal({
     },
   });
 
+  /**
+   * Muestra un mensaje de error debajo del campo de contraseña.
+   * @param {string} msg - mensaje de error a mostrar
+   * @returns {void}
+   */
   const showError = (msg) => {
     error.innerHTML = '';
     error.appendChild(svg(h, ICON.alert, 'w-3.5 h-3.5 flex-none'));

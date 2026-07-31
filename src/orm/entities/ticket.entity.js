@@ -4,6 +4,10 @@
 const { EntitySchema } = require('typeorm');
 const { TICKET_STATUS_VALUES, TICKET_PRIORITY_VALUES } = require('../enums');
 
+// Entidad ORM: tabla `tickets`. Es la entidad central del sistema: representa cada incidencia
+// reportada. Campos principales: code (identificador visible), title/description, category_id,
+// area, status y priority (enums), created_by/assigned_to/closed_by (ids de usuario) y
+// timestamps created_at/updated_at/closed_at; company_id la ata a una empresa en multitenant.
 module.exports = new EntitySchema({
   name: 'Ticket',
   tableName: 'tickets',

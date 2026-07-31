@@ -1,4 +1,9 @@
 /* Documentado por: Miguel Flores */
+/**
+ * Determina la URL base de la API a usar: primero VITE_API_BASE_URL si está definida en build,
+ * y si no, infiere la URL de Render en producción según el hostname actual.
+ * @returns {string} URL base de la API (sin barra final), o cadena vacía para usar rutas relativas
+ */
 function getApiBase() {
   const raw = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL
     ? import.meta.env.VITE_API_BASE_URL
@@ -23,11 +28,21 @@ function getApiBase() {
 
 const BASE = getApiBase();
 
+/**
+ * Antepone la URL base de la API a una ruta relativa, si corresponde.
+ * @param {string} url - ruta relativa del endpoint (ej. '/api/tickets')
+ * @returns {string} URL completa a usar en fetch
+ */
 function buildUrl(url) {
   if (!BASE) return url;
   return `${BASE}${url}`;
 }
 
+/**
+ * Convierte una ruta relativa de un asset (ej. avatar, adjunto) en su URL completa hacia el backend.
+ * @param {string} path - ruta relativa del asset
+ * @returns {string} URL completa del asset, o el valor original si path es falsy
+ */
 export function assetUrl(path) {
   if (!path) return path;
   return buildUrl(path);
@@ -35,6 +50,18 @@ export function assetUrl(path) {
 
 const AUTH_BOOTSTRAP_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/auth/firebase', '/api/auth/resolve-login', '/api/auth/me'];
 
+/**
+ * Realiza una petición HTTP a la API incluyendo cookies de sesión, serializando el body a JSON
+ * (o dejándolo pasar tal cual si es FormData), parseando la respuesta JSON y lanzando un Error
+ * enriquecido (status, code) si la respuesta no es exitosa. En un 401 fuera de las rutas de
+ * bootstrap de auth, dispara el evento global 'gcm:unauthorized'.
+ * @param {string} method - método HTTP (GET, POST, PATCH, DELETE, etc.)
+ * @param {string} url - ruta relativa del endpoint
+ * @param {Object} [options] - opciones de la petición
+ * @param {*} [options.body] - cuerpo de la petición (objeto para JSON, o FormData)
+ * @param {Object} [options.headers] - headers adicionales a fusionar
+ * @returns {Promise<*>} datos ya parseados de la respuesta (o null si no hay body)
+ */
 async function request(method, url, options = {}) {
   const opts = {
     method,
@@ -66,6 +93,8 @@ async function request(method, url, options = {}) {
   return data;
 }
 
+// Cliente de la API: agrupa por recurso (auth, users, tickets, etc.) los métodos que envuelven
+// llamadas a request() con el método HTTP y la ruta correspondientes.
 export const api = {
   auth: {
     login:  (body)    => request('POST', '/api/auth/login',  { body }),

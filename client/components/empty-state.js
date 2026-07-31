@@ -11,6 +11,12 @@ const ICON = {
   inbox:     'M3 8h18M3 8l2 12h14l2-12M9 12h6',
 };
 
+/**
+ * Crea un ícono SVG a partir del path definido en ICON, con el ticket como ícono por defecto.
+ * @param {string} name - clave del ícono dentro de ICON
+ * @param {string} [cls='w-10 h-10'] - clases CSS de tamaño para el SVG
+ * @returns {HTMLElement} elemento svg
+ */
 function svgIcon(name, cls = 'w-10 h-10') {
   return h(`svg.${cls}`, {
     fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6',
@@ -19,6 +25,17 @@ function svgIcon(name, cls = 'w-10 h-10') {
   });
 }
 
+/**
+ * Arma un bloque de "estado vacío" con ícono, título, mensaje y un botón de
+ * acción opcional, usado cuando una lista o panel no tiene datos que mostrar.
+ * @param {Object} [options] - opciones de configuración
+ * @param {string} [options.icon='ticket'] - clave del ícono a mostrar
+ * @param {string} [options.title='Sin datos'] - título del estado vacío
+ * @param {string} [options.message] - mensaje descriptivo
+ * @param {{onclick: Function, label: string}|null} [options.action=null] - acción opcional con callback y texto de botón
+ * @param {string} [options.className=''] - clases CSS adicionales para el contenedor
+ * @returns {HTMLElement} elemento div con el estado vacío
+ */
 export function emptyState(
   {
     icon = 'ticket',

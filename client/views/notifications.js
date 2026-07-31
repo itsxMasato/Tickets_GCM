@@ -41,6 +41,11 @@ const TYPE_TONE = {
 
 const LOAD_STEP = 30;
 
+/**
+ * Arma la etiqueta (badge) visual correspondiente al tipo de notificación, con ícono y color según el tipo.
+ * @param {string} type - tipo de notificación (ej. 'ticket_created')
+ * @returns {HTMLElement} badge de tipo de notificación
+ */
 function pillFor(type) {
   const tone = TYPE_TONE[type] || 'bg-slate-100 text-slate-700';
   const iconPath = ICON[type];
@@ -50,6 +55,16 @@ function pillFor(type) {
   ]);
 }
 
+/**
+ * Arma una tarjeta de indicador (KPI) para el panel de notificaciones, con variantes de color 'coral' y 'dark'.
+ * @param {Object} params - configuración de la tarjeta
+ * @param {string} params.label - etiqueta del indicador
+ * @param {number|string} params.value - valor a mostrar
+ * @param {string} [params.hint] - texto de ayuda debajo del valor
+ * @param {string} params.icon - path del ícono a mostrar
+ * @param {string} [params.variant] - variante visual ('default', 'coral', 'dark')
+ * @returns {HTMLElement} tarjeta de indicador
+ */
 function kpiCard({ label, value, hint = '', icon, variant = 'default' }) {
   const isCoral = variant === 'coral';
   const isDark = variant === 'dark';
@@ -71,6 +86,12 @@ function kpiCard({ label, value, hint = '', icon, variant = 'default' }) {
   ]);
 }
 
+/**
+ * Arma la vista del centro de notificaciones: filtros, KPIs, listado con paginación incremental y suscripción a eventos en tiempo real.
+ * @param {Object} params - parámetros de la ruta
+ * @param {Object} params.user - usuario autenticado
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderNotifications({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
   let limit = LOAD_STEP;
@@ -102,6 +123,11 @@ export async function renderNotifications({ user }) {
     { key: 'unread',  label: 'No leídas' },
   ];
   let active = 'all';
+  /**
+   * Activa el filtro indicado (todas / no leídas), actualiza el estilo de los botones y recarga la lista.
+   * @param {string} k - clave del filtro a activar
+   * @returns {void}
+   */
   function setActive(k) {
     active = k;
     limit = LOAD_STEP;
@@ -132,6 +158,10 @@ export async function renderNotifications({ user }) {
   root.appendChild(list);
   root.appendChild(loadMoreWrap);
 
+  /**
+   * Recarga las notificaciones desde la API según el filtro activo y el límite actual, y las dibuja.
+   * @returns {Promise<void>}
+   */
   async function reload() {
     list.innerHTML = '<div class="card flex items-center justify-center gap-2 py-10 text-sm text-slate-600" role="status" aria-live="polite"><svg class="animate-spin w-4 h-4 text-brand-ocean" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg><span>Cargando notificaciones…</span></div>';
     loadMoreWrap.innerHTML = '';
@@ -146,6 +176,11 @@ export async function renderNotifications({ user }) {
     }
   }
 
+  /**
+   * Marca todas las notificaciones como leídas y refresca el contador global antes de ejecutar el callback dado.
+   * @param {Function} fn - callback a ejecutar tras marcar todas como leídas (normalmente reload)
+   * @returns {Promise<void>}
+   */
   async function markAll(fn) {
     try {
       await api.notifications.markRead({ all: true });
@@ -155,6 +190,11 @@ export async function renderNotifications({ user }) {
     } catch (e) { toast(e.message, 'error'); }
   }
 
+  /**
+   * Calcula y dibuja los KPIs de la vista (total, no leídas, últimas 24 h, tipo más frecuente) a partir de las notificaciones cargadas.
+   * @param {Array<Object>} items - notificaciones cargadas
+   * @returns {void}
+   */
   function drawKpis(items) {
     kpis.innerHTML = '';
     const total = items.length;
@@ -176,6 +216,11 @@ export async function renderNotifications({ user }) {
     }));
   }
 
+  /**
+   * Arma la tarjeta de una notificación individual, con su badge de tipo, hora relativa y acción de apertura.
+   * @param {Object} n - notificación a mostrar
+   * @returns {HTMLElement} tarjeta de notificación
+   */
   function notificationCard(n) {
     const card = h('button.text-left.w-full.flex.flex-col.gap-3.p-4.rounded-2xl.transition.cursor-pointer', {
       class: [
@@ -212,6 +257,11 @@ export async function renderNotifications({ user }) {
     return card;
   }
 
+  /**
+   * Dibuja los KPIs y el listado de notificaciones separado en "Recientes" y "Anteriores", o el estado vacío si no hay resultados.
+   * @param {Array<Object>} items - notificaciones a mostrar
+   * @returns {void}
+   */
   function draw(items) {
     drawKpis(items);
 
@@ -250,6 +300,11 @@ export async function renderNotifications({ user }) {
     }
   }
 
+  /**
+   * Maneja el click sobre una notificación: la marca como leída, actualiza el contador global y navega al ticket asociado (o recarga la lista).
+   * @param {Object} n - notificación clickeada
+   * @returns {Promise<void>}
+   */
   async function onClick(n) {
     try { await api.notifications.markRead({ ids: [n.id] }); } catch {}
     setState({ unreadCount: Math.max(0, (getState().unreadCount || 0) - (n.read ? 0 : 1)) });

@@ -30,6 +30,13 @@ let membersByCompany = new Map();
 let loadedAt = null;
 let loading = false;
 
+/**
+ * Marca o limpia el estado de error de un campo de formulario, actualizando el mensaje y los atributos aria.
+ * @param {HTMLElement} input - campo del formulario
+ * @param {HTMLElement} errorEl - elemento donde se muestra el mensaje de error
+ * @param {string|null} message - texto del error, o null/vacío para limpiarlo
+ * @returns {void}
+ */
 function setFieldError(input, errorEl, message) {
   if (message) {
     errorEl.textContent = message;
@@ -42,8 +49,19 @@ function setFieldError(input, errorEl, message) {
     input.removeAttribute('aria-invalid');
   }
 }
+/**
+ * Limpia el estado de error de un campo de formulario.
+ * @param {HTMLElement} input - campo del formulario
+ * @param {HTMLElement} errorEl - elemento donde se muestra el mensaje de error
+ * @returns {void}
+ */
 function clearFieldError(input, errorEl) { setFieldError(input, errorEl, null); }
 
+/**
+ * Renderiza un punto de color usado como indicador visual del color de la empresa.
+ * @param {string} color - color en formato hexadecimal
+ * @returns {HTMLElement} nodo del punto de color
+ */
 function colorDot(color) {
   const safe = (color && /^#[0-9A-Fa-f]{3,8}$/.test(color)) ? color : '#0b1e3a';
   return h('span.inline-block.w-3.h-3.rounded-full.flex-none', {
@@ -52,6 +70,10 @@ function colorDot(color) {
   });
 }
 
+/**
+ * Carga la lista completa de empresas desde la API y sincroniza el estado local (membresías huérfanas, selección).
+ * @returns {Promise<void>}
+ */
 async function loadCompanies() {
   const res = await api.companies.list({ all: true });
   companies = res.companies || [];
@@ -63,20 +85,42 @@ async function loadCompanies() {
   if (selectedId && !liveIds.has(selectedId)) selectedId = null;
 }
 
+/**
+ * Carga las membresías de una empresa desde la API y las guarda en el caché en memoria.
+ * @param {number|string} companyId - id de la empresa
+ * @returns {Promise<void>}
+ */
 async function loadMembers(companyId) {
   const res = await api.companies.members.list(companyId);
   membersByCompany.set(companyId, res.memberships || []);
 }
 
+/**
+ * Garantiza que las membresías de una empresa estén cargadas en caché antes de mostrar su detalle.
+ * @param {number|string} companyId - id de la empresa
+ * @returns {Promise<void>}
+ */
 async function ensureDetail(companyId) {
   if (!membersByCompany.has(companyId)) await loadMembers(companyId);
 }
 
+/**
+ * Busca en el caché de usuarios el encargado (responsable) asignado a una empresa.
+ * @param {Object} company - empresa
+ * @returns {Object|null} usuario encargado, o null si no tiene o no se encuentra
+ */
 function responsibleUser(company) {
   if (!company?.responsible_user_id) return null;
   return usersCache.get().find((u) => String(u.id) === String(company.responsible_user_id)) || null;
 }
 
+/**
+ * Punto de entrada de la vista Empresas: arma el header, la grilla de tarjetas de empresa y el modal de detalle
+ * con pestañas de datos y miembros, cargando datos de la API y suscribiéndose a eventos en tiempo real.
+ * @param {Object} params - parámetros de la vista
+ * @param {Object} params.user - usuario autenticado
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderCompanies({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
@@ -124,6 +168,11 @@ export async function renderCompanies({ user }) {
 
   grid.appendChild(renderLoading('Cargando empresas…'));
 
+  /**
+   * Handler de eventos realtime relacionados con empresas o membresías: recarga la grilla o refresca el detalle abierto.
+   * @param {CustomEvent} e - evento 'gcm:realtime' recibido
+   * @returns {void}
+   */
   const onRealtime = (e) => {
     const t = e.detail?.event;
     if (!t) return;
@@ -158,6 +207,10 @@ export async function renderCompanies({ user }) {
   }
   drawGrid();
 
+  /**
+   * Redibuja la grilla de tarjetas de empresa según el estado actual (cargando, vacío o lista de empresas).
+   * @returns {void}
+   */
   function drawGrid() {
     grid.innerHTML = '';
     if (loading) { grid.appendChild(renderLoading('Cargando…')); return; }
@@ -237,6 +290,11 @@ export async function renderCompanies({ user }) {
     }
   }
 
+  /**
+   * Abre el modal de detalle de una empresa con su cabecera y las pestañas de datos/miembros.
+   * @param {Object} company - empresa a mostrar
+   * @returns {void}
+   */
   function openDetailModal(company) {
     if (!company) return;
     const body = h('div.flex.flex-col.gap-4', {}, [
@@ -275,6 +333,10 @@ export async function renderCompanies({ user }) {
     });
   }
 
+  /**
+   * Reabre el modal de detalle de la empresa actualmente seleccionada con datos frescos.
+   * @returns {void}
+   */
   function refreshDetailModal() {
     if (!selectedId) return;
     const company = companies.find((x) => x.id === selectedId);
@@ -282,6 +344,11 @@ export async function renderCompanies({ user }) {
     openDetailModal(company);
   }
 
+  /**
+   * Arma el sistema de pestañas (Datos / Miembros) del modal de detalle de empresa.
+   * @param {Object} company - empresa a mostrar
+   * @returns {HTMLElement} nodo con la barra de pestañas y el contenido activo
+   */
   function renderTabs(company) {
     const tabs = [
       { key: 'data',    label: 'Datos' },
@@ -294,6 +361,10 @@ export async function renderCompanies({ user }) {
     const tabContent = h('div.p-5', {});
     const state = { active: 'data' };
 
+    /**
+     * Redibuja la barra de pestañas marcando la pestaña activa según el estado local.
+     * @returns {void}
+     */
     function renderBar() {
       bar.innerHTML = '';
       for (const t of tabs) {
@@ -315,6 +386,10 @@ export async function renderCompanies({ user }) {
       }
     }
 
+    /**
+     * Redibuja el contenido de la pestaña activa (datos o miembros) del modal de detalle.
+     * @returns {void}
+     */
     function renderContent() {
       tabContent.innerHTML = '';
       const node = state.active === 'data'
@@ -330,6 +405,11 @@ export async function renderCompanies({ user }) {
     return h('div', {}, [bar, tabContent]);
   }
 
+  /**
+   * Arma el formulario de edición de datos de la empresa (nombre, ubicación, prefijo, encargado) con validación y guardado.
+   * @param {Object} company - empresa a editar
+   * @returns {HTMLElement} nodo del formulario, o mensaje de solo lectura si el usuario no puede gestionar empresas
+   */
   function renderDataTab(company) {
     if (!canManage) {
       return h('p.text-sm.text-slate-500', {}, 'Solo el administrador de plataforma puede editar los datos de la empresa.');
@@ -351,10 +431,20 @@ export async function renderCompanies({ user }) {
     const responsibleErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-resp-err', role: 'alert' });
     const banner = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', { role: 'alert' });
 
+    /**
+     * Registra un listener que limpia el error del campo apenas el usuario vuelve a escribir en él.
+     * @param {HTMLElement} input - campo del formulario
+     * @param {HTMLElement} err - elemento de mensaje de error asociado
+     * @returns {void}
+     */
     const wireClear = (input, err) => input.addEventListener('input', () => clearFieldError(input, err));
     wireClear(name, nameErr);
     wireClear(codePrefix, codePrefixErr);
 
+    /**
+     * Puebla el select de encargado con los administradores de área activos, preservando el valor actual aunque ya no califique.
+     * @returns {void}
+     */
     function populateResponsible() {
       const users = usersCache.get().filter((u) => u.active && u.role === 'admin_area');
       responsible.innerHTML = '';
@@ -386,6 +476,12 @@ export async function renderCompanies({ user }) {
       populateResponsible();
     }
 
+    /**
+     * Registra un listener que limpia el error del campo apenas el usuario vuelve a interactuar con él.
+     * @param {HTMLElement} input - campo del formulario
+     * @param {HTMLElement} err - elemento de mensaje de error asociado
+     * @returns {void}
+     */
     const wireClearExtra = (input, err) => input.addEventListener('input', () => clearFieldError(input, err));
     wireClearExtra(location, locationErr);
     wireClearExtra(responsible, responsibleErr);
@@ -456,6 +552,11 @@ export async function renderCompanies({ user }) {
     ]);
   }
 
+  /**
+   * Arma la tabla de miembros de la empresa con acciones de editar/activar-desactivar membresía.
+   * @param {Object} company - empresa cuyos miembros se listan
+   * @returns {HTMLElement} nodo con la tabla de miembros (o estado vacío si no tiene)
+   */
   function renderMembersTab(company) {
     const members = membersByCompany.get(company.id) || [];
     const header = h('div.flex.items-center.justify-between.mb-3', {}, [
@@ -551,6 +652,11 @@ export async function renderCompanies({ user }) {
     return wrap;
   }
 
+  /**
+   * Marca una empresa como seleccionada, carga su detalle y abre el modal correspondiente (o cierra el modal si id es null).
+   * @param {number|string|null} id - id de la empresa a seleccionar, o null para deseleccionar
+   * @returns {Promise<void>}
+   */
   async function selectCompany(id) {
     if (id === null) {
       selectedId = null;
@@ -574,6 +680,12 @@ export async function renderCompanies({ user }) {
     }
   }
 
+  /**
+   * Abre el modal de confirmación para activar o desactivar una empresa.
+   * @param {number|string} companyId - id de la empresa
+   * @param {boolean} isCurrentlyActive - estado activo actual de la empresa
+   * @returns {void}
+   */
   function openConfirmToggleCompany(companyId, isCurrentlyActive) {
     confirmModal({
       title: isCurrentlyActive ? 'Desactivar empresa' : 'Activar empresa',
@@ -590,6 +702,10 @@ export async function renderCompanies({ user }) {
     });
   }
 
+  /**
+   * Recarga empresas y membresías desde la API y redibuja la grilla y el modal de detalle si hay una empresa seleccionada.
+   * @returns {Promise<void>}
+   */
   async function reloadAll() {
     loading = true;
     drawGrid();
@@ -606,8 +722,19 @@ export async function renderCompanies({ user }) {
     }
   }
 
+  /**
+   * Exporta el listado de empresas a Excel o PDF, pidiendo confirmación de contraseña antes de generar el archivo.
+   * @param {string} format - formato de exportación ('pdf' o 'excel')
+   * @returns {Promise<void>}
+   */
   async function doExportCompanies(format) {
     const formatLabel = format === 'pdf' ? 'PDF' : 'Excel';
+    /**
+     * Actualiza el estado de carga (deshabilitado/etiqueta) del botón de exportar.
+     * @param {boolean} busy - si el botón debe mostrarse ocupado/deshabilitado
+     * @param {string} [label] - etiqueta a mostrar en el botón
+     * @returns {void}
+     */
     const setBusy = (busy, label = 'Exportar') => {
       exportBtn.disabled = busy;
       exportBtn.setLabel(label);
@@ -680,10 +807,20 @@ export async function renderCompanies({ user }) {
   return root;
 }
 
+/**
+ * Obtiene la etiqueta legible de un rol, con fallback al valor crudo si no hay traducción.
+ * @param {string} role - clave del rol
+ * @returns {string} etiqueta legible del rol
+ */
 function roleLabel(role) {
   return getRoleLabel(role) || role;
 }
 
+/**
+ * Renderiza un indicador de carga (spinner + mensaje) usado mientras se obtienen datos.
+ * @param {string} message - texto a mostrar junto al spinner
+ * @returns {HTMLElement} nodo del indicador de carga
+ */
 function renderLoading(message) {
   return h('div.flex.items-center.justify-center.gap-2.py-8.text-sm.text-slate-600', {
     role: 'status',
@@ -697,6 +834,12 @@ function renderLoading(message) {
   ]);
 }
 
+/**
+ * Abre el modal de creación o edición de una empresa, con validación de campos y guardado contra la API.
+ * @param {Object|null} company - empresa a editar, o null para crear una nueva
+ * @param {Function} [onSaved] - callback invocado tras guardar exitosamente
+ * @returns {void}
+ */
 function openCompanyModal(company, onSaved) {
   const isEdit = !!company;
   const name = h('input.input', { type: 'text', value: company?.name || '', maxlength: String(LIMITS.company.name.max) });
@@ -714,11 +857,21 @@ function openCompanyModal(company, onSaved) {
   const codePrefixErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-new-prefix-err', role: 'alert' });
   const responsibleErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-co-new-resp-err', role: 'alert' });
   const banner = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', { role: 'alert' });
+  /**
+   * Registra un listener que limpia el error del campo apenas el usuario vuelve a interactuar con él.
+   * @param {HTMLElement} input - campo del formulario
+   * @param {HTMLElement} err - elemento de mensaje de error asociado
+   * @returns {void}
+   */
   const wireClear = (input, err) => input.addEventListener('input', () => clearFieldError(input, err));
   wireClear(name, nameErr);
   wireClear(codePrefix, codePrefixErr);
   wireClear(location, locationErr); wireClear(responsible, responsibleErr);
 
+  /**
+   * Puebla el select de encargado del modal de creación/edición con los administradores de área activos.
+   * @returns {void}
+   */
   function populateResponsibleNew() {
     const users = usersCache.get().filter((u) => u.active && u.role === 'admin_area');
     responsible.innerHTML = '';
@@ -800,6 +953,13 @@ h('div', {}, [h('label.label', {}, 'Encargado *'), responsible, h('p.text-xs.tex
   openModal({ title: isEdit ? `Editar ${company.name}` : 'Nueva empresa', body, actions, size: 'lg' });
 }
 
+/**
+ * Abre el modal para agregar o editar la membresía de un usuario en una empresa (usuario y rol asignado).
+ * @param {number|string} companyId - id de la empresa
+ * @param {Function} [onSaved] - callback invocado tras guardar exitosamente
+ * @param {Object|null} [membership] - membresía a editar, o null para crear una nueva
+ * @returns {void}
+ */
 function openMembershipModal(companyId, onSaved, membership = null) {
   const isEdit = !!membership;
   const company = companies.find((c) => c.id === companyId);
@@ -821,6 +981,12 @@ function openMembershipModal(companyId, onSaved, membership = null) {
   const userErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-mb-user-err', role: 'alert' });
   const roleErr = h('p.text-xs.text-red-600.mt-1.hidden', { id: 'gcm-mb-role-err', role: 'alert' });
   const banner = h('div.hidden.p-3.rounded-md.bg-red-50.border.border-red-200.text-sm.text-red-700', { role: 'alert' });
+  /**
+   * Registra un listener que limpia el error del campo apenas el usuario cambia su valor.
+   * @param {HTMLElement} input - campo del formulario
+   * @param {HTMLElement} err - elemento de mensaje de error asociado
+   * @returns {void}
+   */
   const wireClear = (input, err) => input.addEventListener('change', () => clearFieldError(input, err));
   wireClear(userSel, userErr); wireClear(role, roleErr);
 

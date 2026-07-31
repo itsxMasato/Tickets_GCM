@@ -12,10 +12,21 @@ const DEFAULT_COMPANY = {
   active: true,
 };
 
+/**
+ * Escribe un mensaje de log a stdout con el prefijo del script.
+ * @param {string} msg - mensaje a loguear
+ * @returns {void}
+ */
 function log(msg) {
   process.stdout.write(`[seed-multitenant] ${msg}\n`);
 }
 
+/**
+ * Garantiza que exista la empresa por defecto (DEFAULT_COMPANY) en la base MSSQL: si ya
+ * existe (por slug) la devuelve, si no la crea.
+ * @param {Repository} Company - repositorio TypeORM de la entidad Company
+ * @returns {Promise<Object>} registro de la empresa por defecto (existente o recién creada)
+ */
 async function ensureDefaultCompany(Company) {
   const repo = Company;
   let company = await repo.findOne({ where: { slug: DEFAULT_COMPANY.slug } });
@@ -28,6 +39,15 @@ async function ensureDefaultCompany(Company) {
   return company;
 }
 
+/**
+ * Migra los usuarios existentes al esquema multitenant: marca como platform admin al
+ * usuario configurado (PLATFORM_ADMIN_USERNAME) si aún no lo es, y crea para cada usuario
+ * una membresía por defecto en la empresa dada si todavía no la tiene.
+ * @param {Repository} User - repositorio TypeORM de la entidad User
+ * @param {Repository} UserCompanyMembership - repositorio TypeORM de membresías
+ * @param {number} companyId - id de la empresa por defecto
+ * @returns {Promise<void>}
+ */
 async function migrateUsers(User, UserCompanyMembership, companyId) {
   const userRepo = User;
   const memRepo = UserCompanyMembership;
@@ -56,6 +76,14 @@ async function migrateUsers(User, UserCompanyMembership, companyId) {
   }
 }
 
+/**
+ * Actualiza masivamente (backfill) todas las filas con company_id NULL de una entidad,
+ * asignándoles el companyId dado.
+ * @param {string} entityName - nombre descriptivo de la entidad (solo para el log)
+ * @param {Repository} Entity - repositorio TypeORM de la entidad a actualizar
+ * @param {number} companyId - id de empresa a asignar
+ * @returns {Promise<void>}
+ */
 async function backfillCompanyId(entityName, Entity, companyId) {
   const repo = Entity;
   const result = await repo.createQueryBuilder()
@@ -66,6 +94,13 @@ async function backfillCompanyId(entityName, Entity, companyId) {
   log(`Backfill ${entityName}: ${result.affected || 0} filas actualizadas.`);
 }
 
+/**
+ * Backfill especial para notificaciones sin company_id: para cada notificación ligada a
+ * un ticket, toma el company_id del ticket asociado y lo copia a la notificación.
+ * @param {Repository} Notification - repositorio TypeORM de notificaciones
+ * @param {Repository} Ticket - repositorio TypeORM de tickets
+ * @returns {Promise<void>}
+ */
 async function backfillNotificationsFromTicket(Notification, Ticket) {
   const repo = Notification;
   const ticketRepo = Ticket;
@@ -82,6 +117,12 @@ async function backfillNotificationsFromTicket(Notification, Ticket) {
   log(`Backfill notifications: ${rows.length} filas procesadas.`);
 }
 
+/**
+ * Verifica que una entidad ya no tenga filas con company_id NULL, como paso previo a que
+ * el DBA aplique la restricción NOT NULL vía T-SQL. Lanza error si aún quedan filas pendientes.
+ * @param {Repository} Entity - repositorio TypeORM de la entidad a verificar
+ * @returns {Promise<void>}
+ */
 async function makeNotNull(Entity) {
   const rows = await Entity.createQueryBuilder('e')
     .where('e.company_id IS NULL')
@@ -91,6 +132,13 @@ async function makeNotNull(Entity) {
   }
 }
 
+/**
+ * Punto de entrada del script de seed multitenant: inicializa el ORM contra SQL Server
+ * (falla si DISABLE_MSSQL=true), asegura la empresa por defecto, migra usuarios y hace
+ * backfill de company_id en tickets/categorías/eventos de calendario/notificaciones/auditoría,
+ * y finalmente valida que no queden filas con company_id NULL antes de cerrar la conexión.
+ * @returns {Promise<void>}
+ */
 async function main() {
   log(`Entorno: MSSQL_HOST=${env.MSSQL_HOST} DB=${env.MSSQL_DATABASE}`);
   if (env.MSSQL_DISABLED) {

@@ -11,6 +11,11 @@ const {
 } = require('../utils/validators');
 const { CALENDAR_EVENT_TYPE_VALUES, CALENDAR_EVENT_COLORS } = require('../orm/enums');
 
+/**
+ * Convierte un valor de fecha a formato SQL ("YYYY-MM-DD HH:mm:ss"), devolviendo null si es inválido o vacío.
+ * @param {Date|String|Number} value - fecha a convertir
+ * @returns {String|null} fecha en formato SQL, o null si no es válida
+ */
 function toSqlDate(value) {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
@@ -18,6 +23,11 @@ function toSqlDate(value) {
   return d.toISOString().replace('T', ' ').slice(0, 19);
 }
 
+/**
+ * Convierte un registro crudo de evento de calendario al formato plano expuesto por la API.
+ * @param {Object} row - registro crudo del evento
+ * @returns {Object|null} evento decorado, o null si no se recibió registro
+ */
 function decorate(row) {
   if (!row) return null;
   return {
@@ -35,6 +45,13 @@ function decorate(row) {
   };
 }
 
+/**
+ * Valida y normaliza el payload de un evento de calendario (título, notas, fechas, color, tipo, ticket vinculado), en modo completo o parcial (para updates).
+ * @param {Object} payload - datos del evento a validar
+ * @param {Object} [options] - opciones de validación
+ * @param {Boolean} [options.partial=false] - si true, solo valida los campos presentes (para actualizaciones parciales)
+ * @returns {Object} campos validados y normalizados
+ */
 function validateEventPayload(payload, { partial = false } = {}) {
   const out = {};
 
@@ -90,6 +107,14 @@ function validateEventPayload(payload, { partial = false } = {}) {
   return out;
 }
 
+/**
+ * Lista los eventos de calendario activos de un usuario dentro de un rango de fechas, ordenados por fecha de inicio.
+ * @param {Object} params - parámetros de consulta
+ * @param {Object} params.user - usuario dueño de los eventos
+ * @param {Date|String} [params.from] - fecha desde la cual filtrar
+ * @param {Date|String} [params.to] - fecha hasta la cual filtrar
+ * @returns {Promise<Array>} eventos del usuario en el rango indicado
+ */
 async function listEvents({ user, from, to }) {
   const fromSql = toSqlDate(from) || '1970-01-01 00:00:00';
   const toSql = toSqlDate(to) || '2999-12-31 23:59:59';
@@ -113,6 +138,12 @@ async function listEvents({ user, from, to }) {
     .map(decorate);
 }
 
+/**
+ * Crea un evento de calendario para un usuario, opcionalmente vinculado a un ticket existente. Registra auditoría y notifica en tiempo real.
+ * @param {Object} payload - datos del evento a crear
+ * @param {Object} user - usuario dueño del evento
+ * @returns {Promise<Object>} evento creado decorado
+ */
 async function createEvent(payload, user) {
   const data = validateEventPayload(payload, { partial: false });
   if (data.ticket_id != null) {
@@ -150,6 +181,13 @@ async function createEvent(payload, user) {
   return decorated;
 }
 
+/**
+ * Actualiza un evento de calendario existente, validando que pertenezca al usuario y que el rango de fechas siga siendo válido. Registra auditoría y notifica en tiempo real.
+ * @param {String|Number} id - id del evento a actualizar
+ * @param {Object} payload - campos a actualizar
+ * @param {Object} user - usuario que realiza la actualización
+ * @returns {Promise<Object>} evento actualizado decorado
+ */
 async function updateEvent(id, payload, user) {
   const existing = decorate(await firestore.getById('calendar_events', id));
   if (!existing) throw notFoundError('Evento de calendario no encontrado.');
@@ -194,6 +232,12 @@ async function updateEvent(id, payload, user) {
   return decorated;
 }
 
+/**
+ * Elimina (desactiva) un evento de calendario, validando que pertenezca al usuario. Registra auditoría y notifica en tiempo real.
+ * @param {String|Number} id - id del evento a eliminar
+ * @param {Object} user - usuario que realiza la eliminación
+ * @returns {Promise<Object>} objeto con el id del evento eliminado
+ */
 async function deleteEvent(id, user) {
   const existing = decorate(await firestore.getById('calendar_events', id));
   if (!existing) throw notFoundError('Evento de calendario no encontrado.');
@@ -217,6 +261,13 @@ async function deleteEvent(id, user) {
   return { id: existing.id };
 }
 
+/**
+ * Lista tickets del usuario que están en un estado programable (recibido, asignado, en_proceso) para poder vincularlos a un evento de calendario.
+ * @param {Object} user - usuario para el cual se listan los tickets
+ * @param {Object} [options] - opciones de listado
+ * @param {Number} [options.limit=30] - cantidad máxima de tickets a devolver
+ * @returns {Promise<Array>} tickets programables
+ */
 async function listSchedulableTickets(user, { limit = 30 } = {}) {
   const allowedStatuses = new Set(['recibido', 'asignado', 'en_proceso']);
   const result = await firestoreData.listTickets({}, user, { limit: Math.max(limit * 5, 100) });
@@ -225,6 +276,13 @@ async function listSchedulableTickets(user, { limit = 30 } = {}) {
     .slice(0, limit);
 }
 
+/**
+ * Emite por socket.io un evento relacionado a un evento de calendario. Silencia errores de socket.
+ * @param {String} event - nombre del evento a emitir
+ * @param {Object} payload - datos del evento
+ * @param {Object} [opts] - opciones de enrutamiento del socket (ej. user)
+ * @returns {void}
+ */
 function emit(event, payload, opts = {}) {
   try {
     const { emit: emitSocket } = require('../sockets');

@@ -1,4 +1,11 @@
 /* Documentado por: Miguel Flores */
+/**
+ * Valida un rango de fechas: que ambas sean fechas válidas, que "desde" no sea posterior a "hasta",
+ * y que el rango no exceda 1 año.
+ * @param {string} dateFrom - fecha de inicio del rango
+ * @param {string} dateTo - fecha de fin del rango
+ * @returns {{valid: boolean, message: (string|null)}} resultado de la validación con mensaje de error si aplica
+ */
 export function validateDateRange(dateFrom, dateTo) {
   if (!dateFrom || !dateTo) return { valid: true, message: null };
   
@@ -28,6 +35,12 @@ export function validateDateRange(dateFrom, dateTo) {
   return { valid: true, message: null };
 }
 
+/**
+ * Formatea un rango de fechas para mostrarlo al usuario en español, contemplando rangos parciales o vacíos.
+ * @param {string} dateFrom - fecha de inicio del rango
+ * @param {string} dateTo - fecha de fin del rango
+ * @returns {string} texto legible del rango de fechas
+ */
 export function formatDateRange(dateFrom, dateTo) {
   if (!dateFrom && !dateTo) return 'Sin filtro de fechas';
   
@@ -41,6 +54,12 @@ export function formatDateRange(dateFrom, dateTo) {
   if (dateTo) return `Hasta ${formatDate(dateTo)}`;
 }
 
+/**
+ * Calcula la cantidad de días (inclusive) entre dos fechas.
+ * @param {string} dateFrom - fecha de inicio del rango
+ * @param {string} dateTo - fecha de fin del rango
+ * @returns {(number|null)} cantidad de días del rango, o null si las fechas son inválidas o faltan
+ */
 export function calculateDays(dateFrom, dateTo) {
   if (!dateFrom || !dateTo) return null;
   

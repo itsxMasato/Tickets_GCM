@@ -20,6 +20,13 @@ import { attachmentThumb } from '../components/attachments.js';
 
 let currentSocketCleanup = null;
 
+/**
+ * Arma la vista de detalle de un ticket: encabezado con acciones de exportar/recargar, resumen y estado, descripción, línea de tiempo, chat de comentarios y panel de acciones/información lateral. Se suscribe a eventos de socket para refrescar en tiempo real.
+ * @param {Object} params - parámetros de la ruta
+ * @param {Object} params.params - parámetros de la URL (incluye el id del ticket)
+ * @param {Object} params.user - usuario autenticado
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderTicketDetail({ params, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
   const id = parseInt(params.id, 10);
@@ -203,6 +210,10 @@ export async function renderTicketDetail({ params, user }) {
   layout.appendChild(right);
   root.appendChild(layout);
 
+  /**
+   * Vuelve a obtener el ticket desde la API y reconstruye toda la vista de detalle en el mismo nodo padre.
+   * @returns {Promise<void>}
+   */
   async function reload() {
     try {
       const data = await api.tickets.get(id);
@@ -246,6 +257,11 @@ const HISTORY_TONE = {
   attachment_added: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 
+/**
+ * Arma la tarjeta con la línea de tiempo de eventos del ticket (creación, asignación, cambios de estado, comentarios, adjuntos).
+ * @param {Object} ticket - ticket con su historial (ticket.history)
+ * @returns {HTMLElement} tarjeta de línea de tiempo
+ */
 function renderTimeline(ticket) {
   const entries = Array.isArray(ticket.history) ? ticket.history : [];
   const card = h('div.card', {}, [
@@ -286,7 +302,19 @@ function renderTimeline(ticket) {
   return card;
 }
 
+/**
+ * Arma la tarjeta lateral con la información general del ticket (código, creado por, asignado a, categoría, área, fechas) y sus adjuntos.
+ * @param {Object} ticket - ticket a mostrar
+ * @returns {HTMLElement} tarjeta de información
+ */
 function renderSidebarInfo(ticket) {
+  /**
+   * Arma una fila etiqueta/valor de la tarjeta de información, con formato monoespaciado opcional.
+   * @param {string} label - etiqueta del campo
+   * @param {string} value - valor a mostrar (o "—" si está vacío)
+   * @param {boolean} [isCode] - si true, muestra el valor con fuente monoespaciada
+   * @returns {HTMLElement} fila de información
+   */
   const row = (label, value, isCode = false) => h('div.flex.items-start.justify-between.gap-3.py-2.border-b.border-slate-100', { class: 'last:border-0' }, [
     h('span.text-xs.text-slate-500.uppercase.tracking-wide', {}, label),
     h('span.text-sm.text-slate-800.text-right', isCode ? { class: 'font-mono text-xs' } : {}, value || '—'),
@@ -313,6 +341,13 @@ function renderSidebarInfo(ticket) {
   return info;
 }
 
+/**
+ * Arma la tarjeta de acciones disponibles para el ticket según el rol del usuario: asignar, agregar al calendario, cambiar de estado y editar detalles.
+ * @param {Object} ticket - ticket sobre el que se actúa
+ * @param {Object} user - usuario autenticado
+ * @param {Function} onChange - callback invocado tras completar una acción, para refrescar la vista
+ * @returns {HTMLElement} tarjeta de acciones
+ */
 function renderActions(ticket, user, onChange) {
   const actions = h('div.card.flex.flex-col.gap-2', {});
   actions.appendChild(h('h3.text-sm.font-semibold.text-slate-700', {}, 'Acciones'));
@@ -354,6 +389,12 @@ function renderActions(ticket, user, onChange) {
   return actions;
 }
 
+/**
+ * Crea un evento en el calendario del usuario vinculado al ticket, con horario por defecto (mañana a las 10:00, una hora de duración).
+ * @param {Object} ticket - ticket a vincular con el evento
+ * @param {Function} [onChange] - callback invocado tras crear el evento
+ * @returns {Promise<void>}
+ */
 async function addToMyCalendar(ticket, onChange) {
   const start = new Date();
   start.setDate(start.getDate() + 1);
@@ -375,6 +416,12 @@ async function addToMyCalendar(ticket, onChange) {
   }
 }
 
+/**
+ * Abre el modal para asignar o reasignar el ticket a un encargado (admin_area o jefe_inmediato), con notas opcionales.
+ * @param {Object} ticket - ticket a asignar
+ * @param {Function} [onChange] - callback invocado tras asignar exitosamente
+ * @returns {Promise<void>}
+ */
 async function openAssignModal(ticket, onChange) {
   let users = [];
   try { users = (await api.users.list({ active: true })).users.filter((u) => u.role === 'admin_area' || u.role === 'jefe_inmediato'); } catch {}
@@ -407,6 +454,13 @@ async function openAssignModal(ticket, onChange) {
   openModal({ title: `Asignar ${ticket.code}`, body, actions });
 }
 
+/**
+ * Cambia el estado del ticket: para cerrar/reabrir pide confirmación directa, para otros estados abre un modal con comentario opcional.
+ * @param {Object} ticket - ticket a modificar
+ * @param {string} next - próximo estado a aplicar
+ * @param {Function} [onChange] - callback invocado tras cambiar el estado exitosamente
+ * @returns {Promise<void>}
+ */
 async function changeStatus(ticket, next, onChange) {
   const label = STATUS_LABEL[next] || next;
   if (next === 'cerrado' || next === 'reabierto') {
@@ -444,6 +498,12 @@ async function changeStatus(ticket, next, onChange) {
   openModal({ title: `Cambiar estado · ${ticket.code}`, body, actions });
 }
 
+/**
+ * Abre el modal para editar los detalles del ticket (título, descripción, categoría y prioridad).
+ * @param {Object} ticket - ticket a editar
+ * @param {Function} [onChange] - callback invocado tras guardar exitosamente
+ * @returns {Promise<void>}
+ */
 async function openEditModal(ticket, onChange) {
   const { categories } = await api.categories.list().catch(() => ({ categories: [] }));
   const title = h('input.input', { type: 'text', value: ticket.title, maxlength: '200' });

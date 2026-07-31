@@ -29,6 +29,16 @@ const KPI_TONE = {
   accent:  { border: 'border-2 border-accent/25 bg-accent/5',      icon: 'bg-accent/10 text-accent',           value: 'text-accent' },
 };
 
+/**
+ * Arma una tarjeta de indicador (KPI) con icono, valor y etiqueta para el resumen superior de la lista.
+ * @param {Object} params - datos del KPI
+ * @param {string} params.label - etiqueta del indicador
+ * @param {*} params.value - valor a mostrar
+ * @param {string} [params.hint] - texto de ayuda debajo del valor
+ * @param {string} [params.tone] - variante de color/estilo del KPI
+ * @param {string} [params.icon] - icono a mostrar
+ * @returns {HTMLElement} tarjeta KPI
+ */
 function kpiCard({ label, value, hint = '', tone = '', icon = null }) {
   const t = KPI_TONE[tone] || KPI_TONE[''];
   return h('div.card.flex.flex-col.gap-3', { class: t.border }, [
@@ -41,12 +51,22 @@ function kpiCard({ label, value, hint = '', tone = '', icon = null }) {
   ]);
 }
 
+/**
+ * Formatea un número de horas en texto legible, usando días cuando supera las 48 horas.
+ * @param {number} hours - cantidad de horas
+ * @returns {string} texto formateado (ej. "2.5 h" o "3.0 d")
+ */
 function formatHours(hours) {
   if (hours == null || isNaN(hours)) return '—';
   if (hours >= 48) return `${(hours / 24).toFixed(1)} d`;
   return `${Number(hours).toFixed(1)} h`;
 }
 
+/**
+ * Arma el icono/indicador visual de prioridad de un ticket (alerta para alta/urgente, punto de color para media/baja).
+ * @param {string} p - prioridad del ticket
+ * @returns {HTMLElement} icono de prioridad
+ */
 function priorityIcon(p) {
   const label = PRIORITY_LABEL[p] || p || '—';
   if (p === 'urgente' || p === 'alta') {
@@ -58,6 +78,13 @@ function priorityIcon(p) {
   ]);
 }
 
+/**
+ * Arma la vista de listado de tickets: KPIs, filtros, filtros rápidos, tabla/tarjetas paginadas y exportación.
+ * @param {Object} params - parámetros de entrada de la ruta
+ * @param {Object} params.query - parámetros de query string de la URL (filtros iniciales)
+ * @param {Object} params.user - usuario autenticado actual
+ * @returns {Promise<{view: HTMLElement, cleanup: Function}>} nodo raíz de la vista y función de limpieza de listeners
+ */
 export async function renderTicketsList({ query, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
@@ -149,6 +176,11 @@ export async function renderTicketsList({ query, user }) {
   ];
 
   const statusBadgeCache = new Map();
+  /**
+   * Devuelve el HTML del badge de estado de un ticket, usando caché para evitar recrearlo.
+   * @param {string} s - estado del ticket
+   * @returns {string} HTML del badge de estado
+   */
   function statusBadgeHtml(s) {
     if (statusBadgeCache.has(s)) return statusBadgeCache.get(s);
     const html = statusBadge(s).outerHTML;
@@ -156,6 +188,11 @@ export async function renderTicketsList({ query, user }) {
     return html;
   }
   const priorityIconCache = new Map();
+  /**
+   * Devuelve el HTML del icono de prioridad de un ticket, usando caché para evitar recrearlo.
+   * @param {string} p - prioridad del ticket
+   * @returns {string} HTML del icono de prioridad
+   */
   function priorityIconHtml(p) {
     if (priorityIconCache.has(p)) return priorityIconCache.get(p);
     const html = priorityIcon(p).outerHTML;
@@ -163,6 +200,13 @@ export async function renderTicketsList({ query, user }) {
     return html;
   }
 
+  /**
+   * Arma el HTML de una celda de persona (avatar con iniciales + nombre) para las columnas de usuario/asignado de la tabla.
+   * @param {string} name - nombre de la persona
+   * @param {string|number} seedId - identificador usado para generar el color del avatar
+   * @param {string} [emptyLabel] - texto a mostrar cuando no hay persona asignada
+   * @returns {string} HTML de la celda
+   */
   function personCellHtml(name, seedId, emptyLabel = 'Sin asignar') {
     if (!name) return `<span class="text-slate-400 italic text-xs">${escapeHtml(emptyLabel)}</span>`;
     return `
@@ -173,6 +217,11 @@ export async function renderTicketsList({ query, user }) {
     `;
   }
 
+  /**
+   * Arma la tarjeta de un ticket para la vista mobile del listado (código, prioridad, título, estado, área y responsable).
+   * @param {Object} t - datos del ticket
+   * @returns {HTMLElement} tarjeta del ticket
+   */
   function mobileCard(t) {
     const open = () => go(`/tickets/${t.id}`);
     const card = h('button.card.text-left.flex.flex-col.gap-2.p-3.transition', {
@@ -203,6 +252,11 @@ export async function renderTicketsList({ query, user }) {
     return card;
   }
 
+  /**
+   * Arma el HTML de una fila de la tabla de tickets para la vista desktop.
+   * @param {Object} t - datos del ticket
+   * @returns {string} HTML de la fila `<tr>`
+   */
   function tableRow(t) {
     return `
       <tr class="cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:ring-inset group" data-id="${escapeHtml(String(t.id))}" tabindex="0" role="link" aria-label="Abrir ticket ${escapeHtml(t.code)}: ${escapeHtml(t.title)}">
@@ -228,6 +282,10 @@ export async function renderTicketsList({ query, user }) {
   let currentTotal = 0;
   let currentLimit = 20;
 
+  /**
+   * Conecta los listeners de click y teclado a las filas de la tabla renderizada para abrir el detalle del ticket.
+   * @returns {void}
+   */
   function wireTableRows() {
     const rows = listWrap.querySelectorAll('tr[data-id]');
     rows.forEach((tr) => {
@@ -242,10 +300,19 @@ export async function renderTicketsList({ query, user }) {
     });
   }
 
+  /**
+   * Reacciona al cambio entre vista mobile y desktop, re-conectando los listeners de la tabla cuando corresponde.
+   * @param {boolean} isMobile - true si el breakpoint activo es mobile
+   * @returns {void}
+   */
   function onMatchMediaChange(isMobile) {
     if (!isMobile) wireTableRows();
   }
 
+  /**
+   * Dibuja los botones de filtro rápido por estado (varían según el rol del usuario) sobre la barra de filtros.
+   * @returns {void}
+   */
   function renderQuickFilters() {
     quickFiltersWrap.innerHTML = '';
     const options = isJefe(user)
@@ -277,6 +344,10 @@ export async function renderTicketsList({ query, user }) {
     quickFiltersWrap.appendChild(h('div.flex.flex-wrap.gap-2', {}, buttons));
   }
 
+  /**
+   * Toma los valores actuales de los controles de filtro, los sincroniza con la URL y recarga el listado desde la primera página.
+   * @returns {Promise<void>}
+   */
   async function applyFilters() {
     filters.search = searchInput.value.trim();
     filters.status = statusSel.value;
@@ -299,6 +370,11 @@ export async function renderTicketsList({ query, user }) {
     render();
   }
 
+  /**
+   * Avanza o retrocede una página en la paginación por cursor y vuelve a renderizar el listado.
+   * @param {string} direction - dirección de navegación ('next' o 'prev')
+   * @returns {Promise<void>}
+   */
   async function goToPage(direction) {
     if (direction === 'next') {
       if (!state.result.hasMore || !state.result.nextCursor) return;
@@ -313,6 +389,10 @@ export async function renderTicketsList({ query, user }) {
     render();
   }
 
+  /**
+   * Carga los usuarios activos desde la API y llena el select de "Responsable" con las opciones disponibles.
+   * @returns {Promise<void>}
+   */
   async function populateAssignedUsers() {
     try {
       const users = await api.users.list({ active: true });
@@ -324,6 +404,10 @@ export async function renderTicketsList({ query, user }) {
     }
   }
 
+  /**
+   * Obtiene las estadísticas del dashboard (o del usuario, según rol) y dibuja los KPIs superiores.
+   * @returns {Promise<void>}
+   */
   async function loadStats() {
     try {
       const data = user.role === 'sac' ? await api.stats.dashboard() : await api.stats.me();
@@ -333,6 +417,11 @@ export async function renderTicketsList({ query, user }) {
     }
   }
 
+  /**
+   * Renderiza las tarjetas KPI (resolución promedio, urgentes, cerrados hoy, reabiertos) con los datos de estadísticas.
+   * @param {Object} data - datos de estadísticas del dashboard
+   * @returns {void}
+   */
   function drawStats(data) {
     const totals = data.totals || {};
     statsRow.innerHTML = '';
@@ -342,6 +431,10 @@ export async function renderTicketsList({ query, user }) {
     statsRow.appendChild(kpiCard({ label: 'Reabiertos', value: totals.reabierto ?? '—', hint: 'Requieren seguimiento', tone: 'warn', icon: ICON.reopen }));
   }
 
+  /**
+   * Solicita a la API el listado de tickets según los filtros y la página actual, y dibuja el resultado.
+   * @returns {Promise<void>}
+   */
   async function render() {
     ensureDataList();
     dataList.update({ loading: true, items: [] });
@@ -361,6 +454,10 @@ export async function renderTicketsList({ query, user }) {
     }
   }
 
+  /**
+   * Inicializa el componente de lista de datos (tabla/tarjetas) una única vez, si todavía no fue montado.
+   * @returns {void}
+   */
   function ensureDataList() {
     if (dataList) return;
     dataList = mountDataList({
@@ -373,6 +470,10 @@ export async function renderTicketsList({ query, user }) {
     });
   }
 
+  /**
+   * Actualiza el subtítulo de resultados, la lista de tickets, el paginador y los chips de filtros activos con el resultado actual.
+   * @returns {void}
+   */
   function draw() {
     const { tickets, total, hasMore, limit } = state.result;
     currentTickets = tickets;
@@ -412,6 +513,14 @@ export async function renderTicketsList({ query, user }) {
     if (chips) filtersChipsWrap.appendChild(chips);
   }
 
+  /**
+   * Dibuja el resumen de resultados mostrados y los controles de paginación (anterior/siguiente).
+   * @param {number} shown - cantidad de tickets mostrados en la página actual
+   * @param {number} total - total de tickets que coinciden con los filtros
+   * @param {boolean} hasMore - si existe una página siguiente
+   * @param {number} pageIndex - índice de la página actual
+   * @returns {void}
+   */
   function drawPager(shown, total, hasMore, pageIndex) {
     pagWrap.innerHTML = '';
     if (!shown) return;
@@ -425,8 +534,19 @@ export async function renderTicketsList({ query, user }) {
     ]));
   }
 
+  /**
+   * Pide confirmación de contraseña y exporta el listado de tickets filtrado a Excel o PDF.
+   * @param {string} format - formato de exportación ('pdf' o 'excel')
+   * @returns {Promise<void>}
+   */
   async function doExport(format) {
     const formatLabel = format === 'pdf' ? 'PDF' : 'Excel';
+    /**
+     * Activa/desactiva el estado de carga del botón de exportación y actualiza su etiqueta.
+     * @param {boolean} busy - true para mostrar estado ocupado
+     * @param {string} [labelText] - texto a mostrar en el botón
+     * @returns {void}
+     */
     const setBusy = (busy, labelText = 'Exportar') => {
       if (!exportBtn) return;
       exportBtn.disabled = busy;

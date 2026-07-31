@@ -1,6 +1,10 @@
 /* Documentado por: Miguel Flores */
 'use strict'
 
+// Enums compartidos por la capa ORM (TypeORM/SQL Server): valores válidos para roles,
+// estados y prioridad de tickets, tipos de notificación y de evento de calendario, más
+// sus respectivos arrays de valores (*_VALUES) para usar en validaciones y columnas enum.
+
 const RoleEnum = Object.freeze({
   SUPERVISOR_CAMPO: 'supervisor_campo',
   SAC:              'sac',

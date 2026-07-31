@@ -23,6 +23,11 @@ const ERROR_COPY = {
   server_error: 'El servicio no responde en este momento. Intenta de nuevo en unos minutos.',
 };
 
+/**
+ * Traduce un error de login (HTTP o de Firebase) a un mensaje legible en español para el usuario.
+ * @param {Object} err - error capturado durante el intento de login
+ * @returns {string} mensaje de error a mostrar al usuario
+ */
 function describeError(err) {
   if (!err) return ERROR_COPY.server_error;
   if (err.status === 401) return ERROR_COPY.invalid_credentials;
@@ -34,6 +39,14 @@ function describeError(err) {
   return err.message || ERROR_COPY.server_error;
 }
 
+/**
+ * Arma la pantalla de login: video de fondo, panel de acceso con formulario de usuario/contraseña y panel lateral con capacidades del sistema.
+ * @param {Object} params - parámetros de la ruta
+ * @param {Object} [params.params] - parámetros de la ruta
+ * @param {Object} [params.query] - query string de la URL (puede incluir "next")
+ * @param {Function} params.onLogin - callback invocado con el usuario autenticado al iniciar sesión con éxito
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderLogin({ params, query, onLogin }) {
   const nextUrl = typeof query?.next === 'string' ? query.next : null;
   const root = h('div.login-root', {});
@@ -198,6 +211,11 @@ export async function renderLogin({ params, query, onLogin }) {
     }
   });
 
+  /**
+   * Maneja el envío del formulario de login: intenta autenticación local y, si falla, hace fallback a Firebase Auth; muestra errores y pistas tras varios intentos fallidos.
+   * @param {Event} e - evento de submit del formulario
+   * @returns {Promise<void>}
+   */
   async function onSubmit(e) {
     e.preventDefault();
     if (state.busy) return;
@@ -256,6 +274,11 @@ export async function renderLogin({ params, query, onLogin }) {
     }
   }
 
+  /**
+   * Activa o desactiva el estado de carga del botón de submit, alternando su ícono (spinner o flecha) y texto.
+   * @param {boolean} b - true para mostrar estado de carga, false para restaurarlo
+   * @returns {void}
+   */
   function setBusy(b) {
     state.busy = b;
     submit.setAttribute('aria-busy', b ? 'true' : 'false');
@@ -296,20 +319,38 @@ export async function renderLogin({ params, query, onLogin }) {
     submit.appendChild(text);
   }
 
+  /**
+   * Muestra el banner de error debajo del formulario con el mensaje dado.
+   * @param {string} message - mensaje de error a mostrar
+   * @returns {void}
+   */
   function showError(message) {
     errorBox.innerHTML = '';
     errorBox.appendChild(Banner({ message, variant: 'error' }));
     errorBox.classList.remove('hidden');
   }
+  /**
+   * Oculta y limpia el banner de error del formulario.
+   * @returns {void}
+   */
   function hideError() {
     errorBox.innerHTML = '';
     errorBox.classList.add('hidden');
   }
+  /**
+   * Muestra el banner de sugerencia (ej. recuperar contraseña) debajo del formulario.
+   * @param {string} message - mensaje de sugerencia a mostrar
+   * @returns {void}
+   */
   function showHint(message) {
     hintBox.innerHTML = '';
     hintBox.appendChild(Banner({ message, variant: 'warning' }));
     hintBox.classList.remove('hidden');
   }
+  /**
+   * Oculta y limpia el banner de sugerencia del formulario.
+   * @returns {void}
+   */
   function hideHint() {
     hintBox.innerHTML = '';
     hintBox.classList.add('hidden');

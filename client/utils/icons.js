@@ -1,4 +1,6 @@
 /* Documentado por: Miguel Flores */
+// Mapa de nombre de ícono a su "d" de path SVG (sistema de íconos propio, sin librería externa).
+// Se usa junto con la función svg() de este archivo para renderizar los íconos como elementos <svg>.
 export const ICON = {
   back: 'M19 12H5M12 19l-7-7 7-7',
   menu:      'M4 6h16M4 12h16M4 18h16',
@@ -83,6 +85,13 @@ export const ICON = {
   section_account:        'M16 11a4 4 0 10-8 0 4 4 0 008 0zM4 21a8 8 0 0116 0',
 };
 
+/**
+ * Construye un elemento <svg> a partir de un nombre de ícono del mapa ICON, o de un path SVG directo.
+ * @param {Function} h - función hyperscript (de utils/dom.js) usada para crear el elemento
+ * @param {string} nameOrPath - clave del mapa ICON, o un string de path SVG "d" directo
+ * @param {string} [cls] - clases CSS a aplicar al elemento svg
+ * @returns {SVGElement} elemento SVG del ícono
+ */
 export function svg(h, nameOrPath, cls = 'w-4 h-4') {
   const path = typeof nameOrPath === 'string' && nameOrPath in ICON ? ICON[nameOrPath] : nameOrPath;
   return h('svg', {

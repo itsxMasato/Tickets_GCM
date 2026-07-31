@@ -12,6 +12,12 @@ const FILE_ICON = {
   file:  'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6',
 };
 
+/**
+ * Crea un ícono SVG a partir del path definido en FILE_ICON para el tipo de archivo dado.
+ * @param {string} name - clave del ícono dentro de FILE_ICON (image, pdf, doc, sheet, zip, file)
+ * @param {string} [cls='w-5 h-5'] - clases CSS de tamaño para el SVG
+ * @returns {HTMLElement} elemento svg
+ */
 function svgFor(name, cls = 'w-5 h-5') {
   return h(`svg.${cls}`, {
     fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8',
@@ -20,6 +26,11 @@ function svgFor(name, cls = 'w-5 h-5') {
   });
 }
 
+/**
+ * Determina qué ícono y color de Tailwind corresponden a un tipo MIME de archivo.
+ * @param {string} mime - tipo MIME del archivo adjunto
+ * @returns {{name: string, cls: string}} nombre del ícono en FILE_ICON y clase de color
+ */
 function iconFor(mime) {
   if (isImage(mime))    return { name: 'image', cls: 'text-brand-ocean' };
   if (mime === 'application/pdf') return { name: 'pdf', cls: 'text-accent' };
@@ -29,6 +40,14 @@ function iconFor(mime) {
   return { name: 'file', cls: 'text-slate-500' };
 }
 
+/**
+ * Arma la miniatura de un archivo adjunto: una imagen previsualizable si es una foto,
+ * o una tarjeta con ícono, nombre y tamaño para el resto de tipos de archivo. Enlaza
+ * a la descarga/visualización del adjunto.
+ * @param {Object} att - adjunto a mostrar (mime_type, original_name, size, id)
+ * @param {string|number} ticketId - id del ticket al que pertenece el adjunto
+ * @returns {HTMLElement} elemento anchor con la miniatura del adjunto
+ */
 export function attachmentThumb(att, ticketId) {
   if (isImage(att.mime_type)) {
     return h('a.group.block.relative.overflow-hidden.rounded-md.border.border-slate-200.bg-slate-50', {

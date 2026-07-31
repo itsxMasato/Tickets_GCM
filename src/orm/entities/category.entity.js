@@ -4,6 +4,9 @@
 const { EntitySchema } = require('typeorm');
 const { bitBoolean } = require('../transformers');
 
+// Entidad ORM: tabla `categories`. Representa las categorías en las que se clasifican los
+// tickets, opcionalmente acotadas a una empresa (company_id) en el esquema multitenant.
+// Campos principales: name, active (borrado lógico), company_id.
 module.exports = new EntitySchema({
   name: 'Category',
   tableName: 'categories',

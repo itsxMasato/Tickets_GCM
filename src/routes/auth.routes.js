@@ -14,6 +14,12 @@ const { avatarUpload, avatarDir } = require('../middleware/upload');
 
 const NOT_FOUND_MSG = 'No encontramos una cuenta con ese usuario o correo.';
 
+/**
+ * Determina si un usuario tiene el flag de administrador de plataforma, aceptando
+ * distintas representaciones del valor (booleano, camelCase/snake_case, número o string).
+ * @param {Object} user - registro de usuario
+ * @returns {boolean} true si el usuario es administrador de plataforma
+ */
 function resolvePlatformAdminFlag(user) {
   if (!user || typeof user !== 'object') return false;
   if (typeof user.isPlatformAdmin === 'boolean') return user.isPlatformAdmin;
@@ -23,6 +29,12 @@ function resolvePlatformAdminFlag(user) {
   return false;
 }
 
+/**
+ * Carga las membresías activas de un usuario; si falla la consulta, devuelve un array vacío
+ * en lugar de propagar el error (uso defensivo en el flujo de login/sesión).
+ * @param {number|string} userId - id del usuario
+ * @returns {Promise<Array>} lista de membresías (o vacía si falló la consulta)
+ */
 async function loadMemberships(userId) {
   try {
     return await membershipsService.listByUser(userId, { requester: { id: userId } });
@@ -31,12 +43,23 @@ async function loadMemberships(userId) {
   }
 }
 
+/**
+ * Reconstruye el objeto de usuario de sesión con datos frescos (usuario actualizado,
+ * empresa activa y membresías), para devolver al cliente tras login o cambios de sesión.
+ * @param {Request} req - request de Express con user y session
+ * @returns {Promise<Object>} usuario enriquecido con active_company_id y memberships
+ */
 async function buildSessionUser(req) {
   const fresh = await authService.getById(req.user.id);
   const memberships = await loadMemberships(req.user.id);
   return { ...fresh, active_company_id: req.user.activeCompanyId, memberships };
 }
 
+/**
+ * POST /login - Autentica con username/password (flujo legacy), crea la sesión del usuario
+ * (incluyendo rol, empresa activa y flag de administrador de plataforma) y devuelve el usuario.
+ * @returns {Promise<void>} responde con { user }
+ */
 router.post('/login', async (req, res, next) => {
   try {
     const { username, password } = req.body || {};
@@ -54,6 +77,11 @@ router.post('/login', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * POST /resolve-login - Dado un identificador (username o email) busca el usuario en Firestore
+ * y resuelve el email sintético/real usado para autenticar contra Firebase Auth.
+ * @returns {Promise<void>} responde con { email } o 404 si no se encuentra
+ */
 router.post('/resolve-login', async (req, res, next) => {
   try {
     const { identifier } = req.body || {};
@@ -83,6 +111,10 @@ router.post('/resolve-login', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * POST /logout - Destruye la sesión del usuario actual y limpia la cookie de sesión.
+ * @returns {void} responde con { ok: true }
+ */
 router.post('/logout', (req, res, next) => {
   if (!req.session) return res.json({ ok: true });
   req.session.destroy((err) => {
@@ -92,6 +124,11 @@ router.post('/logout', (req, res, next) => {
   });
 });
 
+/**
+ * POST /verify-password - Verifica que la contraseña dada coincida con la del usuario autenticado
+ * (usado como reautenticación para operaciones sensibles).
+ * @returns {Promise<void>} responde con { ok: true } o error si la contraseña no coincide
+ */
 router.post('/verify-password', requireAuth, async (req, res, next) => {
   try {
     const { password } = req.body || {};
@@ -102,12 +139,21 @@ router.post('/verify-password', requireAuth, async (req, res, next) => {
   }
 });
 
+/**
+ * GET /me - Devuelve los datos actuales del usuario autenticado (perfil, empresa activa y membresías).
+ * @returns {Promise<void>} responde con { user }
+ */
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
     res.json({ user: await buildSessionUser(req) });
   } catch (err) { next(err); }
 });
 
+/**
+ * POST /firebase - Autentica al usuario a partir de un idToken de Firebase Auth: lo verifica,
+ * busca el usuario correspondiente en Firestore por email, valida que esté activo y crea la sesión.
+ * @returns {Promise<void>} responde con { user } o error (400/403/404) según el caso
+ */
 router.post('/firebase', async (req, res, next) => {
   try {
     const { idToken } = req.body || {};
@@ -141,6 +187,12 @@ router.post('/firebase', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * POST /active-company - Cambia la empresa activa de la sesión del usuario autenticado.
+ * Administradores de plataforma y rol 'sac' pueden elegir cualquier empresa; el resto solo
+ * empresas de las que sean miembro activo.
+ * @returns {Promise<void>} responde con { user } actualizado o 400/403 según el caso
+ */
 router.post('/active-company', requireAuth, async (req, res, next) => {
   try {
     const companyId = Number((req.body || {}).company_id);
@@ -159,6 +211,11 @@ router.post('/active-company', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * POST /avatar - Sube una nueva imagen de avatar para el usuario autenticado (multipart, campo 'file'),
+ * borra el avatar anterior del disco si existía, y actualiza la referencia en el usuario.
+ * @returns {Promise<void>} responde con { user } actualizado
+ */
 router.post('/avatar', requireAuth, avatarUpload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) {

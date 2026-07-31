@@ -7,12 +7,21 @@ const auditService = require('../services/audit.service');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 
+/**
+ * GET /dashboard - Devuelve las estadísticas globales del dashboard principal. Requiere rol 'sac'.
+ * @returns {Promise<void>} responde con el resultado de statsService.dashboard()
+ */
 router.get('/dashboard', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     res.json(await statsService.dashboard(req.user));
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /me - Devuelve las estadísticas personalizadas según el rol del usuario autenticado
+ * (admin_area, supervisor_campo o jefe_inmediato); para otros roles devuelve un objeto vacío.
+ * @returns {Promise<void>} responde con las estadísticas correspondientes al rol
+ */
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
     const role = req.user.role;
@@ -29,6 +38,11 @@ router.get('/me', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /audit - Lista el log de auditoría paginado por cursor. Requiere rol 'sac'.
+ * Acepta filtros por query string: cursor, limit, user_id, action_type, date_from, date_to, search.
+ * @returns {Promise<void>} responde con el resultado paginado de auditService.list()
+ */
 router.get('/audit', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     const cursor = req.query.cursor || null;
@@ -47,6 +61,10 @@ router.get('/audit', requireAuth, requireRole('sac'), async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /audit/action-types - Lista los tipos de acción distintos presentes en el log de auditoría. Requiere rol 'sac'.
+ * @returns {Promise<void>} responde con { types }
+ */
 router.get('/audit/action-types', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     const types = await auditService.getActionTypes();
@@ -54,6 +72,10 @@ router.get('/audit/action-types', requireAuth, requireRole('sac'), async (req, r
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /audit/active-users - Lista los usuarios que tienen actividad registrada en el log de auditoría. Requiere rol 'sac'.
+ * @returns {Promise<void>} responde con { users }
+ */
 router.get('/audit/active-users', requireAuth, requireRole('sac'), async (req, res, next) => {
   try {
     const users = await auditService.getActiveUsers();

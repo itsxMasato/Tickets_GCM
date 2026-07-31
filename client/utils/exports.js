@@ -1,4 +1,9 @@
 /* Documentado por: Miguel Flores */
+/**
+ * Carga dinámicamente un script externo insertándolo en <head>, evitando duplicados si ya fue agregado.
+ * @param {string} src - URL del script a cargar
+ * @returns {Promise<void>} promesa que resuelve al cargar el script (o si ya estaba cargado)
+ */
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) return resolve();
@@ -16,6 +21,10 @@ const JSPDF_CDN = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.j
 const AUTOTABLE_CDN = 'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js';
 
 let xlsxReady = null;
+/**
+ * Garantiza que la librería XLSX (SheetJS) esté cargada desde CDN, cargándola una sola vez.
+ * @returns {Promise<Object>} referencia global window.XLSX ya lista para usar
+ */
 async function ensureXLSX() {
   if (window.XLSX) return window.XLSX;
   if (!xlsxReady) xlsxReady = loadScript(XLSX_CDN);
@@ -24,6 +33,10 @@ async function ensureXLSX() {
 }
 
 let jsPdfReady = null;
+/**
+ * Garantiza que jsPDF y el plugin autoTable estén cargados desde CDN, cargándolos una sola vez.
+ * @returns {Promise<Object>} referencia global window.jspdf ya lista para usar
+ */
 async function ensureJsPDF() {
   if (window.jspdf?.jsPDF) return window.jspdf;
   if (!jsPdfReady) jsPdfReady = (async () => {
@@ -52,6 +65,10 @@ export const BRAND = {
 };
 
 let logoImagePromise = null;
+/**
+ * Precarga la imagen del logo de la empresa (BRAND.logoUrl) para usarla en los encabezados de PDF.
+ * @returns {Promise<(HTMLImageElement|null)>} imagen cargada, o null si falló la carga
+ */
 function loadLogoImage() {
   if (!logoImagePromise) {
     logoImagePromise = new Promise((resolve) => {
@@ -64,6 +81,11 @@ function loadLogoImage() {
   return logoImagePromise;
 }
 
+/**
+ * Convierte un ticket crudo en una versión con etiquetas y fechas legibles para exportar (Excel/PDF).
+ * @param {Object} t - ticket con valores crudos (status, priority, area, fechas ISO)
+ * @returns {Object} copia del ticket con status/priority/area traducidos y fechas formateadas
+ */
 function humanize(t) {
   return {
     ...t,
@@ -93,6 +115,12 @@ export const TICKET_EXPORT_COLUMNS = [
 
 const FETCH_ALL_MAX_ROWS = 20000;
 
+/**
+ * Trae todos los tickets que cumplen los filtros dados, paginando automáticamente hasta agotar
+ * los resultados o alcanzar el límite máximo FETCH_ALL_MAX_ROWS.
+ * @param {Object} [filters] - filtros a aplicar en la consulta de tickets
+ * @returns {Promise<{rows: Array, truncated: boolean}>} tickets obtenidos y si el resultado fue truncado
+ */
 export async function fetchAllTickets(filters = {}) {
   const all = [];
   let cursor = null;
@@ -110,11 +138,25 @@ export async function fetchAllTickets(filters = {}) {
   return { rows: all, truncated };
 }
 
+/**
+ * Trae todos los tickets según los filtros y los transforma a su versión legible (humanize) para exportar.
+ * @param {Object} [filters] - filtros a aplicar en la consulta de tickets
+ * @returns {Promise<{rows: Array, truncated: boolean}>} tickets humanizados y si el resultado fue truncado
+ */
 export async function fetchAllForExport(filters = {}) {
   const { rows, truncated } = await fetchAllTickets(filters);
   return { rows: rows.map(humanize), truncated };
 }
 
+/**
+ * Genera y descarga un archivo Excel con una hoja de resumen ejecutivo (branding, totales, firmas)
+ * y una hoja de datos con estilos (encabezado, bordes) a partir de las filas dadas.
+ * @param {Array} rows - filas de datos a exportar
+ * @param {string} [filename] - nombre del archivo .xlsx a descargar
+ * @param {Object} [options] - opciones de exportación (columns, title, subtitle, sheetName, summaryField,
+ *   summaryLabel, generatedByName, generatedByRole)
+ * @returns {Promise<void>}
+ */
 export async function exportToExcel(rows, filename = 'reporte.xlsx', options = {}) {
   const columns = options.columns || TICKET_EXPORT_COLUMNS;
   const title = options.title || 'Reporte';
@@ -206,6 +248,15 @@ export async function exportToExcel(rows, filename = 'reporte.xlsx', options = {
 
 const PDF_MARGIN = 40;
 
+/**
+ * Dibuja el encabezado de marca (logo, nombre, título, subtítulo y metadata) en la página actual de un PDF.
+ * @param {Object} doc - instancia de documento jsPDF
+ * @param {Object} options - contenido del encabezado
+ * @param {string} options.title - título principal del documento
+ * @param {string} [options.subtitle] - subtítulo opcional
+ * @param {Array<string>} [options.meta] - líneas de metadata alineadas a la derecha (ej. fecha, autor)
+ * @returns {Promise<number>} alto en puntos del encabezado dibujado
+ */
 async function drawPdfHeader(doc, { title, subtitle, meta = [] }) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const logo = await loadLogoImage();
@@ -259,6 +310,12 @@ async function drawPdfHeader(doc, { title, subtitle, meta = [] }) {
   return headerHeight;
 }
 
+/**
+ * Dibuja el pie de página (línea divisoria, texto de confidencialidad y número de página) en un PDF.
+ * @param {Object} doc - instancia de documento jsPDF
+ * @param {number} pageNumber - número de página a mostrar
+ * @returns {void}
+ */
 function drawPdfFooter(doc, pageNumber) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -273,6 +330,15 @@ function drawPdfFooter(doc, pageNumber) {
   doc.text(`Página ${pageNumber}`, pageWidth - PDF_MARGIN, footerY + 14, { align: 'right' });
 }
 
+/**
+ * Dibuja el bloque de firmas (Elaborado/Revisado/Aprobado por) en un PDF, agregando una nueva página
+ * si no entra en el espacio restante de la actual.
+ * @param {Object} doc - instancia de documento jsPDF
+ * @param {number} y - posición vertical donde empezar a dibujar el bloque
+ * @param {string} generatedByName - nombre de quien generó el documento (columna "Elaborado por")
+ * @param {string} generatedByRole - rol de quien generó el documento
+ * @returns {number} posición vertical final tras dibujar el bloque
+ */
 function drawSignatureBlock(doc, y, generatedByName, generatedByRole) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -315,6 +381,16 @@ function drawSignatureBlock(doc, y, generatedByName, generatedByRole) {
   return y + blockHeight;
 }
 
+/**
+ * Genera y descarga un PDF tabular (listado) con encabezado de marca, resumen opcional,
+ * tabla de datos vía autoTable, pie de página en cada hoja y bloque de firmas al final.
+ * @param {Array} rows - filas de datos a exportar
+ * @param {Array<{key: string, label: string}>} columns - columnas a mostrar en la tabla
+ * @param {string} [filename] - nombre del archivo .pdf a descargar
+ * @param {Object} [options] - opciones de exportación (title, subtitle, summaryField, summaryLabel,
+ *   generatedByName, generatedByRole)
+ * @returns {Promise<void>}
+ */
 export async function exportListToPDF(rows, columns, filename = 'reporte.pdf', options = {}) {
   const { jsPDF } = await ensureJsPDF();
   const orientation = columns.length > 6 ? 'landscape' : 'portrait';
@@ -370,6 +446,12 @@ export async function exportListToPDF(rows, columns, filename = 'reporte.pdf', o
   doc.save(filename);
 }
 
+/**
+ * Genera y descarga un PDF detallado de un ticket individual: resumen, descripción, línea de tiempo
+ * de eventos (creación, asignaciones, comentarios) y bloque de firmas.
+ * @param {Object} ticket - ticket completo, incluyendo assignments y comments
+ * @returns {Promise<void>}
+ */
 export async function exportTicketToPDF(ticket) {
   const { jsPDF } = await ensureJsPDF();
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });

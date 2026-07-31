@@ -34,10 +34,24 @@ const AREA_LABEL = {
   otro:          'Otro',
 };
 
+/**
+ * Verifica si un valor pertenece a una lista de valores permitidos.
+ * @param {*} value - valor a verificar
+ * @param {Array} list - lista de valores permitidos
+ * @returns {boolean} true si el valor está en la lista
+ */
 function isOneOf(value, list) {
   return list.includes(value);
 }
 
+/**
+ * Valida que un valor sea un string no vacío (tras trim) y dentro del largo máximo permitido.
+ * Lanza un error de validación (400) si no cumple.
+ * @param {*} value - valor a validar
+ * @param {string} field - nombre del campo (para el mensaje de error)
+ * @param {number} [max=500] - largo máximo permitido
+ * @returns {string} valor recortado (trim)
+ */
 function requireString(value, field, max = 500) {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw validationError(`El campo "${field}" es obligatorio.`);
@@ -49,6 +63,14 @@ function requireString(value, field, max = 500) {
   return trimmed;
 }
 
+/**
+ * Valida un string opcional: si es null/undefined/vacío devuelve null; si viene con valor,
+ * exige que sea string y respete el largo máximo. Lanza error de validación (400) si no cumple.
+ * @param {*} value - valor a validar
+ * @param {string} field - nombre del campo (para el mensaje de error)
+ * @param {number} [max=500] - largo máximo permitido
+ * @returns {string|null} valor recortado (trim), o null
+ */
 function optionalString(value, field, max = 500) {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string') throw validationError(`El campo "${field}" debe ser texto.`);
@@ -59,6 +81,14 @@ function optionalString(value, field, max = 500) {
   return trimmed || null;
 }
 
+/**
+ * Valida un valor enum opcional: si es null/undefined/vacío devuelve null; si viene con valor,
+ * exige que pertenezca a la lista dada. Lanza error de validación (400) si no cumple.
+ * @param {*} value - valor a validar
+ * @param {string} field - nombre del campo (para el mensaje de error)
+ * @param {Array} list - lista de valores permitidos
+ * @returns {*} el valor si es válido, o null
+ */
 function optionalEnum(value, field, list) {
   if (value === null || value === undefined || value === '') return null;
   if (!isOneOf(value, list)) {
@@ -67,6 +97,11 @@ function optionalEnum(value, field, list) {
   return value;
 }
 
+/**
+ * Construye un Error de validación (400/VALIDATION_ERROR) con el mensaje dado.
+ * @param {string} message - mensaje descriptivo del error
+ * @returns {Error} error listo para lanzar
+ */
 function validationError(message) {
   const err = new Error(message);
   err.statusCode = 400;
@@ -74,6 +109,11 @@ function validationError(message) {
   return err;
 }
 
+/**
+ * Construye un Error de permisos insuficientes (403/FORBIDDEN).
+ * @param {string} [message] - mensaje descriptivo del error
+ * @returns {Error} error listo para lanzar
+ */
 function forbiddenError(message = 'No tiene permisos para realizar esta acción.') {
   const err = new Error(message);
   err.statusCode = 403;
@@ -81,6 +121,11 @@ function forbiddenError(message = 'No tiene permisos para realizar esta acción.
   return err;
 }
 
+/**
+ * Construye un Error de recurso no encontrado (404/NOT_FOUND).
+ * @param {string} [message] - mensaje descriptivo del error
+ * @returns {Error} error listo para lanzar
+ */
 function notFoundError(message = 'Recurso no encontrado.') {
   const err = new Error(message);
   err.statusCode = 404;
@@ -88,6 +133,11 @@ function notFoundError(message = 'Recurso no encontrado.') {
   return err;
 }
 
+/**
+ * Construye un Error de conflicto (409/CONFLICT), usado por ejemplo ante duplicados.
+ * @param {string} message - mensaje descriptivo del error
+ * @returns {Error} error listo para lanzar
+ */
 function conflictError(message) {
   const err = new Error(message);
   err.statusCode = 409;

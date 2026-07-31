@@ -4,6 +4,8 @@
 const { EntitySchema } = require('typeorm');
 const { CALENDAR_EVENT_TYPE_VALUES } = require('../enums');
 
+// Entidad ORM: tabla `calendar_events`. Eventos del calendario de un usuario: personales
+// o vinculados a un ticket (type), con rango start_at/end_at, color de UI y notas.
 module.exports = new EntitySchema({
   name: 'CalendarEvent',
   tableName: 'calendar_events',

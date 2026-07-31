@@ -12,6 +12,12 @@ import { renderAvatar } from '../utils/avatar.js';
 
 let mountedRoot = null;
 
+/**
+ * Crea un ícono SVG a partir de un path, usado en los distintos botones del topbar.
+ * @param {string} path - definición del atributo `d` del path SVG
+ * @param {string} [cls='w-5 h-5'] - clases CSS de tamaño para el SVG
+ * @returns {HTMLElement} elemento svg
+ */
 function icon(path, cls = 'w-5 h-5') {
   return h('svg', {
     class: cls,
@@ -21,6 +27,12 @@ function icon(path, cls = 'w-5 h-5') {
   });
 }
 
+/**
+ * Determina el título y subtítulo a mostrar en el topbar según la ruta actual
+ * y sus parámetros de query (ej. filtros aplicados en /tickets).
+ * @param {Object} user - usuario actual, usado para personalizar el saludo del dashboard
+ * @returns {{title: string, subtitle: string}} título y subtítulo del topbar
+ */
 function topbarContext(user) {
   const raw = (location.hash || '').replace(/^#/, '') || '/dashboard';
   const [pathname, qs] = raw.split('?');
@@ -44,6 +56,11 @@ function topbarContext(user) {
   return { title: 'GCM Tickets', subtitle: 'Sistema interno' };
 }
 
+/**
+ * Devuelve el subtítulo del dashboard según el rol del usuario.
+ * @param {Object} user - usuario actual (usa user.role)
+ * @returns {string} texto de subtítulo correspondiente al rol
+ */
 function subtitleByRole(user) {
   switch (user.role) {
     case 'supervisor_campo': return 'Tus tickets reportados y su estado';
@@ -54,6 +71,12 @@ function subtitleByRole(user) {
   }
 }
 
+/**
+ * Determina qué acciones rápidas (botones) mostrar en el topbar según la ruta
+ * actual y el rol del usuario (ej. "Nuevo ticket", "Refrescar", "Exportar").
+ * @param {Object} user - usuario actual (determina permisos de creación)
+ * @returns {Array<Object>} lista de acciones con label, icon, kind y onclick
+ */
 function quickActions(user) {
   const raw = (location.hash || '').replace(/^#/, '') || '/dashboard';
   const isTickets = raw.startsWith('/tickets') && raw !== '/tickets/new';
@@ -96,6 +119,11 @@ const BELL_TYPE_LABEL = {
   ticket_reopened:       'Reabierto',
   ticket_transferred:    'Para tu revisión',
 };
+/**
+ * Crea la etiqueta (pill) con ícono y color correspondientes al tipo de notificación.
+ * @param {string} type - tipo de notificación (ej. 'ticket_created', 'ticket_assigned')
+ * @returns {HTMLElement} elemento span con la etiqueta del tipo de notificación
+ */
 function bellPill(type) {
   const tone = BELL_TYPE_TONE[type] || 'bg-slate-100 text-slate-700';
   const cls = tone.replace(/\s+/g, '.');
@@ -105,10 +133,20 @@ function bellPill(type) {
     : '';
   return h(`span.badge.${cls}.inline-flex.items-center`, { html: `${iconHtml}${escapeHtml(BELL_TYPE_LABEL[type] || type)}` });
 }
+/**
+ * Crea el ícono de check usado en el botón de "marcar como leída" de una notificación.
+ * @returns {HTMLElement} elemento svg del ícono de check
+ */
 function bellCheckIcon() {
   return h('svg.text-slate-400.transition-colors', { class: 'w-3.5 h-3.5 group-hover:text-accent', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', viewBox: '0 0 24 24', 'aria-hidden': 'true', html: `<path stroke-linecap="round" stroke-linejoin="round" d="${ICON.check}" />` });
 }
 
+/**
+ * Renderiza el ícono de campana de notificaciones del topbar con su menú
+ * desplegable: carga y muestra las notificaciones no leídas, permite marcarlas
+ * como leídas (una o todas) y se suscribe a eventos de tiempo real mientras está abierto.
+ * @returns {HTMLElement} elemento div raíz con el trigger y el dropdown de notificaciones
+ */
 function renderBell() {
   const { unreadCount } = getState();
   const hasUnread = unreadCount > 0;
@@ -168,7 +206,16 @@ function renderBell() {
   let realtimeAc = null;
   let fetched = false;
 
+  /**
+   * Indica si el dropdown de notificaciones está actualmente abierto.
+   * @returns {boolean} true si el dropdown está visible
+   */
   function isOpen() { return open; }
+  /**
+   * Abre el dropdown de notificaciones, carga la lista y se suscribe a nuevas
+   * notificaciones en tiempo real mientras permanece abierto.
+   * @returns {void}
+   */
   function openDropdown() {
     open = true;
     dropdown.classList.remove('hidden');
@@ -178,14 +225,26 @@ function renderBell() {
       loadList();
     });
   }
+  /**
+   * Cierra el dropdown de notificaciones y cancela la suscripción a tiempo real.
+   * @returns {void}
+   */
   function closeDropdown() {
     open = false;
     dropdown.classList.add('hidden');
     trigger.setAttribute('aria-expanded', 'false');
     if (realtimeAc) { realtimeAc.abort(); realtimeAc = null; }
   }
+  /**
+   * Alterna la visibilidad del dropdown de notificaciones.
+   * @returns {void}
+   */
   function toggleDropdown() { open ? closeDropdown() : openDropdown(); }
 
+  /**
+   * Carga desde la API las notificaciones no leídas más recientes y las pinta en la lista.
+   * @returns {Promise<void>}
+   */
   async function loadList() {
     try {
       const { notifications } = await api.notifications.list({ unread: 'true', limit: 10 });
@@ -198,6 +257,11 @@ function renderBell() {
     }
   }
 
+  /**
+   * Pinta la lista de notificaciones dentro del dropdown, o el estado vacío si no hay ninguna.
+   * @param {Array<Object>} items - notificaciones a mostrar
+   * @returns {void}
+   */
   function drawList(items) {
     listEl.innerHTML = '';
     if (!items.length) {
@@ -241,10 +305,25 @@ function renderBell() {
     }
   }
 
+  /**
+   * Maneja el click sobre una notificación: la marca como leída y, si tiene
+   * ticket asociado, navega a su detalle.
+   * @param {Object} n - notificación clickeada
+   * @returns {Promise<void>}
+   */
   async function onItemClick(n) {
     await markOne(n, { silent: true, openTicket: !!n.ticket_id });
   }
 
+  /**
+   * Marca una notificación como leída en la API, actualizando el contador global
+   * de no leídas de forma optimista (y revirtiéndolo si la petición falla).
+   * @param {Object} n - notificación a marcar
+   * @param {Object} [opts] - opciones
+   * @param {boolean} [opts.silent] - si true, no muestra un toast de confirmación
+   * @param {boolean} [opts.openTicket] - si true, navega al ticket asociado tras marcarla
+   * @returns {Promise<void>}
+   */
   async function markOne(n, opts = {}) {
     const wasUnread = !n.read;
     if (wasUnread) {
@@ -269,6 +348,10 @@ function renderBell() {
     }
   }
 
+  /**
+   * Marca todas las notificaciones del usuario como leídas y limpia el contador global.
+   * @returns {Promise<void>}
+   */
   async function markAll() {
     try {
       await api.notifications.markRead({ all: true });
@@ -281,10 +364,20 @@ function renderBell() {
     }
   }
 
+  /**
+   * Cierra el dropdown de notificaciones si un click ocurre fuera de él.
+   * @param {MouseEvent} e - evento de click
+   * @returns {void}
+   */
   const onDocClick = (e) => {
     if (!open) return;
     if (!root.contains(e.target)) closeDropdown();
   };
+  /**
+   * Cierra el dropdown de notificaciones al presionar Escape.
+   * @param {KeyboardEvent} e - evento de teclado
+   * @returns {void}
+   */
   const onKey = (e) => {
     if (e.key === 'Escape' && open) closeDropdown();
   };
@@ -300,6 +393,14 @@ function renderBell() {
   return root;
 }
 
+/**
+ * Renderiza el menú de usuario del topbar: avatar, nombre, rol/área y un
+ * desplegable con accesos a inicio, perfil, notificaciones y cerrar sesión.
+ * @param {Object} params - parámetros de renderizado
+ * @param {Object} params.user - usuario actual (full_name, role, area)
+ * @param {Function} params.onLogout - callback invocado al elegir "Cerrar sesión"
+ * @returns {HTMLElement} elemento div raíz con el trigger y el menú de usuario
+ */
 function renderUserMenu({ user, onLogout }) {
   const root = h('div.relative', {});
   const roleLabel = ROLE_LABEL[user.role] || user.role;
@@ -340,12 +441,37 @@ function renderUserMenu({ user, onLogout }) {
     h('svg.w-4.h-4.text-slate-500.flex-none', { fill: 'none', stroke: 'currentColor', 'stroke-width': '2', viewBox: '0 0 24 24', html: '<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />' }),
   ]);
 
+  /**
+   * Indica si el menú de usuario está actualmente abierto.
+   * @returns {boolean} true si el menú está visible
+   */
   function isOpen() { return !menu.classList.contains('hidden'); }
+  /**
+   * Muestra el menú de usuario y actualiza el estado de accesibilidad del trigger.
+   * @returns {void}
+   */
   function openMenu() { menu.classList.remove('hidden'); trigger.setAttribute('aria-expanded', 'true'); }
+  /**
+   * Oculta el menú de usuario y actualiza el estado de accesibilidad del trigger.
+   * @returns {void}
+   */
   function closeMenu() { menu.classList.add('hidden'); trigger.setAttribute('aria-expanded', 'false'); }
+  /**
+   * Alterna la visibilidad del menú de usuario.
+   * @returns {void}
+   */
   function toggleMenu() { isOpen() ? closeMenu() : openMenu(); }
 
+  /**
+   * Cierra el menú de usuario si un click ocurre fuera de él (listener global en el documento).
+   * @returns {void}
+   */
   const onDocClick = () => { if (isOpen()) closeMenu(); };
+  /**
+   * Cierra el menú de usuario al presionar la tecla Escape (listener global en el documento).
+   * @param {KeyboardEvent} e - evento de teclado
+   * @returns {void}
+   */
   const onKey = (e) => { if (e.key === 'Escape' && isOpen()) closeMenu(); };
   document.addEventListener('click', onDocClick, { capture: true });
   document.addEventListener('keydown', onKey);
@@ -360,6 +486,12 @@ function renderUserMenu({ user, onLogout }) {
   return root;
 }
 
+/**
+ * Renderiza el grupo de botones de acciones rápidas del topbar (visible solo
+ * en escritorio) a partir de las acciones que correspondan a la ruta y rol actual.
+ * @param {Object} user - usuario actual
+ * @returns {HTMLElement|null} elemento div con los botones de acción, o null si no hay acciones
+ */
 function renderQuickActions(user) {
   const actions = quickActions(user);
   if (!actions.length) return null;
@@ -369,6 +501,12 @@ function renderQuickActions(user) {
   }));
 }
 
+/**
+ * Renderiza el botón que abre/cierra o colapsa/expande el sidebar, con el ícono
+ * y etiqueta correspondientes al estado actual (móvil abierto/cerrado, o
+ * escritorio colapsado/expandido).
+ * @returns {HTMLElement} elemento button del toggle de sidebar
+ */
 function renderSidebarToggle() {
   const collapsed = document.body.classList.contains('gcm-sidebar-collapsed');
   const isMobile  = window.matchMedia('(max-width: 767.95px)').matches;
@@ -396,6 +534,16 @@ function renderSidebarToggle() {
   ]);
 }
 
+/**
+ * Renderiza el topbar completo de la aplicación: título/subtítulo contextual,
+ * toggle de sidebar, acciones rápidas, selector de empresa, campana de
+ * notificaciones y menú de usuario. Se suscribe a cambios de estado global y
+ * al evento de sidebar para refrescar sus partes dinámicas.
+ * @param {Object} params - parámetros de renderizado
+ * @param {Object} params.user - usuario autenticado actual
+ * @param {Function} params.onLogout - callback invocado al cerrar sesión
+ * @returns {HTMLElement} elemento header con el topbar completo
+ */
 export function renderTopbar({ user, onLogout }) {
   const { title, subtitle } = topbarContext(user);
 
@@ -433,11 +581,21 @@ export function renderTopbar({ user, onLogout }) {
 
   mountedRoot = root;
 
+  /**
+   * Reemplaza el botón de toggle de sidebar montado por una versión actualizada,
+   * usado cuando cambia el estado del sidebar (colapsado/expandido, abierto/cerrado).
+   * @returns {void}
+   */
   const refreshToggle = () => {
     if (!mountedRoot) return;
     const oldToggle = mountedRoot.querySelector('button[aria-label*="barra lateral"], button[aria-label*="menú"]');
     if (oldToggle) oldToggle.replaceWith(renderSidebarToggle());
   };
+  /**
+   * Reemplaza la campana de notificaciones montada por una nueva instancia,
+   * limpiando primero los listeners de la anterior. Se ejecuta ante cambios de estado global.
+   * @returns {void}
+   */
   const refreshBell = () => {
     if (!mountedRoot || !bellWrapper.parentNode) return;
     if (typeof bellWrapper._bellDropdownCleanup === 'function') bellWrapper._bellDropdownCleanup();

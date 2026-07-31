@@ -17,6 +17,11 @@ import { renderAvatar, avatarColor, initials } from '../utils/avatar.js';
 
 const AUTO_EMAIL_DOMAIN = 'gcm.com';
 
+/**
+ * Convierte un nombre de usuario en la parte local de un correo (minúsculas, sin caracteres inválidos).
+ * @param {string} username - nombre de usuario
+ * @returns {string} parte local válida para el correo autogenerado
+ */
 function usernameToLocalPart(username) {
   return String(username || '')
     .trim()
@@ -47,10 +52,25 @@ const ROLE_DOT_COLOR = {
   supervisor_campo: 'bg-slate-400',
 };
 
+/**
+ * Normaliza el campo "active" de un usuario (que puede venir como 0/1, booleano o string) a un booleano real.
+ * @param {*} value - valor crudo del campo "active"
+ * @returns {boolean} true si el usuario está activo
+ */
 function isUserActive(value) {
   return value === 0 || value === false || value === '0' || value === 'false' ? false : true;
 }
 
+/**
+ * Arma una tarjeta de indicador (KPI) con icono, valor y etiqueta para el resumen superior del listado de usuarios.
+ * @param {Object} params - datos del KPI
+ * @param {string} params.label - etiqueta del indicador
+ * @param {*} params.value - valor a mostrar
+ * @param {string} [params.hint] - texto de ayuda debajo del valor
+ * @param {string} [params.icon] - icono a mostrar
+ * @param {string} [params.tone] - variante de color/estilo del KPI
+ * @returns {HTMLElement} tarjeta KPI
+ */
 function kpiCard({ label, value, hint = '', icon = null, tone = '' }) {
   const TONE = {
     '':     { border: 'border-l-4 border-l-surface-border-strong', icon: 'bg-surface-alt text-brand' },
@@ -69,6 +89,12 @@ function kpiCard({ label, value, hint = '', icon = null, tone = '' }) {
   ]);
 }
 
+/**
+ * Arma la vista de gestión de usuarios: KPIs, filtros, tabla/tarjetas paginadas, distribución por rol y exportación.
+ * @param {Object} params - parámetros de entrada de la ruta
+ * @param {Object} params.user - usuario autenticado actual
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderUsers({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
@@ -134,6 +160,10 @@ export async function renderUsers({ user }) {
   let allUsers = [];
   let currentPage = 1;
 
+  /**
+   * Inicializa el componente de lista de datos (tabla/tarjetas) una única vez, si todavía no fue montado.
+   * @returns {void}
+   */
   function ensureDataList() {
     if (dataList) return;
     dataList = mountDataList({
@@ -146,6 +176,10 @@ export async function renderUsers({ user }) {
     });
   }
 
+  /**
+   * Conecta los listeners de click y teclado a las filas de la tabla renderizada (abrir edición, alternar estado, ir a roles).
+   * @returns {void}
+   */
   function wireTableRows() {
     const rows = listWrap.querySelectorAll('tr[data-id]');
     rows.forEach((tr) => {
@@ -163,6 +197,11 @@ export async function renderUsers({ user }) {
     });
   }
 
+  /**
+   * Obtiene los datos completos de un usuario y abre el modal de edición.
+   * @param {number} id - id del usuario a editar
+   * @returns {Promise<void>}
+   */
   async function onEdit(id) {
     try {
       const res = await api.users.get(id);
@@ -172,6 +211,11 @@ export async function renderUsers({ user }) {
     }
   }
 
+  /**
+   * Pide confirmación y activa/desactiva un usuario según su estado actual.
+   * @param {number} id - id del usuario a activar/desactivar
+   * @returns {void}
+   */
   function onToggle(id) {
     const u = allUsers.find((x) => x.id === id);
     if (!u) return;
@@ -186,6 +230,11 @@ export async function renderUsers({ user }) {
     });
   }
 
+  /**
+   * Arma el HTML del interruptor de estado (activo/inactivo) de un usuario para la columna de la tabla.
+   * @param {Object} u - datos del usuario
+   * @returns {string} HTML del interruptor de estado
+   */
   function statusToggleHtml(u) {
     const active = isUserActive(u.active);
     return `
@@ -199,6 +248,11 @@ export async function renderUsers({ user }) {
     `;
   }
 
+  /**
+   * Arma el HTML de la celda de persona (avatar + nombre + correo/usuario) para la columna de usuario de la tabla.
+   * @param {Object} u - datos del usuario
+   * @returns {string} HTML de la celda
+   */
   function personCellHtml(u) {
     const avatarHtml = u.avatar_url
       ? `<img class="w-10 h-10 rounded-full object-cover flex-none" src="${escapeHtml(assetUrl(u.avatar_url))}" alt="">`
@@ -214,6 +268,11 @@ export async function renderUsers({ user }) {
     `;
   }
 
+  /**
+   * Arma el HTML de la celda de rol/área (badge de rol + etiqueta de área) para la columna de la tabla.
+   * @param {Object} u - datos del usuario
+   * @returns {string} HTML de la celda
+   */
   function roleCellHtml(u) {
     const tone = ROLE_BADGE_TONE[u.role] || 'bg-slate-100 text-slate-700';
     return `
@@ -224,6 +283,11 @@ export async function renderUsers({ user }) {
     `;
   }
 
+  /**
+   * Arma el HTML de una fila de la tabla de usuarios para la vista desktop.
+   * @param {Object} u - datos del usuario
+   * @returns {string} HTML de la fila `<tr>`
+   */
   function tableRow(u) {
     return `
       <tr class="cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-ocean/60 focus:ring-inset" data-id="${escapeHtml(String(u.id))}" tabindex="0" role="link" aria-label="Editar ${escapeHtml(u.full_name || u.username)}">
@@ -239,6 +303,11 @@ export async function renderUsers({ user }) {
     `;
   }
 
+  /**
+   * Arma la tarjeta de un usuario para la vista mobile del listado, con acciones de editar y activar/desactivar.
+   * @param {Object} u - datos del usuario
+   * @returns {HTMLElement} tarjeta del usuario
+   */
   function renderMobileCard(u) {
     const active = isUserActive(u.active);
     const tone = ROLE_BADGE_TONE[u.role] || 'bg-slate-100 text-slate-700';
@@ -273,6 +342,10 @@ export async function renderUsers({ user }) {
     ]);
   }
 
+  /**
+   * Filtra la lista completa de usuarios en memoria según los controles de búsqueda, rol, área y estado.
+   * @returns {Array<Object>} usuarios que cumplen con los filtros actuales
+   */
   function getFiltered() {
     const q = searchInput.value.trim().toLowerCase();
     const role = roleSel.value;
@@ -287,6 +360,10 @@ export async function renderUsers({ user }) {
     });
   }
 
+  /**
+   * Calcula y dibuja las tarjetas KPI (total, activos, inactivos, sin área) a partir de la lista completa de usuarios.
+   * @returns {void}
+   */
   function drawKpis() {
     const total = allUsers.length;
     const active = allUsers.filter((u) => isUserActive(u.active)).length;
@@ -299,6 +376,10 @@ export async function renderUsers({ user }) {
     kpis.appendChild(kpiCard({ label: 'Sin área', value: sinArea, hint: 'Requieren asignación', icon: ICON.tag, tone: 'warn' }));
   }
 
+  /**
+   * Dibuja los chips de distribución de usuarios por rol, con el conteo de cada uno.
+   * @returns {void}
+   */
   function drawRoleChips() {
     roleChipsWrap.innerHTML = '';
     ROLES.forEach((r) => {
@@ -314,6 +395,10 @@ export async function renderUsers({ user }) {
     });
   }
 
+  /**
+   * Aplica los filtros y la paginación en memoria, y actualiza la lista de datos y el paginador con la página actual.
+   * @returns {void}
+   */
   function draw() {
     ensureDataList();
     const filtered = getFiltered();
@@ -335,6 +420,10 @@ export async function renderUsers({ user }) {
     nextBtn.disabled = currentPage >= totalPages;
   }
 
+  /**
+   * Vuelve a cargar la lista completa de usuarios desde la API y redibuja KPIs, chips de rol y tabla/tarjetas.
+   * @returns {Promise<void>}
+   */
   async function reload() {
     ensureDataList();
     dataList.update({ loading: true, items: [] });
@@ -351,8 +440,19 @@ export async function renderUsers({ user }) {
     }
   }
 
+  /**
+   * Pide confirmación de contraseña y exporta el listado de usuarios filtrado a Excel o PDF.
+   * @param {string} format - formato de exportación ('pdf' o 'excel')
+   * @returns {Promise<void>}
+   */
   async function doExportUsers(format) {
     const formatLabel = format === 'pdf' ? 'PDF' : 'Excel';
+    /**
+     * Activa/desactiva el estado de carga del botón de exportación y actualiza su etiqueta.
+     * @param {boolean} busy - true para mostrar estado ocupado
+     * @param {string} [label] - texto a mostrar en el botón
+     * @returns {void}
+     */
     const setBusy = (busy, label = 'Exportar') => {
       exportBtn.disabled = busy;
       exportBtn.setLabel(label);
@@ -411,6 +511,11 @@ export async function renderUsers({ user }) {
 
   await reload();
 
+  /**
+   * Maneja los eventos de tiempo real de usuarios (creado/actualizado/desactivado) recargando el listado.
+   * @param {CustomEvent} e - evento 'gcm:realtime' recibido
+   * @returns {void}
+   */
   const onRealtime = (e) => {
     const t = e.detail?.event;
     if (t === 'user:created' || t === 'user:updated' || t === 'user:deactivated') {
@@ -433,6 +538,13 @@ const VALIDATION = {
   password: { min: 4, max: 200 },
 };
 
+/**
+ * Muestra u oculta el mensaje de error de un campo del formulario y actualiza sus atributos de accesibilidad.
+ * @param {HTMLElement} input - campo del formulario
+ * @param {HTMLElement} errorEl - elemento donde se muestra el mensaje de error
+ * @param {string|null} message - mensaje de error a mostrar, o null/vacío para limpiarlo
+ * @returns {void}
+ */
 function setFieldError(input, errorEl, message) {
   if (message) {
     errorEl.textContent = message;
@@ -446,10 +558,23 @@ function setFieldError(input, errorEl, message) {
   }
 }
 
+/**
+ * Limpia el mensaje de error de un campo del formulario.
+ * @param {HTMLElement} input - campo del formulario
+ * @param {HTMLElement} errorEl - elemento donde se muestra el mensaje de error
+ * @returns {void}
+ */
 function clearFieldError(input, errorEl) {
   setFieldError(input, errorEl, null);
 }
 
+/**
+ * Abre el modal de creación/edición de usuario, con validación de campos, correo autogenerado, selección de empresa y rol de administrador de plataforma.
+ * @param {Object|null} u - usuario a editar, o null para crear uno nuevo
+ * @param {Function} [onSaved] - callback ejecutado tras guardar exitosamente
+ * @param {Object} [currentUser] - usuario autenticado actual (determina si puede asignar administrador de plataforma)
+ * @returns {Promise<void>}
+ */
 async function openEditModal(u, onSaved, currentUser) {
   const isEdit = !!u;
 
@@ -501,6 +626,11 @@ async function openEditModal(u, onSaved, currentUser) {
   }
   if (u?.area)
     area.value = u.area;
+  /**
+   * Envuelve un input de contraseña con un botón para mostrar/ocultar el texto ingresado.
+   * @param {HTMLElement} input - input de contraseña a envolver
+   * @returns {HTMLElement} contenedor con el input y el botón de mostrar/ocultar
+   */
   function makePasswordInput(input) {
     const wrap = h('div.relative', {});
     const eyeBtn = h('button', {
@@ -624,6 +754,12 @@ async function openEditModal(u, onSaved, currentUser) {
     banner,
   ]);
 
+  /**
+   * Conecta un campo del formulario para que limpie su error apenas el usuario lo modifica.
+   * @param {HTMLElement} input - campo del formulario
+   * @param {HTMLElement} errorEl - elemento donde se muestra el mensaje de error
+   * @returns {void}
+   */
   const wireClear = (input, errorEl) => {
     const ev = input.tagName === 'SELECT' ? 'change' : 'input';
     input.addEventListener(ev, () => clearFieldError(input, errorEl));
@@ -641,6 +777,10 @@ async function openEditModal(u, onSaved, currentUser) {
     });
   }
 
+  /**
+   * Valida todos los campos del formulario de usuario y arma el payload a enviar a la API si todo es válido.
+   * @returns {{ok: boolean, firstInvalid?: HTMLElement, payload?: Object}} resultado de la validación
+   */
   function validate() {
     const fullnameVal = fullname.value.trim();
     const roleVal = role.value;
@@ -726,10 +866,19 @@ async function openEditModal(u, onSaved, currentUser) {
     return { ok: true, payload };
   }
 
+  /**
+   * Muestra el banner de error general del modal con el mensaje indicado.
+   * @param {string} message - mensaje de error a mostrar
+   * @returns {void}
+   */
   function showBanner(message) {
     banner.textContent = message;
     banner.classList.remove('hidden');
   }
+  /**
+   * Oculta el banner de error general del modal.
+   * @returns {void}
+   */
   function hideBanner() {
     banner.textContent = '';
     banner.classList.add('hidden');

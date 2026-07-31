@@ -9,6 +9,14 @@ const { getFirestore } = require('firebase-admin/firestore');
 let initialized = false;
 let initError = null;
 
+/**
+ * Inicializa el SDK Admin de Firebase una sola vez, probando en orden: la variable
+ * de entorno FIREBASE_SERVICE_ACCOUNT (JSON inline), FIREBASE_SERVICE_ACCOUNT_PATH
+ * (archivo de credenciales, incluyendo keys/service-account.json local), y por
+ * último las credenciales por defecto de la aplicación. Deja registrado el estado
+ * (initialized / initError) para consultarlo con isInitialized/getInitializationError.
+ * @returns {void}
+ */
 function init() {
   if (initialized) return;
   try {
@@ -72,6 +80,11 @@ function init() {
   }
 }
 
+/**
+ * Verifica que Firebase Admin haya sido inicializado correctamente; si no,
+ * lanza un error con código FIREBASE_ADMIN_INIT_FAILED describiendo la causa.
+ * @returns {void}
+ */
 function ensureInitialized() {
   if (!initialized) {
     const message = initError
@@ -83,22 +96,40 @@ function ensureInitialized() {
   }
 }
 
+/**
+ * Verifica un ID token de Firebase Auth enviado por el cliente y devuelve
+ * el token decodificado con los datos del usuario autenticado.
+ * @param {String} idToken - ID token emitido por Firebase Auth en el cliente
+ * @returns {Promise<Object>} token decodificado (DecodedIdToken)
+ */
 async function verifyIdToken(idToken) {
   init();
   ensureInitialized();
   return getAuth().verifyIdToken(idToken);
 }
 
+/**
+ * Inicializa Firebase Admin si hace falta y devuelve la instancia de Firestore lista para usar.
+ * @returns {Object} instancia de Firestore (firebase-admin/firestore)
+ */
 function getFirestoreInstance() {
   init();
   ensureInitialized();
   return getFirestore();
 }
 
+/**
+ * Indica si Firebase Admin ya fue inicializado exitosamente.
+ * @returns {Boolean} true si la inicialización se completó sin errores
+ */
 function isInitialized() {
   return initialized;
 }
 
+/**
+ * Devuelve el error capturado durante la última inicialización fallida, si lo hubo.
+ * @returns {Error|null} error de inicialización o null si no hubo error
+ */
 function getInitializationError() {
   return initError;
 }

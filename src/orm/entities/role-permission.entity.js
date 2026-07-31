@@ -5,6 +5,9 @@ const { EntitySchema } = require('typeorm');
 const { ROLE_VALUES } = require('../enums');
 const { bitBoolean } = require('../transformers');
 
+// Entidad ORM: tabla `role_permissions`. Permisos configurables por rol y empresa: para
+// cada (company_id, role, permission_key) guarda un value booleano habilitando/deshabilitando
+// ese permiso. Único por (company_id, role, permission_key).
 module.exports = new EntitySchema({
   name: 'RolePermission',
   tableName: 'role_permissions',

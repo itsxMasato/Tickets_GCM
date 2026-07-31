@@ -17,6 +17,13 @@ const COLORS = {
   warn:    'bg-amber-500 text-white',
 };
 
+/**
+ * Muestra una notificación toast flotante en el contenedor #toast-root, con auto-cierre por timeout.
+ * @param {string} message - texto a mostrar en la notificación
+ * @param {string} [type] - tipo visual: 'success', 'error', 'info' o 'warn'
+ * @param {number} [timeout] - milisegundos antes de auto-cerrar la notificación
+ * @returns {void}
+ */
 export function toast(message, type = 'info', timeout = 4000) {
   const root = TOAST_ROOT();
   if (!root) return;
@@ -42,6 +49,11 @@ export function toast(message, type = 'info', timeout = 4000) {
   setTimeout(() => remove(id), timeout);
 }
 
+/**
+ * Anima y elimina del DOM el toast identificado por id.
+ * @param {number} id - identificador interno del toast a remover
+ * @returns {void}
+ */
 function remove(id) {
   const root = TOAST_ROOT();
   if (!root) return;

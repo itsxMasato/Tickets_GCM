@@ -42,6 +42,14 @@ const ALLOWED_ORIGINS = Array.from(new Set([
   ...DEFAULT_ALLOWED_ORIGINS,
 ].filter(Boolean)));
 
+/**
+ * Construye y configura la aplicación Express completa: proxy/trust, CORS con
+ * lista blanca de orígenes, parseo de JSON y cookies, sesión con almacenamiento
+ * en SQLite, archivos estáticos (videos, avatars, public), health check, montaje
+ * de todas las rutas /api/*, fallback SPA para rutas del frontend y el manejador
+ * de errores final.
+ * @returns {Object} objeto con { app, sessionMiddleware } listos para usar en el servidor HTTP
+ */
 function createApp() {
   const app = express();
 

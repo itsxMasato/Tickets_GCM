@@ -2,6 +2,11 @@
 'use strict'
 const firebaseAdmin = require('./firebaseAdmin');
 
+/**
+ * Obtiene la instancia de Firestore a través de Firebase Admin, inicializándolo
+ * si es necesario. Lanza un error descriptivo si Firebase Admin no está listo.
+ * @returns {Object} instancia de Firestore
+ */
 function getFirestore() {
   firebaseAdmin.init();
   if (!firebaseAdmin.isInitialized()) {
@@ -14,10 +19,22 @@ function getFirestore() {
   return firebaseAdmin.getFirestoreInstance();
 }
 
+/**
+ * Genera la fecha/hora actual en formato compatible con columnas SQL (YYYY-MM-DD HH:mm:ss).
+ * @returns {String} fecha y hora actual formateada
+ */
 function nowSql() {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
 }
 
+/**
+ * Genera el siguiente ID numérico autoincremental para una colección, usando
+ * el documento metadata/counters dentro de una transacción de Firestore.
+ * Reintenta con backoff exponencial si la transacción es abortada por contención.
+ * @param {String} collectionName - nombre de la colección para la que se pide el siguiente id
+ * @param {Number} [attempt] - número de reintento actual (uso interno para el backoff)
+ * @returns {Promise<Number>} siguiente id disponible para la colección
+ */
 async function getNextId(collectionName, attempt = 0) {
   const db = getFirestore();
   const counterRef = db.collection('metadata').doc('counters');
@@ -40,6 +57,12 @@ async function getNextId(collectionName, attempt = 0) {
   }
 }
 
+/**
+ * Busca un documento por su id dentro de una colección de Firestore.
+ * @param {String} collectionName - nombre de la colección
+ * @param {String|Number} id - id del documento a buscar
+ * @returns {Promise<Object|null>} documento encontrado (con id) o null si no existe
+ */
 async function getById(collectionName, id) {
   const db = getFirestore();
   const docRef = db.collection(collectionName).doc(String(id));
@@ -48,6 +71,14 @@ async function getById(collectionName, id) {
   return { id: Number(String(id)) || String(id), ...snap.data() };
 }
 
+/**
+ * Crea un documento nuevo en una colección de Firestore. Si no se provee id,
+ * se genera uno autoincremental con getNextId.
+ * @param {String} collectionName - nombre de la colección donde crear el documento
+ * @param {Object} data - datos a guardar en el documento
+ * @param {String|Number} [id] - id explícito a usar; si se omite, se genera automáticamente
+ * @returns {Promise<Object>} documento creado (con id incluido)
+ */
 async function createDoc(collectionName, data, id = null) {
   const db = getFirestore();
   const docId = id ? String(id) : String(await getNextId(collectionName));
@@ -56,6 +87,13 @@ async function createDoc(collectionName, data, id = null) {
   return { id: Number(docId) || docId, ...data };
 }
 
+/**
+ * Aplica un patch parcial a un documento existente de Firestore y devuelve el documento actualizado.
+ * @param {String} collectionName - nombre de la colección
+ * @param {String|Number} id - id del documento a actualizar
+ * @param {Object} patch - campos a actualizar en el documento
+ * @returns {Promise<Object>} documento actualizado (con id)
+ */
 async function updateDoc(collectionName, id, patch) {
   const db = getFirestore();
   const docRef = db.collection(collectionName).doc(String(id));
@@ -64,6 +102,24 @@ async function updateDoc(collectionName, id, patch) {
   return { id: Number(String(id)) || String(id), ...snap.data() };
 }
 
+/**
+ * Elimina un documento de una colección de Firestore por su id.
+ * @param {String} collectionName - nombre de la colección
+ * @param {String|Number} id - id del documento a eliminar
+ * @returns {Promise<void>}
+ */
+async function deleteDoc(collectionName, id) {
+  const db = getFirestore();
+  await db.collection(collectionName).doc(String(id)).delete();
+}
+
+/**
+ * Busca el primer documento de una colección cuyo campo indicado coincida con el valor dado.
+ * @param {String} collectionName - nombre de la colección
+ * @param {String} field - nombre del campo a filtrar
+ * @param {*} value - valor que debe tener el campo
+ * @returns {Promise<Object|null>} primer documento que coincide, o null si no hay ninguno
+ */
 async function findOne(collectionName, field, value) {
   const db = getFirestore();
   const q = db.collection(collectionName).where(field, '==', value).limit(1);
@@ -74,6 +130,16 @@ async function findOne(collectionName, field, value) {
   return { id: Number(id) || id, ...doc.data() };
 }
 
+/**
+ * Busca varios documentos de una colección aplicando una lista de filtros where,
+ * con orden y límite opcionales.
+ * @param {String} collectionName - nombre de la colección
+ * @param {Array<Array>} [filters] - lista de tuplas [campo, operador, valor] para el where
+ * @param {String} [orderBy] - campo por el cual ordenar los resultados
+ * @param {String} [direction] - dirección del orden ('asc' o 'desc')
+ * @param {Number} [limit] - cantidad máxima de documentos a devolver
+ * @returns {Promise<Array<Object>>} documentos que cumplen los filtros
+ */
 async function findMany(collectionName, filters = [], orderBy = null, direction = 'asc', limit = null) {
   const db = getFirestore();
   let q = db.collection(collectionName);
@@ -86,6 +152,13 @@ async function findMany(collectionName, filters = [], orderBy = null, direction 
   return snap.docs.map((doc) => ({ id: Number(doc.id) || doc.id, ...doc.data() }));
 }
 
+/**
+ * Devuelve todos los documentos de una colección, con orden opcional.
+ * @param {String} collectionName - nombre de la colección
+ * @param {String} [orderBy] - campo por el cual ordenar los resultados
+ * @param {String} [direction] - dirección del orden ('asc' o 'desc')
+ * @returns {Promise<Array<Object>>} todos los documentos de la colección
+ */
 async function listAll(collectionName, orderBy = null, direction = 'asc') {
   const db = getFirestore();
   let q = db.collection(collectionName);
@@ -94,6 +167,13 @@ async function listAll(collectionName, orderBy = null, direction = 'asc') {
   return snap.docs.map((doc) => ({ id: Number(doc.id) || doc.id, ...doc.data() }));
 }
 
+/**
+ * Aplica el mismo patch a varios documentos de una colección en una sola operación batch de Firestore.
+ * @param {String} collectionName - nombre de la colección
+ * @param {Array<String|Number>} idList - ids de los documentos a actualizar
+ * @param {Object} patch - campos a actualizar en cada documento
+ * @returns {Promise<void>}
+ */
 async function batchUpdate(collectionName, idList, patch) {
   const db = getFirestore();
   const batch = db.batch();
@@ -111,6 +191,7 @@ module.exports = {
   getById,
   createDoc,
   updateDoc,
+  deleteDoc,
   findOne,
   findMany,
   listAll,

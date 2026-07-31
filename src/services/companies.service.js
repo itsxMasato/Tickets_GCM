@@ -14,6 +14,13 @@ const {
 const { slugify } = require('../utils/slugify');
 const auditService = require('./audit.service');
 
+/**
+ * Emite por socket.io un evento relacionado a una empresa, dirigido al rol SAC y a la sala de la empresa afectada. Silencia errores de socket.
+ * @param {String} event - nombre del evento a emitir
+ * @param {Object} company - empresa involucrada
+ * @param {String|Number} companyId - id de la empresa, usado para armar la sala del socket
+ * @returns {void}
+ */
 function emitCompany(event, company, companyId) {
   try {
     const { emit } = require('../sockets');
@@ -24,6 +31,11 @@ function emitCompany(event, company, companyId) {
   } catch (e) {}
 }
 
+/**
+ * Convierte un registro de empresa de Firestore al formato plano expuesto por la API.
+ * @param {Object} row - registro crudo de empresa
+ * @returns {Object|null} empresa serializada, o null si no se recibió registro
+ */
 function serialize(row) {
   if (!row) return null;
   return {
@@ -42,6 +54,12 @@ function serialize(row) {
   };
 }
 
+/**
+ * Genera un slug único para una empresa a partir de un valor base, agregando un sufijo numérico incremental si ya existe.
+ * @param {String} base - slug base propuesto
+ * @param {String|Number} [excludeId] - id de empresa a excluir de la verificación de unicidad (para updates)
+ * @returns {Promise<String>} slug único disponible
+ */
 async function ensureUniqueSlug(base, excludeId = null) {
   const seed = base && base.length > 0 ? base : `empresa-${Date.now()}`;
   for (let i = 0; i < 100; i += 1) {
@@ -54,6 +72,11 @@ async function ensureUniqueSlug(base, excludeId = null) {
 
 const CODE_PREFIX_RE = /^[A-Z0-9]{1,6}$/;
 
+/**
+ * Valida y normaliza el prefijo de nomenclatura de una empresa (solo letras/números, hasta 6 caracteres, en mayúsculas).
+ * @param {String} value - prefijo a validar
+ * @returns {String|null} prefijo normalizado en mayúsculas, o null si no se proporcionó
+ */
 function validateCodePrefix(value) {
   const trimmed = optionalString(value, 'code_prefix', 6);
   if (!trimmed) return null;
@@ -64,6 +87,12 @@ function validateCodePrefix(value) {
   return upper;
 }
 
+/**
+ * Verifica que un prefijo de nomenclatura no esté siendo usado por otra empresa, lanzando error de conflicto si ya existe.
+ * @param {String} prefix - prefijo a verificar
+ * @param {String|Number} [excludeId] - id de empresa a excluir de la verificación (para updates)
+ * @returns {Promise<void>}
+ */
 async function ensureUniqueCodePrefix(prefix, excludeId = null) {
   if (!prefix) return;
   const existing = await firestoreData.findOneByFields('companies', [['code_prefix', '==', prefix]]);
@@ -72,6 +101,13 @@ async function ensureUniqueCodePrefix(prefix, excludeId = null) {
   }
 }
 
+/**
+ * Asegura que el usuario encargado de una empresa tenga una membresía activa con rol admin_area en esa empresa, creándola o actualizándola según corresponda. Absorbe errores para no interrumpir el flujo que la invoca.
+ * @param {String|Number} userId - id del usuario encargado
+ * @param {String|Number} companyId - id de la empresa
+ * @param {Object} requester - usuario que realiza la operación
+ * @returns {Promise<void>}
+ */
 async function ensureAdminAreaMembership(userId, companyId, requester) {
   if (!userId || !companyId) return;
   try {
@@ -88,17 +124,37 @@ async function ensureAdminAreaMembership(userId, companyId, requester) {
   }
 }
 
+/**
+ * Lista las empresas visibles para el solicitante, opcionalmente filtrando solo las activas.
+ * @param {Object} [options] - opciones de listado
+ * @param {Boolean} [options.activeOnly=true] - si true, excluye empresas inactivas
+ * @param {Object} [options.requester] - usuario que realiza la consulta, usado para acotar el alcance
+ * @returns {Promise<Array>} empresas serializadas
+ */
 async function list({ activeOnly = true, requester } = {}) {
   const rows = await firestoreData.listCompanies({ activeOnly, requester });
   if (!Array.isArray(rows)) return [];
   return rows.map(serialize);
 }
 
+/**
+ * Obtiene una empresa por id, verificando el alcance del solicitante.
+ * @param {String|Number} id - id de la empresa
+ * @param {Object} [options] - opciones de consulta
+ * @param {Object} [options.requester] - usuario que realiza la consulta
+ * @returns {Promise<Object|null>} empresa serializada
+ */
 async function getById(id, { requester } = {}) {
   const row = await firestoreData.getCompanyById(Number(id), { requester });
   return serialize(row);
 }
 
+/**
+ * Crea una nueva empresa (solo administradores de plataforma), validando nombre, slug único y prefijo de nomenclatura único, gestionando el flag de empresa por defecto y la membresía admin_area del encargado. Registra auditoría y notifica en tiempo real.
+ * @param {Object} input - datos de la empresa a crear
+ * @param {Object} requester - usuario que realiza la creación, debe ser administrador de plataforma
+ * @returns {Promise<Object>} empresa creada serializada
+ */
 async function create(input, requester) {
   if (!requester || !requester.isPlatformAdmin) {
     throw forbiddenError('Requiere permisos de administrador de plataforma.');
@@ -144,6 +200,13 @@ async function create(input, requester) {
   return created;
 }
 
+/**
+ * Actualiza los datos de una empresa existente (solo administradores de plataforma), validando slug y prefijo únicos, gestionando el flag de empresa por defecto y la membresía admin_area del encargado. Registra auditoría y notifica en tiempo real.
+ * @param {String|Number} id - id de la empresa a actualizar
+ * @param {Object} input - campos a actualizar
+ * @param {Object} requester - usuario que realiza la actualización, debe ser administrador de plataforma
+ * @returns {Promise<Object>} empresa actualizada serializada
+ */
 async function update(id, input, requester) {
   if (!requester || !requester.isPlatformAdmin) {
     throw forbiddenError('Requiere permisos de administrador de plataforma.');
@@ -210,6 +273,12 @@ async function update(id, input, requester) {
   return result;
 }
 
+/**
+ * Desactiva una empresa (soft delete), impidiendo desactivar la última empresa activa del sistema. Registra auditoría y notifica en tiempo real.
+ * @param {String|Number} id - id de la empresa a desactivar
+ * @param {Object} requester - usuario que realiza la operación, debe ser administrador de plataforma
+ * @returns {Promise<Object>} empresa resultante tras la baja
+ */
 async function softDelete(id, requester) {
   if (!requester || !requester.isPlatformAdmin) {
     throw forbiddenError('Requiere permisos de administrador de plataforma.');

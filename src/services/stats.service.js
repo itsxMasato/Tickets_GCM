@@ -4,6 +4,11 @@ const firestoreData = require('../firestoreData');
 
 const TICKET_TOTALS_FIELDS = ['status', 'priority', 'closed_at'];
 
+/**
+ * Completa los totales de tickets faltantes (por estado, urgencia, cerrados hoy) consultando la colección de tickets cuando el objeto base no los trae ya calculados.
+ * @param {Object} baseTotals - totales ya calculados, posiblemente incompletos
+ * @returns {Promise<Object>} totales completos
+ */
 async function enrichTotals(baseTotals) {
   if (baseTotals.recibido != null
   && baseTotals.asignado != null
@@ -52,6 +57,11 @@ const EMPTY_DASHBOARD = {
   top_categories: [],
 };
 
+/**
+ * Arma el dashboard general de estadísticas (totales, promedios, distribución por estado/prioridad/área/asignado, histórico e incidencias por categoría), acotado a la empresa activa del solicitante salvo que sea admin de plataforma.
+ * @param {Object} [requester] - usuario que solicita el dashboard, usado para determinar el alcance por empresa
+ * @returns {Promise<Object>} datos completos del dashboard
+ */
 async function dashboard(requester = null) {
   if (requester && !requester.isPlatformAdmin && requester.activeCompanyId == null) {
     return EMPTY_DASHBOARD;
@@ -96,6 +106,12 @@ async function dashboard(requester = null) {
   };
 }
 
+/**
+ * Obtiene las estadísticas de tickets correspondientes a un usuario/rol específico, completando los totales de solucionados, reabiertos y por cerrar.
+ * @param {String|Number} userId - id del usuario (puede ser null según el rol, ej. jefe_inmediato por área)
+ * @param {Object} user - contexto del usuario/rol para el cual se calculan las estadísticas
+ * @returns {Promise<Object>} estadísticas del usuario/rol
+ */
 async function forUser(userId, user) {
   const base = await firestoreData.getStatsForUser(userId, user);
   if (!base || !base.totals)
@@ -113,10 +129,22 @@ async function forUser(userId, user) {
   return { ...base, totals };
 }
 
+/**
+ * Obtiene las estadísticas de tickets de un supervisor de campo específico.
+ * @param {String|Number} userId - id del supervisor de campo
+ * @param {Object} [requester] - usuario que solicita las estadísticas, usado para el alcance por empresa
+ * @returns {Promise<Object>} estadísticas del supervisor
+ */
 async function forSupervisor(userId, requester = null) {
   return forUser(userId, { id: userId, role: 'supervisor_campo', activeCompanyId: requester?.activeCompanyId ?? null, isPlatformAdmin: requester?.isPlatformAdmin ?? false });
 }
 
+/**
+ * Obtiene las estadísticas de tickets de un jefe inmediato, acotadas al área que supervisa.
+ * @param {String} area - área supervisada por el jefe inmediato
+ * @param {Object} [requester] - usuario que solicita las estadísticas, usado para el alcance por empresa
+ * @returns {Promise<Object>} estadísticas del área
+ */
 async function forJefe(area, requester = null) {
   return forUser(null, { role: 'jefe_inmediato', area, activeCompanyId: requester?.activeCompanyId ?? null, isPlatformAdmin: requester?.isPlatformAdmin ?? false });
 }

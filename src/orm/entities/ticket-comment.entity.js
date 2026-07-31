@@ -3,6 +3,8 @@
 
 const { EntitySchema } = require('typeorm');
 
+// Entidad ORM: tabla `ticket_comments`. Comentarios/mensajes dentro de un ticket (flujo
+// chat-like), con referencia opcional a un adjunto (attachment_id) asociado al comentario.
 module.exports = new EntitySchema({
   name: 'TicketComment',
   tableName: 'ticket_comments',

@@ -9,26 +9,52 @@ const { getFirestore } = firestore;
 const firestoreData = require('../firestoreData');
 const config = require('../config');
 
+/**
+ * Obtiene la instancia de Firestore inicializada.
+ * @returns {Promise<Firestore>} instancia de Firestore lista para usar
+ */
 async function ensureFirestore() {
   return getFirestore();
 }
 
+/**
+ * Abre la base SQLite legacy en modo solo lectura. Lanza error si el archivo no existe.
+ * @returns {Database} conexión SQLite (better-sqlite3) en modo readonly
+ */
 function openSqlite() {
   const dbPath = config.dbPath || path.resolve(process.cwd(), 'data', 'tickets.db');
   if (!fs.existsSync(dbPath)) throw new Error(`SQLite DB not found: ${dbPath}`);
   return new Database(dbPath, { readonly: true });
 }
 
+/**
+ * Lee todas las filas de una tabla SQLite.
+ * @param {Database} db - conexión SQLite
+ * @param {string} table - nombre de la tabla
+ * @returns {Array} filas de la tabla (array vacío si no hay resultados)
+ */
 function readAll(db, table) {
   const rows = db.prepare(`SELECT * FROM ${table}`).all();
   return rows || [];
 }
 
+/**
+ * Lista los nombres de todas las tablas presentes en la base SQLite.
+ * @param {Database} db - conexión SQLite
+ * @returns {string[]} nombres de tablas
+ */
 function listSqliteTables(db) {
   const rows = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
   return rows.map((r) => r.name);
 }
 
+/**
+ * Migra la tabla `companies` de SQLite a la colección `companies` de Firestore,
+ * omitiendo las empresas cuyo id ya existe en destino (migración idempotente).
+ * @param {Database} db - conexión SQLite origen
+ * @param {Firestore} firestoreDb - instancia de Firestore destino
+ * @returns {Promise<void>}
+ */
 async function migrateCompanies(db, firestoreDb) {
   const rows = readAll(db, 'companies');
   console.log(`Found ${rows.length} companies in SQLite`);
@@ -52,6 +78,13 @@ async function migrateCompanies(db, firestoreDb) {
   }
 }
 
+/**
+ * Migra la tabla `user_company_memberships` de SQLite a la colección homónima de Firestore,
+ * omitiendo las membresías cuyo id ya existe en destino (migración idempotente).
+ * @param {Database} db - conexión SQLite origen
+ * @param {Firestore} firestoreDb - instancia de Firestore destino
+ * @returns {Promise<void>}
+ */
 async function migrateMemberships(db, firestoreDb) {
   const rows = readAll(db, 'user_company_memberships');
   console.log(`Found ${rows.length} memberships in SQLite`);
@@ -74,6 +107,12 @@ async function migrateMemberships(db, firestoreDb) {
   }
 }
 
+/**
+ * Punto de entrada del script: abre la base SQLite legacy, detecta qué tablas existen
+ * y migra a Firestore las que estén presentes (companies, user_company_memberships),
+ * cerrando siempre la conexión SQLite al finalizar (éxito o error).
+ * @returns {Promise<void>}
+ */
 async function run() {
   console.log('Starting migration SQLite -> Firestore');
   const db = openSqlite();

@@ -11,6 +11,11 @@ import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
 import { subscribeToRealtimeEvents } from '../utils/realtime.js';
 import { renderAvatar } from '../utils/avatar.js';
 
+/**
+ * Determina el rol funcional del dashboard a partir de las banderas de permisos del usuario.
+ * @param {Object} user - usuario autenticado
+ * @returns {string} uno de: 'sac', 'jefe_inmediato', 'admin_area', 'supervisor_campo'
+ */
 const ROL_FROM_USER = (user) =>
   isSAC(user)          ? 'sac'
   : isJefe(user)       ? 'jefe_inmediato'
@@ -18,6 +23,12 @@ const ROL_FROM_USER = (user) =>
   : isSupervisor(user) ? 'supervisor_campo'
   : 'supervisor_campo';
 
+/**
+ * Arma la lista de tarjetas KPI a mostrar según el rol del usuario.
+ * @param {string} rol - rol funcional del dashboard
+ * @param {Object} totals - totales agregados de tickets
+ * @returns {Array<Object>} configuración de cada KPI (label, value, hint, tone, icon, badge)
+ */
 function buildKpis(rol, totals) {
   const t = totals || {};
   switch (rol) {
@@ -53,6 +64,12 @@ function buildKpis(rol, totals) {
   }
 }
 
+/**
+ * Arma los datos del bloque hero (mensaje destacado y CTA principal) según el rol y los totales actuales.
+ * @param {string} rol - rol funcional del dashboard
+ * @param {Object} totals - totales agregados de tickets
+ * @returns {Object} datos del hero (count, icon, eyebrow, headline, sub, ctaLabel, ctaHref)
+ */
 function buildHero(rol, totals) {
   const t = totals || {};
   switch (rol) {
@@ -120,6 +137,11 @@ function buildHero(rol, totals) {
   }
 }
 
+/**
+ * Arma la lista de accesos rápidos (tarjetas de navegación) para el rol dado.
+ * @param {string} rol - rol funcional del dashboard
+ * @returns {Array<Object>} configuración de cada acceso rápido (icon, title, sub, href, tone)
+ */
 function buildQuickActions(rol) {
   switch (rol) {
     case 'sac':
@@ -150,6 +172,12 @@ function buildQuickActions(rol) {
   }
 }
 
+/**
+ * Renderiza la franja superior de bienvenida con nombre, rol, área y última actualización.
+ * @param {Object} user - usuario autenticado
+ * @param {string} lastUpdateIso - fecha ISO de la última actualización de datos
+ * @returns {HTMLElement} nodo de la franja de bienvenida
+ */
 function welcomeStrip(user, lastUpdateIso) {
   const firstName = (user.full_name || '').split(' ')[0] || 'equipo';
   const role = ROL_FROM_USER(user);
@@ -174,6 +202,12 @@ function welcomeStrip(user, lastUpdateIso) {
   ]);
 }
 
+/**
+ * Renderiza el bloque hero del dashboard: variante "en calma" cuando no hay pendientes, o variante destacada con CTA.
+ * @param {string} rol - rol funcional del dashboard
+ * @param {Object} totals - totales agregados de tickets
+ * @returns {HTMLElement} nodo del hero
+ */
 function heroAction(rol, totals) {
   const h_ = buildHero(rol, totals);
   const noCount = h_.count === -1;
@@ -218,6 +252,16 @@ const KPI_TONE = {
   '':     { border: 'border-l-surface-border-strong', iconTone: '',  badge: '',                                   value: '' },
 };
 
+/**
+ * Renderiza una tarjeta KPI individual con valor, etiqueta, ícono y badge opcional.
+ * @param {string} label - etiqueta del KPI
+ * @param {number|string} value - valor a mostrar
+ * @param {string} [hint] - texto de ayuda bajo el valor
+ * @param {string} [tone] - clave de tono visual (accent, ocean, good, '')
+ * @param {string} [icon] - ícono a mostrar
+ * @param {string} [badge] - texto de badge opcional
+ * @returns {HTMLElement} nodo de la tarjeta KPI
+ */
 function kpi(label, value, hint = '', tone = '', icon = null, badge = '') {
   const t = KPI_TONE[tone] || KPI_TONE[''];
   const top = (icon || badge)
@@ -236,6 +280,10 @@ function kpi(label, value, hint = '', tone = '', icon = null, badge = '') {
   ]);
 }
 
+/**
+ * Renderiza el placeholder de carga (skeleton) de una tarjeta KPI mientras llegan los datos.
+ * @returns {HTMLElement} nodo skeleton de KPI
+ */
 function kpiSkeleton() {
   return h('div.card.flex.flex-col.gap-3.border-l-4.border-l-surface-border', { 'aria-hidden': 'true' }, [
     h('div.flex.items-start.justify-between', {}, [
@@ -246,6 +294,11 @@ function kpiSkeleton() {
   ]);
 }
 
+/**
+ * Renderiza el gráfico de tendencia de tickets creados en los últimos 30 días, con línea, área, promedio y tooltip interactivo.
+ * @param {Array<Object>} data - serie diaria de tickets ({ day, c })
+ * @returns {HTMLElement} nodo del gráfico (o estado vacío si no hay datos)
+ */
 function ticketsTrendChart(data) {
   if (!data || data.length === 0) {
     return emptyState({
@@ -299,6 +352,11 @@ function ticketsTrendChart(data) {
   const tooltipValue = h('div.dash-trend-tooltip-value', {}, '');
   const tooltip = h('div.dash-trend-tooltip', {}, [tooltipDate, tooltipValue]);
 
+  /**
+   * Activa el estado hover/foco del gráfico en el índice dado: mueve crosshair, punto y tooltip.
+   * @param {number} i - índice del punto de datos a activar
+   * @returns {void}
+   */
   function setActive(i) {
     const [x, y] = points[i];
     crosshair.setAttribute('x1', x.toFixed(2));
@@ -312,18 +370,36 @@ function ticketsTrendChart(data) {
     tooltip.style.left = `${n === 1 ? 50 : (i / (n - 1)) * 100}%`;
     tooltip.classList.add('is-active');
   }
+  /**
+   * Limpia el estado hover/foco del gráfico (crosshair, punto y tooltip).
+   * @returns {void}
+   */
   function clearActive() {
     crosshair.classList.remove('is-active');
     hoverDot.classList.remove('is-active');
     tooltip.classList.remove('is-active');
   }
+  /**
+   * Convierte una coordenada X del puntero (viewport) en el índice de dato más cercano del gráfico.
+   * @param {number} clientX - coordenada X del evento de puntero
+   * @returns {number} índice del punto de datos correspondiente
+   */
   function indexFromClientX(clientX) {
     const rect = svg.getBoundingClientRect();
     const relX = ((clientX - rect.left) / rect.width) * VIEW_W;
     const raw = ((relX - padX) / plotW) * (n - 1);
     return Math.min(n - 1, Math.max(0, Math.round(raw)));
   }
+  /**
+   * Handler de pointermove sobre el gráfico: activa el punto correspondiente a la posición del puntero.
+   * @param {PointerEvent} e - evento de puntero
+   * @returns {void}
+   */
   const onMove = (e) => setActive(indexFromClientX(e.clientX));
+  /**
+   * Handler de pointerleave sobre el gráfico: limpia el estado activo.
+   * @returns {void}
+   */
   const onLeave = () => clearActive();
   svg.addEventListener('pointermove', onMove);
   svg.addEventListener('pointerleave', onLeave);
@@ -352,6 +428,13 @@ function ticketsTrendChart(data) {
   return wrap;
 }
 
+/**
+ * Renderiza una barra de progreso horizontal proporcional a value/max.
+ * @param {number} value - valor actual
+ * @param {number} max - valor máximo de referencia
+ * @param {string} [color] - clase Tailwind de color de relleno
+ * @returns {HTMLElement} nodo de la barra de progreso
+ */
 function progressBar(value, max, color = 'bg-brand-ocean') {
   const pct = max ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return h('div.w-full.h-2.bg-slate-100.rounded.overflow-hidden', {}, [
@@ -365,6 +448,11 @@ const PRIORITY_BAR_COLOR = {
   media: 'bg-brand-ocean',
   baja: 'bg-slate-300',
 };
+/**
+ * Renderiza el desglose de tickets por prioridad con barras de progreso proporcionales.
+ * @param {Array<Object>} byPriority - lista de { priority, c } con conteo por prioridad
+ * @returns {HTMLElement} nodo con la lista de prioridades (o mensaje vacío si no hay datos)
+ */
 function priorityList(byPriority) {
   if (!byPriority || byPriority.length === 0) {
     return h('p.text-xs.text-slate-500', {}, 'Sin tickets para mostrar.');
@@ -383,6 +471,11 @@ function priorityList(byPriority) {
   }));
 }
 
+/**
+ * Formatea una duración en horas a un texto legible (minutos, horas o días).
+ * @param {number} hours - duración en horas
+ * @returns {string} duración formateada (p. ej. "45 min", "3.2 h", "1.5 d") o "—" si no hay dato
+ */
 function formatDuration(hours) {
   if (hours == null || Number.isNaN(hours)) return '—';
   if (hours <= 0) return '0 min';
@@ -391,6 +484,11 @@ function formatDuration(hours) {
   return `${(hours / 24).toFixed(1)} d`;
 }
 
+/**
+ * Renderiza el desglose de tickets por área operativa con barras de progreso proporcionales.
+ * @param {Array<Object>} byArea - lista de { area, c } con conteo por área
+ * @returns {HTMLElement} nodo con la lista de áreas (o mensaje vacío si no hay datos)
+ */
 function areaBreakdown(byArea) {
   if (!byArea || byArea.length === 0) {
     return h('p.text-xs.text-slate-500', {}, 'Sin datos para mostrar.');
@@ -408,6 +506,12 @@ function areaBreakdown(byArea) {
   ])));
 }
 
+/**
+ * Renderiza una lista compacta genérica de ítems (nombre, meta opcional, contador, índice o avatar opcional).
+ * @param {Array<Object>} items - ítems a listar
+ * @param {Object} [opts] - opciones de renderizado (getName, getMeta, showIndex, showAvatar, max)
+ * @returns {HTMLElement} nodo de la lista (o mensaje vacío si no hay datos)
+ */
 function denseList(items, opts = {}) {
   const { getName, getMeta, showIndex = true, showAvatar = false, max = 8 } = opts;
   if (!items || items.length === 0) {
@@ -437,6 +541,11 @@ const CATEGORY_TONES = [
   { bg: 'bg-violet-100', text: 'text-violet-700' },
   { bg: 'bg-slate-100', text: 'text-slate-600' },
 ];
+/**
+ * Renderiza el top de categorías con conteo de tickets, alternando tonos de color por fila.
+ * @param {Array<Object>} categories - lista de { name, c } con conteo por categoría
+ * @returns {HTMLElement} nodo con la lista de categorías (o mensaje vacío si no hay datos)
+ */
 function categoryChipList(categories) {
   if (!categories || categories.length === 0) {
     return h('p.text-xs.text-slate-500', {}, 'Sin categorías para mostrar.');
@@ -453,6 +562,11 @@ function categoryChipList(categories) {
   }));
 }
 
+/**
+ * Renderiza el ranking de encargados por carga de tickets asignados, con avatar y puesto.
+ * @param {Array<Object>} agents - lista de agentes con { full_name, area, c, id }
+ * @returns {HTMLElement} nodo con el ranking (o mensaje vacío si no hay datos)
+ */
 function rankingList(agents) {
   if (!agents || agents.length === 0) {
     return h('p.text-xs.text-slate-500', {}, 'Sin datos para mostrar.');
@@ -477,6 +591,12 @@ function rankingList(agents) {
   }));
 }
 
+/**
+ * Renderiza una tarjeta con una cola de tickets (título, subtítulo, enlace "ver todos") o su estado vacío.
+ * @param {Array<Object>} tickets - tickets a mostrar en la cola
+ * @param {Object} opts - configuración de la sección (title, sub, linkToAll, linkLabel, emptyTitle, emptyMessage, emptyAction)
+ * @returns {HTMLElement} nodo de la tarjeta de cola
+ */
 function queueList(
   tickets,
   { title, sub, linkToAll, linkLabel = 'Ver todos', emptyTitle, emptyMessage, emptyAction }
@@ -514,6 +634,11 @@ function queueList(
   ]);
 }
 
+/**
+ * Renderiza la grilla de accesos rápidos (tarjetas de navegación) para el rol dado.
+ * @param {string} rol - rol funcional del dashboard
+ * @returns {HTMLElement} nodo con la grilla de accesos rápidos
+ */
 function quickActions(rol) {
   const items = buildQuickActions(rol);
   return h('div.grid.grid-cols-1.gap-3', { class: 'sm:grid-cols-3' }, items.map((it) =>
@@ -531,6 +656,13 @@ function quickActions(rol) {
   ));
 }
 
+/**
+ * Punto de entrada de la vista Dashboard: arma bienvenida, hero, KPIs y el panel específico del rol,
+ * mostrando skeletons mientras carga y suscribiéndose a eventos en tiempo real para refrescar los datos.
+ * @param {Object} params - parámetros de la vista
+ * @param {Object} params.user - usuario autenticado
+ * @returns {Promise<Object>} objeto con `view` (nodo raíz HTMLElement) y `cleanup` (función para cancelar la suscripción realtime)
+ */
 export async function renderDashboard({ user }) {
   const rol = ROL_FROM_USER(user);
   const root = h('div.flex.flex-col.gap-5', {});
@@ -623,6 +755,13 @@ export async function renderDashboard({ user }) {
   return { view: root, cleanup: () => ac.abort() };
 }
 
+/**
+ * Reemplaza el bloque hero del dashboard con datos actualizados, preservando el foco si estaba dentro.
+ * @param {HTMLElement} rootEl - nodo raíz del dashboard
+ * @param {string} r - rol funcional del dashboard
+ * @param {Object} totals - totales agregados de tickets actualizados
+ * @returns {Object} copia de los totales aplicados
+ */
 function applyHero(rootEl, r, totals) {
   const old = rootEl.children[1];
   if (!old) return {};
@@ -636,6 +775,14 @@ function applyHero(rootEl, r, totals) {
   return (totals && typeof totals === 'object') ? { ...totals } : {};
 }
 
+/**
+ * Reemplaza la fila de KPIs con datos actualizados y aplica una animación de pulso a los valores que cambiaron.
+ * @param {HTMLElement} rootEl - nodo raíz del dashboard
+ * @param {string} r - rol funcional del dashboard
+ * @param {Object} totals - totales agregados de tickets actualizados
+ * @param {Object} [oldTotals] - totales previos, usados para detectar cambios y animarlos
+ * @returns {void}
+ */
 function applyKpis(rootEl, r, totals, oldTotals) {
   const row = rootEl.children[2];
   if (!row) return;
@@ -657,6 +804,11 @@ function applyKpis(rootEl, r, totals, oldTotals) {
   }
 }
 
+/**
+ * Arma el panel específico del rol SAC: tendencia de 30 días, prioridades, top categorías, ranking y áreas.
+ * @param {Object} data - datos de estadísticas del dashboard
+ * @returns {Promise<HTMLElement>} nodo con las secciones del panel SAC
+ */
 async function sacDashboard(data) {
   const root = h('div.flex.flex-col.gap-5', {});
   const t = data.totals || {};
@@ -718,6 +870,11 @@ async function sacDashboard(data) {
   return root;
 }
 
+/**
+ * Arma el panel específico del rol jefe inmediato: carga por administrador y distribución por estado del área.
+ * @param {Object} data - datos de estadísticas del dashboard
+ * @returns {Promise<HTMLElement>} nodo con las secciones del panel de jefe inmediato
+ */
 async function jefeDashboard(data) {
   const root = h('div.flex.flex-col.gap-5', {});
   const t = data.totals || {};
@@ -759,6 +916,11 @@ async function jefeDashboard(data) {
   return root;
 }
 
+/**
+ * Arma el panel específico del rol admin de área: cola de trabajo asignada y desglose por prioridad.
+ * @param {Object} data - datos de estadísticas del dashboard
+ * @returns {Promise<HTMLElement>} nodo con las secciones del panel de admin de área
+ */
 async function adminDashboard(data) {
   const root = h('div.flex.flex-col.gap-5', {});
 
@@ -790,6 +952,11 @@ async function adminDashboard(data) {
   return root;
 }
 
+/**
+ * Arma el panel específico del rol supervisor de campo: últimos tickets creados por el usuario.
+ * @param {Object} data - datos de estadísticas del dashboard
+ * @returns {Promise<HTMLElement>} nodo con las secciones del panel de supervisor de campo
+ */
 async function supervisorDashboard(data) {
   const root = h('div.flex.flex-col.gap-5', {});
 
@@ -813,6 +980,11 @@ async function supervisorDashboard(data) {
   return root;
 }
 
+/**
+ * Renderiza el desglose de tickets por estado (recibido, asignado, en proceso, etc.) con barras de progreso.
+ * @param {Object} t - totales agregados de tickets por estado
+ * @returns {HTMLElement} nodo con la lista de estados
+ */
 function statusBreakdown(t) {
   const states = [
     { key: 'recibido',    label: 'Recibidos' },

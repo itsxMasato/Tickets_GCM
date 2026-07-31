@@ -29,14 +29,29 @@ const COLOR_OPTIONS = [
 ];
 const EVENT_COLORS = Object.fromEntries(COLOR_OPTIONS.map((option) => [option.key, option.className]));
 
+/**
+ * Devuelve la clave de color de calendario asociada a la prioridad de un ticket.
+ * @param {string} priority - prioridad del ticket
+ * @returns {string} clave de color (ocean/brand/deep/accent)
+ */
 function getTicketColorByPriority(priority) {
   return PRIORITY_COLOR_MAP[priority] || 'ocean';
 }
 
+/**
+ * Devuelve la etiqueta y el color hexadecimal asociados a una prioridad, con valores por defecto si no se reconoce.
+ * @param {string} priority - prioridad del ticket/evento
+ * @returns {{label: string, hex: string}} metadatos visuales de la prioridad
+ */
 function getPriorityMeta(priority) {
   return PRIORITY_COLOR_META[priority] || { label: String(priority || 'Media'), hex: '#94a3b8' };
 }
 
+/**
+ * Calcula el inicio (lunes 00:00) de la semana que contiene la fecha dada.
+ * @param {Date} date - fecha de referencia
+ * @returns {Date} fecha del lunes de esa semana, a medianoche
+ */
 function startOfWeek(date) {
   const d = new Date(date);
   const day = d.getDay();
@@ -46,12 +61,23 @@ function startOfWeek(date) {
   return d;
 }
 
+/**
+ * Devuelve una nueva fecha desplazada una cantidad de días respecto a la fecha dada.
+ * @param {Date} date - fecha de referencia
+ * @param {number} amount - cantidad de días a sumar (negativo para restar)
+ * @returns {Date} nueva fecha desplazada
+ */
 function addDays(date, amount) {
   const d = new Date(date);
   d.setDate(d.getDate() + amount);
   return d;
 }
 
+/**
+ * Genera la clave de día (YYYY-MM-DD) usada para agrupar eventos por fecha.
+ * @param {Date} date - fecha a convertir
+ * @returns {string} clave de día en formato YYYY-MM-DD
+ */
 function dayKey(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -59,15 +85,30 @@ function dayKey(date) {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Formatea una fecha como etiqueta corta de día ("Lun 12/5") para mensajes al usuario.
+ * @param {Date} date - fecha a formatear
+ * @returns {string} etiqueta de día formateada
+ */
 function formatDayLabel(date) {
   return `${DAY_LABELS[(date.getDay() + 6) % 7]} ${date.getDate()}/${date.getMonth() + 1}`;
 }
 
+/**
+ * Convierte un valor de fecha/hora del backend (con o sin separador "T") en un objeto Date.
+ * @param {string} value - valor de fecha/hora crudo
+ * @returns {Date} fecha parseada
+ */
 function parseDateTime(value) {
   const iso = String(value);
   return new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
 }
 
+/**
+ * Formatea un valor de fecha/hora como hora corta (HH:MM) para mostrar en los bloques del calendario.
+ * @param {string} value - valor de fecha/hora crudo
+ * @returns {string} hora formateada (HH:MM)
+ */
 function formatTime(value) {
   const d = parseDateTime(value);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -77,15 +118,32 @@ const HOUR_START = 7;
 const HOUR_END = 20;
 const ROW_HEIGHT = 56;
 
+/**
+ * Formatea un número de hora entero como etiqueta de fila del calendario ("07:00").
+ * @param {number} hour - hora del día (0-23)
+ * @returns {string} etiqueta de hora formateada
+ */
 function formatHourLabel(hour) {
   return `${String(hour).padStart(2, '0')}:00`;
 }
 
+/**
+ * Arma el texto del rango de la semana mostrada ("12 may – 18 may") a partir de su fecha de inicio.
+ * @param {Date} start - fecha de inicio de la semana
+ * @returns {string} texto del rango de fechas
+ */
 function buildWeekTitle(start) {
   const end = addDays(start, 6);
   return `${start.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
 }
 
+/**
+ * Arma la vista de planificación semanal: sidebar de tickets agendables y tablero tipo Gantt con drag & drop de eventos.
+ * @param {Object} params - parámetros de entrada de la ruta
+ * @param {Object} params.query - parámetros de query string de la URL (incluye la semana inicial)
+ * @param {Object} params.user - usuario autenticado actual
+ * @returns {Promise<{view: HTMLElement}>} nodo raíz de la vista
+ */
 export async function renderCalendar({ query, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
   let weekStart = query?.start ? startOfWeek(new Date(query.start)) : startOfWeek(new Date());
@@ -176,6 +234,10 @@ export async function renderCalendar({ query, user }) {
   ]);
   root.appendChild(fab);
 
+  /**
+   * Carga desde la API los eventos y tickets agendables de la semana actual, y dispara el redibujado de estadísticas, tickets y tablero.
+   * @returns {Promise<void>}
+   */
   async function load() {
     ticketList.innerHTML = '';
     boardGrid.innerHTML = '';
@@ -202,11 +264,19 @@ export async function renderCalendar({ query, user }) {
     renderCalendar();
   }
 
+  /**
+   * Actualiza la URL con la fecha de inicio de la semana actual, navegando dentro de la vista de calendario.
+   * @returns {void}
+   */
   function updateHash() {
     const params = new URLSearchParams({ start: weekStart.toISOString() });
     go(`/calendar?${params.toString()}`);
   }
 
+  /**
+   * Redibuja la tarjeta de resumen semanal con el total de eventos y de tickets disponibles.
+   * @returns {void}
+   */
   function renderStats() {
     statsCard.innerHTML = '';
     const totalEvents = events.length;
@@ -218,6 +288,10 @@ export async function renderCalendar({ query, user }) {
     ]));
   }
 
+  /**
+   * Dibuja la lista paginada de tickets agendables en el sidebar, ordenados por prioridad, con controles de paginación.
+   * @returns {void}
+   */
   function renderTickets() {
     ticketList.innerHTML = '';
     if (!tickets.length) {
@@ -280,6 +354,10 @@ export async function renderCalendar({ query, user }) {
     });
   }
 
+  /**
+   * Redibuja el tablero semanal completo: cabecera de días, cuadrícula de horas con celdas soltables (drop) y los bloques de eventos posicionados.
+   * @returns {void}
+   */
   function renderCalendar() {
     boardGrid.innerHTML = '';
     headerRow.innerHTML = '';
@@ -315,6 +393,11 @@ export async function renderCalendar({ query, user }) {
     });
   }
 
+  /**
+   * Calcula la columna de solapamiento de cada evento de un día para que los eventos simultáneos se muestren lado a lado.
+   * @param {Array<Object>} dayEvents - eventos del día, ordenados por hora de inicio
+   * @returns {Array<Object>} eventos con su columna asignada y el total de columnas usadas ese día
+   */
   function layoutDayEvents(dayEvents) {
     const active = [];
     const placed = [];
@@ -334,10 +417,23 @@ export async function renderCalendar({ query, user }) {
     return placed.map((p) => ({ ...p, cols }));
   }
 
+  /**
+   * Convierte una fecha en su fracción de hora decimal (ej. 9:30 → 9.5), usada para posicionar eventos verticalmente.
+   * @param {Date} date - fecha/hora a convertir
+   * @returns {number} hora en formato decimal
+   */
   function hourFraction(date) {
     return date.getHours() + date.getMinutes() / 60;
   }
 
+  /**
+   * Arma el bloque visual de un evento en el tablero, posicionado y dimensionado según su horario, con acciones de ajustar duración y quitar.
+   * @param {Object} event - datos del evento
+   * @param {number} dayIndex - índice del día (0-6) dentro de la semana mostrada
+   * @param {number} col - columna asignada para evitar solapamiento con otros eventos del mismo día
+   * @param {number} cols - cantidad total de columnas usadas ese día
+   * @returns {HTMLElement} bloque del evento
+   */
   function renderEventBlock(event, dayIndex, col, cols) {
     const startDate = parseDateTime(event.start_at);
     const endDate = event.end_at ? parseDateTime(event.end_at) : new Date(startDate.getTime() + 60 * 60 * 1000);
@@ -397,16 +493,35 @@ export async function renderCalendar({ query, user }) {
     return block;
   }
 
+  /**
+   * Inicializa el arrastre (drag) de una tarjeta de ticket del sidebar, adjuntando su id al evento de drag.
+   * @param {DragEvent} e - evento de inicio de arrastre
+   * @param {Object} ticket - ticket que se está arrastrando
+   * @returns {void}
+   */
   function beginTicketDrag(e, ticket) {
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('application/x-gcm-ticket', String(ticket.id));
   }
 
+  /**
+   * Inicializa el arrastre (drag) de un bloque de evento ya agendado, adjuntando su id al evento de drag para moverlo.
+   * @param {DragEvent} e - evento de inicio de arrastre
+   * @param {Object} event - evento del calendario que se está arrastrando
+   * @returns {void}
+   */
   function beginEventDrag(e, event) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-gcm-event', String(event.id));
   }
 
+  /**
+   * Maneja el soltado (drop) de un ticket o evento sobre una celda del calendario, creando o moviendo el evento correspondiente.
+   * @param {DragEvent} e - evento de soltado
+   * @param {Date} day - día de la celda donde se soltó
+   * @param {number} [hour] - hora de la celda donde se soltó
+   * @returns {Promise<void>}
+   */
   async function handleDrop(e, day, hour = 10) {
     const ticketId = e.dataTransfer.getData('application/x-gcm-ticket');
     const eventId = e.dataTransfer.getData('application/x-gcm-event');
@@ -424,6 +539,14 @@ export async function renderCalendar({ query, user }) {
     }
   }
 
+  /**
+   * Crea un evento de calendario de una hora de duración a partir de un ticket, en el día/hora indicados, y recarga la vista.
+   * @param {Object} ticket - ticket a programar
+   * @param {Date} day - día en el que se programa el evento
+   * @param {number} [hour] - hora de inicio del evento
+   * @param {string} [color] - color a usar (si no se indica, se calcula según la prioridad del ticket)
+   * @returns {Promise<void>}
+   */
   async function createEventFromTicket(ticket, day, hour = 10, color = null) {
     const start = new Date(day);
     start.setHours(hour, 0, 0, 0);
@@ -449,12 +572,22 @@ export async function renderCalendar({ query, user }) {
   const DURATION_MIN = 0.5;
   const DURATION_MAX = 12;
 
+  /**
+   * Abre el modal para ajustar la duración de un evento, con stepper de medias horas y atajos de duraciones comunes.
+   * @param {Object} event - evento cuya duración se va a ajustar
+   * @returns {void}
+   */
   function openDurationModal(event) {
     const startDate = parseDateTime(event.start_at);
     const endDate = parseDateTime(event.end_at || event.start_at);
     let hours = Math.max(DURATION_MIN, Math.round(((endDate - startDate) / (60 * 60 * 1000)) * 2) / 2);
 
     const display = h('div.text-3xl.font-bold.text-brand-ink.text-center.tabular-nums', {}, formatHours(hours));
+    /**
+     * Incrementa o decrementa la duración mostrada en el stepper, respetando los límites mínimo y máximo.
+     * @param {number} delta - cantidad de horas a sumar (negativo para restar)
+     * @returns {void}
+     */
     const step = (delta) => {
       hours = Math.min(DURATION_MAX, Math.max(DURATION_MIN, hours + delta));
       display.textContent = formatHours(hours);
@@ -487,10 +620,21 @@ export async function renderCalendar({ query, user }) {
     openModal({ title: 'Ajustar duración', body, actions, size: 'sm' });
   }
 
+  /**
+   * Formatea una cantidad de horas (en pasos de media hora) como texto corto para el stepper de duración ("2h" o "2h30").
+   * @param {number} hours - cantidad de horas
+   * @returns {string} texto formateado
+   */
   function formatHours(hours) {
     return Number.isInteger(hours) ? `${hours}h` : `${hours}h30`;
   }
 
+  /**
+   * Guarda la nueva duración de un evento (recalculando su hora de fin) y recarga la vista.
+   * @param {Object} event - evento a actualizar
+   * @param {number} hours - nueva duración en horas
+   * @returns {Promise<void>}
+   */
   async function updateEventDuration(event, hours) {
     const startDate = parseDateTime(event.start_at);
     const endDate = new Date(startDate.getTime() + hours * 60 * 60 * 1000);
@@ -503,6 +647,11 @@ export async function renderCalendar({ query, user }) {
     }
   }
 
+  /**
+   * Abre el modal para elegir un ticket de la lista y agendarlo directamente en el día indicado.
+   * @param {Date} date - día en el que se agendará el ticket elegido
+   * @returns {void}
+   */
   function openAssignTicketModal(date) {
     if (!tickets.length) {
       toast('No hay tickets disponibles para asignar.', 'warning');
@@ -538,6 +687,13 @@ export async function renderCalendar({ query, user }) {
     const { cleanup } = openModal({ title: 'Agregar ticket al calendario', body, actions });
   }
 
+  /**
+   * Reprograma un evento existente a un nuevo día (y opcionalmente hora), conservando su duración original, y recarga la vista.
+   * @param {Object} event - evento a mover
+   * @param {Date} day - nuevo día de inicio
+   * @param {number|null} [hour] - nueva hora de inicio; si es null se mantiene la hora original
+   * @returns {Promise<void>}
+   */
   async function moveEventToDay(event, day, hour = null) {
     const originalStart = parseDateTime(event.start_at);
     const originalEnd = parseDateTime(event.end_at);
@@ -558,6 +714,12 @@ export async function renderCalendar({ query, user }) {
     }
   }
 
+  /**
+   * Actualiza el color de un evento del calendario y recarga la vista.
+   * @param {string|number} eventId - id del evento a actualizar
+   * @param {string} color - nueva clave de color
+   * @returns {Promise<void>}
+   */
   async function updateEventColor(eventId, color) {
     try {
       await api.calendar.update(eventId, { color });
@@ -568,6 +730,11 @@ export async function renderCalendar({ query, user }) {
     }
   }
 
+  /**
+   * Elimina un evento programado del calendario y recarga la vista.
+   * @param {string|number} eventId - id del evento a eliminar
+   * @returns {Promise<void>}
+   */
   async function removeScheduledEvent(eventId) {
     try {
       await api.calendar.remove(eventId);

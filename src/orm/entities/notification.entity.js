@@ -5,6 +5,9 @@ const { EntitySchema } = require('typeorm');
 const { NOTIFICATION_TYPE_VALUES } = require('../enums');
 const { bitBoolean } = require('../transformers');
 
+// Entidad ORM: tabla `notifications`. Notificaciones in-app dirigidas a un usuario (user_id),
+// tipadas por type (enum NOTIFICATION_TYPE_VALUES), con referencia opcional a un ticket y
+// flag read para el estado leído/no leído.
 module.exports = new EntitySchema({
   name: 'Notification',
   tableName: 'notifications',

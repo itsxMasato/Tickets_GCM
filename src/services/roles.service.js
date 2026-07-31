@@ -60,6 +60,11 @@ const DEFAULTS = {
   },
 };
 
+/**
+ * Valida y normaliza un objeto de permisos recibido en una actualización, exigiendo que estén los 6 permisos definidos y forzando cada valor a booleano.
+ * @param {Object} obj - objeto de permisos a normalizar
+ * @returns {Object} permisos normalizados (booleanos para cada clave conocida)
+ */
 function normalizePermissions(obj) {
   if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) {
     const err = new Error('Permisos inválidos: se esperaba un objeto.');
@@ -86,6 +91,11 @@ function normalizePermissions(obj) {
   return out;
 }
 
+/**
+ * Lee un objeto de permisos almacenado (o parcial) y devuelve un objeto completo con los 6 permisos conocidos como booleanos.
+ * @param {Object} obj - objeto de permisos crudo, posiblemente incompleto
+ * @returns {Object} permisos completos como booleanos
+ */
 function readPermissions(obj) {
   const out = {};
   const safe = (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
@@ -93,6 +103,10 @@ function readPermissions(obj) {
   return out;
 }
 
+/**
+ * Devuelve el catálogo estático de definiciones de permisos: claves, etiquetas, descripciones y cuáles son críticos.
+ * @returns {Object} definiciones de permisos (keys, labels, descriptions, critical)
+ */
 function getPermissionDefinitions() {
   return {
     keys: [...PERMISSION_KEYS],
@@ -102,6 +116,10 @@ function getPermissionDefinitions() {
   };
 }
 
+/**
+ * Lista los permisos efectivos de todos los roles del sistema (personalizados o por defecto), junto con las definiciones de permisos disponibles.
+ * @returns {Promise<Object>} objeto con `roles` (permisos por rol) y `permissions` (definiciones)
+ */
 async function list() {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();
@@ -121,6 +139,11 @@ async function list() {
   };
 }
 
+/**
+ * Obtiene los permisos efectivos de un rol específico (personalizados o por defecto).
+ * @param {String} role - código del rol
+ * @returns {Promise<Object>} permisos del rol
+ */
 async function get(role) {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();
@@ -129,6 +152,13 @@ async function get(role) {
   return readPermissions(DEFAULTS[role] || {});
 }
 
+/**
+ * Actualiza los permisos de un rol, registra auditoría con el detalle de los cambios y notifica por socket si hubo diferencias reales.
+ * @param {String} role - código del rol a actualizar
+ * @param {Object} body - objeto con los nuevos permisos
+ * @param {Object} user - usuario que realiza la actualización
+ * @returns {Promise<Object>} permisos finales guardados
+ */
 async function update(role, body, user) {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();
@@ -169,18 +199,36 @@ async function update(role, body, user) {
 
 module.exports = { list, get, update, deleteRole, deletePermission };
 
+/**
+ * Construye un error de solicitud inválida (HTTP 400) con código de error opcional.
+ * @param {String} message - mensaje de error
+ * @param {String} [code] - código de error, por defecto 'VALIDATION_ERROR'
+ * @returns {Error} error con statusCode 400
+ */
 function badRequest(message, code) {
   const err = new Error(message);
   err.statusCode = 400;
   err.code = code || 'VALIDATION_ERROR';
   return err;
 }
+/**
+ * Construye un error de acceso prohibido (HTTP 403) con código de error opcional.
+ * @param {String} message - mensaje de error
+ * @param {String} [code] - código de error, por defecto 'FORBIDDEN'
+ * @returns {Error} error con statusCode 403
+ */
 function forbidden(message, code) {
   const err = new Error(message);
   err.statusCode = 403;
   err.code = code || 'FORBIDDEN';
   return err;
 }
+/**
+ * Construye un error de conflicto (HTTP 409) con código de error opcional.
+ * @param {String} message - mensaje de error
+ * @param {String} [code] - código de error, por defecto 'CONFLICT'
+ * @returns {Error} error con statusCode 409
+ */
 function conflict(message, code) {
   const err = new Error(message);
   err.statusCode = 409;
@@ -188,6 +236,13 @@ function conflict(message, code) {
   return err;
 }
 
+/**
+ * Elimina un rol personalizado del sistema, reasignando a otro rol a todos los usuarios que lo tuvieran (obligatorio si hay usuarios afectados). Impide eliminar roles base del flujo operativo. Registra auditoría y notifica en tiempo real.
+ * @param {String} role - código del rol a eliminar
+ * @param {Object} body - cuerpo de la solicitud, debe incluir `reassignTo` si hay usuarios con ese rol
+ * @param {Object} user - usuario que realiza la eliminación
+ * @returns {Promise<void>}
+ */
 async function deleteRole(role, body, user) {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();
@@ -247,6 +302,13 @@ async function deleteRole(role, body, user) {
   }, { role: 'sac', broadcast: true });
 }
 
+/**
+ * Elimina un permiso del catálogo del sistema, reemplazándolo por otro permiso en los roles que lo tuvieran activo (obligatorio si hay roles afectados), con validaciones adicionales si el permiso es crítico. Registra auditoría y notifica en tiempo real.
+ * @param {String} key - clave del permiso a eliminar
+ * @param {Object} body - cuerpo de la solicitud, puede incluir `replacement` con el permiso de reemplazo
+ * @param {Object} user - usuario que realiza la eliminación
+ * @returns {Promise<void>}
+ */
 async function deletePermission(key, body, user) {
   firebaseAdmin.init();
   const db = firebaseAdmin.getFirestoreInstance();

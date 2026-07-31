@@ -13,12 +13,24 @@ const AVATAR_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp';
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const AVATAR_CLASS = 'w-32 h-32 rounded-full text-3xl font-semibold text-white flex items-center justify-center flex-none border-4 border-white shadow-card';
 
+/**
+ * Arma la vista de "Mi perfil": tarjeta de avatar editable y tarjeta con los datos de la cuenta del usuario.
+ * @param {Object} params - parámetros de la ruta
+ * @param {Object} params.user - usuario autenticado
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderProfile({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
   draw(root, user);
   return root;
 }
 
+/**
+ * Limpia el contenedor raíz y vuelve a dibujar el encabezado, el layout de tarjetas y (si aplica) la tarjeta de empresas.
+ * @param {HTMLElement} root - contenedor raíz de la vista
+ * @param {Object} user - usuario autenticado
+ * @returns {void}
+ */
 function draw(root, user) {
   root.innerHTML = '';
 
@@ -41,6 +53,12 @@ function draw(root, user) {
   root.appendChild(layout);
 }
 
+/**
+ * Arma la tarjeta con el avatar del usuario y el flujo de cambio de foto de perfil (selección, validación y subida).
+ * @param {Object} user - usuario autenticado
+ * @param {Function} onUpdated - callback invocado con el usuario actualizado tras subir la foto
+ * @returns {HTMLElement} tarjeta de avatar
+ */
 function renderAvatarCard(user, onUpdated) {
   const card = h('div.card.flex.flex-col.items-center.text-center.p-lg', {});
   const avatarWrap = h('div.relative', {}, [renderAvatar(user, { className: AVATAR_CLASS })]);
@@ -104,7 +122,18 @@ function renderAvatarCard(user, onUpdated) {
   return card;
 }
 
+/**
+ * Arma la tarjeta con los datos de la cuenta del usuario (nombre, usuario, correo, rol, área, estado).
+ * @param {Object} user - usuario autenticado
+ * @returns {HTMLElement} tarjeta de información de cuenta
+ */
 function renderInfoCard(user) {
+  /**
+   * Arma una fila etiqueta/valor para la tarjeta de datos de la cuenta.
+   * @param {string} label - etiqueta del campo
+   * @param {string} value - valor a mostrar (o "—" si está vacío)
+   * @returns {HTMLElement} fila del formulario de solo lectura
+   */
   const row = (label, value) => h('div.flex.flex-col.gap-1.py-2.border-b.border-slate-100', { class: 'last:border-0' }, [
     h('span.text-xs.text-slate-500.uppercase.tracking-wide', {}, label),
     h('span.text-sm.font-medium.text-slate-800', {}, value || '—'),
@@ -126,6 +155,11 @@ function renderInfoCard(user) {
   ]);
 }
 
+/**
+ * Arma la tarjeta con las empresas a las que pertenece el usuario, marcando la empresa activa.
+ * @param {Object} user - usuario autenticado (con user.memberships)
+ * @returns {HTMLElement} tarjeta de empresas asignadas
+ */
 function renderCompaniesCard(user) {
   const rows = user.memberships.map((m) => h('div.flex.items-center.justify-between.gap-3.py-2.border-b.border-slate-100', { class: 'last:border-0' }, [
     h('div.flex.items-center.gap-2.min-w-0', {}, [

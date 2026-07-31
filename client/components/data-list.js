@@ -3,11 +3,32 @@ import { h } from '../utils/dom.js';
 
 const MOBILE_MQ = '(max-width: 767.95px)';
 
+/**
+ * Indica si el viewport actual corresponde a tamaño móvil.
+ * @returns {boolean} true si el ancho de pantalla es de móvil
+ */
 function isMobile() {
   if (typeof window === 'undefined' || !window.matchMedia) return false;
   return window.matchMedia(MOBILE_MQ).matches;
 }
 
+/**
+ * Monta una lista de datos responsive dentro de un wrapper: renderiza tarjetas en
+ * móvil y una tabla en escritorio, con soporte de estado de carga (skeleton),
+ * estado vacío y repintado automático al cruzar el breakpoint móvil/escritorio.
+ * @param {Object} opts - opciones de configuración
+ * @param {HTMLElement} opts.wrapper - contenedor donde se monta la lista
+ * @param {Function} [opts.rowKey] - función para obtener la key única de cada item
+ * @param {Array} [opts.items] - items iniciales a renderizar
+ * @param {boolean} [opts.loading] - estado inicial de carga
+ * @param {HTMLElement} [opts.emptyState] - nodo a mostrar cuando no hay items
+ * @param {HTMLElement} [opts.skeleton] - nodo de carga personalizado
+ * @param {Array} [opts.columns] - definición de columnas para la vista de escritorio
+ * @param {Function} [opts.renderMobileCard] - renderiza una tarjeta para la vista móvil
+ * @param {Function} [opts.renderRow] - devuelve el HTML de una fila para la vista de escritorio
+ * @param {Function} [opts.onMatchMediaChange] - callback al cambiar entre móvil y escritorio
+ * @returns {{update: Function, destroy: Function}} controlador con métodos update (mergea estado y repinta) y destroy (limpia listeners y contenido)
+ */
 export function mountDataList(opts) {
   const {
     wrapper,
@@ -25,6 +46,11 @@ export function mountDataList(opts) {
   let mq = null;
   let onChange = null;
 
+  /**
+   * Repinta el contenido del wrapper según el estado actual (loading, vacío,
+   * o lista de items en formato tarjeta móvil o tabla de escritorio).
+   * @returns {void}
+   */
   function paint() {
     const mobile = isMobile();
     wrapper.innerHTML = '';
@@ -81,6 +107,12 @@ export function mountDataList(opts) {
     }
   }
 
+  /**
+   * Genera un esqueleto de carga (placeholders animados) por defecto, en formato
+   * tarjetas para móvil o tabla para escritorio.
+   * @param {boolean} mobile - true para generar el esqueleto en formato móvil
+   * @returns {HTMLElement} elemento con el esqueleto de carga
+   */
   function defaultSkeleton(mobile) {
     if (mobile) {
       const list = h('div.gcm-data-list-mobile.flex.flex-col.gap-2', {});
@@ -113,6 +145,12 @@ export function mountDataList(opts) {
     return wrap;
   }
 
+  /**
+   * Repinta la lista cuando cambia el breakpoint móvil/escritorio y notifica
+   * el cambio mediante el callback opts.onMatchMediaChange.
+   * @param {MediaQueryListEvent} e - evento de cambio de media query
+   * @returns {void}
+   */
   function handleMatchMedia(e) {
     paint();
     if (typeof opts.onMatchMediaChange === 'function') {
@@ -133,10 +171,19 @@ export function mountDataList(opts) {
   }
 
   return {
+    /**
+     * Combina el estado actual con los cambios recibidos y vuelve a pintar la lista.
+     * @param {Object} partial - cambios parciales de estado (items, loading, emptyState)
+     * @returns {void}
+     */
     update(partial) {
       state = { ...state, ...partial };
       paint();
     },
+    /**
+     * Elimina el listener de media query y vacía el contenido del wrapper.
+     * @returns {void}
+     */
     destroy() {
       if (typeof onChange === 'function') onChange();
       wrapper.innerHTML = '';

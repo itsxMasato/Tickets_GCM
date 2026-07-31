@@ -7,6 +7,12 @@ import {
 } from '../utils/permissions.js';
 import { ICON } from '../utils/icons.js';
 
+/**
+ * Crea el ícono SVG de un ítem de navegación del sidebar.
+ * @param {string} path - definición del atributo `d` del path SVG
+ * @param {string} [cls='sidebar-icon'] - clases CSS del ícono
+ * @returns {HTMLElement} elemento svg
+ */
 function icon(path, cls = 'sidebar-icon') {
   return h(`svg.${cls}`, {
     xmlns: 'http://www.w3.org/2000/svg',
@@ -16,6 +22,11 @@ function icon(path, cls = 'sidebar-icon') {
   });
 }
 
+/**
+ * Crea el ícono SVG pequeño que acompaña el título de una sección del sidebar.
+ * @param {string} path - definición del atributo `d` del path SVG
+ * @returns {HTMLElement} elemento svg
+ */
 function sectionIcon(path) {
   return h('svg.flex-none.opacity-70', {
     class: 'w-3.5 h-3.5',
@@ -34,10 +45,20 @@ const SECTION_ICON = {
   'Cuenta':          ICON.section_account,
 };
 
+/**
+ * Obtiene la ruta actual de la app a partir del hash de la URL.
+ * @returns {string} ruta actual (ej. '/dashboard')
+ */
 function path() {
   return (location.hash || '').replace(/^#/, '') || '/dashboard';
 }
 
+/**
+ * Arma la estructura de navegación (secciones e ítems) del sidebar según el rol
+ * del usuario (supervisor_campo, admin_area, jefe_inmediato o sac).
+ * @param {Object} user - usuario actual, usado para determinar su rol
+ * @returns {Array<Object>} lista de secciones con título e ítems de navegación
+ */
 function navFor(user) {
   if (isSupervisor(user)) {
     return [
@@ -137,6 +158,14 @@ function navFor(user) {
   ];
 }
 
+/**
+ * Renderiza el sidebar de navegación completo: marca/logo, secciones de menú
+ * filtradas por permisos del usuario y resaltado del ítem activo según la ruta actual.
+ * @param {Object} params - parámetros de renderizado
+ * @param {Object} params.user - usuario actual (determina rol y permisos visibles)
+ * @param {Function} [params.onClose] - callback invocado al navegar (ej. cerrar el drawer móvil)
+ * @returns {HTMLElement} elemento aside con el sidebar
+ */
 export function renderSidebar({ user, onClose }) {
   const p = path();
   const sections = navFor(user);

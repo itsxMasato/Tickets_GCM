@@ -5,19 +5,38 @@ import { renderTopbar } from './topbar.js';
 
 const STORAGE_KEY = 'gcm.sidebarCollapsed';
 
+/**
+ * Lee de localStorage si el usuario prefiere el sidebar colapsado.
+ * @returns {boolean} true si la preferencia guardada es colapsado
+ */
 function readCollapsedPref() {
   try { return localStorage.getItem(STORAGE_KEY) === '1'; }
   catch { return false; }
 }
+/**
+ * Guarda en localStorage la preferencia de colapso del sidebar.
+ * @param {boolean} collapsed - true si el sidebar debe quedar colapsado
+ * @returns {void}
+ */
 function writeCollapsedPref(collapsed) {
   try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); }
   catch {}
 }
 
+/**
+ * Indica si el viewport actual corresponde a tamaño móvil.
+ * @returns {boolean} true si el ancho de pantalla es de móvil
+ */
 function isMobileViewport() {
   return window.matchMedia('(max-width: 767.95px)').matches;
 }
 
+/**
+ * Aplica el estado colapsado/expandido del sidebar al body y notifica el cambio
+ * mediante un evento global.
+ * @param {boolean} collapsed - true para colapsar el sidebar
+ * @returns {void}
+ */
 function applyCollapsed(collapsed) {
   document.body.classList.toggle('gcm-sidebar-collapsed', !!collapsed);
   window.dispatchEvent(new CustomEvent('gcm:sidebar-state-changed', {
@@ -25,15 +44,29 @@ function applyCollapsed(collapsed) {
   }));
 }
 
+/**
+ * Abre o cierra el sidebar en modo móvil y sincroniza el scrim (fondo oscuro) asociado.
+ * @param {boolean} open - true para abrir el sidebar móvil
+ * @returns {void}
+ */
 function applyMobileOpen(open) {
   document.body.classList.toggle('gcm-sidebar-open', !!open);
   syncScrim();
 }
 
+/**
+ * Cierra el sidebar en modo móvil.
+ * @returns {void}
+ */
 function closeMobileSidebar() {
   applyMobileOpen(false);
 }
 
+/**
+ * Crea, muestra u oculta el scrim (fondo oscuro semitransparente) detrás del sidebar
+ * móvil abierto, según el estado actual del viewport y del sidebar.
+ * @returns {void}
+ */
 function syncScrim() {
   if (typeof document === 'undefined') return;
   const existing = document.getElementById('gcm-sidebar-scrim');
@@ -59,6 +92,16 @@ function syncScrim() {
   }, 200);
 }
 
+/**
+ * Renderiza el shell general de la aplicación: sidebar, topbar y el contenido
+ * principal recibido. Gestiona el estado de colapso/apertura del sidebar (persistido
+ * en localStorage) y sus listeners globales (resize, teclado, evento de toggle).
+ * @param {Object} params - datos de renderizado
+ * @param {HTMLElement} params.content - contenido principal a mostrar dentro del layout
+ * @param {Object} params.user - usuario autenticado actual
+ * @param {Function} params.onLogout - callback invocado al cerrar sesión
+ * @returns {HTMLElement} elemento div raíz del layout con sidebar, topbar y contenido
+ */
 export function renderLayout({ content, user, onLogout }) {
   const isMobile = isMobileViewport();
   if (!isMobile) {
@@ -83,6 +126,11 @@ export function renderLayout({ content, user, onLogout }) {
     ]),
   ]);
 
+  /**
+   * Alterna el estado del sidebar: en móvil abre/cierra el drawer, en escritorio
+   * colapsa/expande y persiste la preferencia.
+   * @returns {void}
+   */
   const onToggleSidebar = () => {
     if (isMobileViewport()) {
       const open = !document.body.classList.contains('gcm-sidebar-open');
@@ -94,6 +142,11 @@ export function renderLayout({ content, user, onLogout }) {
     }
   };
 
+  /**
+   * Cierra el sidebar móvil al presionar Escape, salvo que haya un diálogo modal abierto.
+   * @param {KeyboardEvent} e - evento de teclado
+   * @returns {void}
+   */
   const onKeydown = (e) => {
     if (e.key !== 'Escape') return;
     if (!isMobileViewport()) return;
@@ -103,6 +156,11 @@ export function renderLayout({ content, user, onLogout }) {
     closeMobileSidebar();
   };
 
+  /**
+   * Al cambiar el tamaño de ventana, si deja de ser móvil cierra el drawer móvil
+   * y restaura la preferencia de colapso guardada.
+   * @returns {void}
+   */
   const onResize = () => {
     const mobile = isMobileViewport();
     if (!mobile) {

@@ -3,6 +3,9 @@
 
 const { EntitySchema } = require('typeorm');
 
+// Entidad ORM: tabla `ticket_assignments`. Historial de reasignaciones de un ticket:
+// quién lo tenía (from_user_id), a quién pasó (to_user_id), quién hizo la asignación
+// (assigned_by), notas opcionales y fecha (assigned_at).
 module.exports = new EntitySchema({
   name: 'TicketAssignment',
   tableName: 'ticket_assignments',

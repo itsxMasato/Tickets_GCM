@@ -3,6 +3,8 @@
 
 const { EntitySchema } = require('typeorm');
 
+// Entidad ORM: tabla `attachments`. Archivos adjuntos subidos a un ticket (o a un
+// comentario específico vía comment_id), con metadata de nombre, mime_type y tamaño.
 module.exports = new EntitySchema({
   name: 'Attachment',
   tableName: 'attachments',

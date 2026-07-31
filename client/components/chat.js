@@ -4,14 +4,29 @@ import { attachmentThumb } from './attachments.js';
 import { relativeFromNow, formatDateTime, ROLE_LABEL } from '../utils/format.js';
 import { sameId } from '../utils/ids.js';
 
+/**
+ * Determina un color de avatar determinístico a partir de un valor semilla (ej. id de usuario).
+ * @param {number} seed - valor usado para elegir el color de forma consistente
+ * @returns {string} código de color hexadecimal
+ */
 function avatarColor(seed) {
   const colors = ['#2563eb', '#16a34a', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9', '#db2777', '#14b8a6', '#7c3aed', '#f97316'];
   return colors[(seed || 0) % colors.length];
 }
+/**
+ * Obtiene las iniciales (hasta 2 letras) a partir de un nombre completo.
+ * @param {string} [name=''] - nombre completo de la persona
+ * @returns {string} iniciales en mayúsculas, o '?' si no hay nombre
+ */
 function initials(name = '') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
 }
 
+/**
+ * Crea el elemento avatar (círculo con iniciales y color) de un usuario del chat.
+ * @param {Object} user - usuario a representar (id, full_name); puede ser null
+ * @returns {HTMLElement} elemento span del avatar
+ */
 function avatarOf(user) {
   if (!user) return h('span.avatar', { style: { backgroundColor: 'var(--color-slate-400, #94a3b8)' } }, '?');
   return h('span.avatar', { style: { backgroundColor: avatarColor(user.id) } }, initials(user.full_name));
@@ -25,6 +40,12 @@ const SVG = {
   paperclip: 'M21 12.8l-8.5 8.5a5.5 5.5 0 11-7.8-7.8l8.5-8.5a3.7 3.7 0 015.2 5.2L10 18.7',
 };
 
+/**
+ * Crea un ícono SVG a partir del path definido en SVG para un tipo de evento del chat.
+ * @param {string} name - clave del ícono dentro de SVG (created, assigned, reassign, status, paperclip)
+ * @param {string} [cls='w-3.5 h-3.5'] - clases CSS de tamaño para el SVG
+ * @returns {HTMLElement} elemento svg
+ */
 function svgIcon(name, cls = 'w-3.5 h-3.5') {
   return h(`svg.${cls}`, {
     fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8',
@@ -33,6 +54,15 @@ function svgIcon(name, cls = 'w-3.5 h-3.5') {
   });
 }
 
+/**
+ * Crea una burbuja de evento del historial del chat (ej. "creó el ticket",
+ * "asignado a...") con ícono, texto y fecha relativa.
+ * @param {Object} params - datos del evento
+ * @param {string} params.icon - clave del ícono a mostrar
+ * @param {string} params.text - descripción del evento
+ * @param {string} params.when - fecha/hora del evento
+ * @returns {HTMLElement} elemento div con el evento
+ */
 function eventNode({ icon, text, when }) {
   const wrap = h('div.chat-event', {}, [
     h('span.inline-flex.items-center.bg-white.border.border-surface-border.rounded-full.text-xs.text-slate-600.shadow-soft', { class: 'gap-1.5 px-2.5 py-0.5' }, [
@@ -46,6 +76,16 @@ function eventNode({ icon, text, when }) {
   return wrap;
 }
 
+/**
+ * Renderiza el historial completo tipo chat de un ticket: combina en orden cronológico
+ * la creación, asignaciones/reasignaciones, comentarios y adjuntos, mostrando cada uno
+ * con su formato correspondiente (evento centrado o burbuja de comentario).
+ * @param {Object} params - datos de renderizado
+ * @param {Object} params.ticket - ticket con sus comments, assignments y attachments
+ * @param {Object} params.user - usuario actual (para distinguir comentarios propios)
+ * @param {Function} [params.onRefresh] - callback opcional para refrescar datos
+ * @returns {HTMLElement} elemento div con el historial del chat
+ */
 export function renderChat({ ticket, user, onRefresh }) {
   const me = user;
   const root = h('div.flex.flex-col.gap-3.p-3.bg-slate-50.rounded-lg', { style: { minHeight: '400px' } });

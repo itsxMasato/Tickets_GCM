@@ -76,6 +76,10 @@ let pending = null;
 const editingLabels = new Map();
 let activeRole = ROLE_ORDER[0];
 
+/**
+ * Carga desde la API la matriz de roles/permisos vigente y el catálogo de usuarios, e inicializa el estado pendiente de edición.
+ * @returns {Promise<void>}
+ */
 async function loadAll() {
   const [rolesRes] = await Promise.all([
     api.roles.list(),
@@ -93,10 +97,19 @@ async function loadAll() {
   pending = JSON.parse(JSON.stringify(current));
 }
 
+/**
+ * Filtra el caché de usuarios devolviendo solo los que tienen el rol dado.
+ * @param {string} role - clave del rol
+ * @returns {Array<Object>} usuarios con ese rol
+ */
 function usersWithRole(role) {
   return usersCache.get().filter((u) => u.role === role);
 }
 
+/**
+ * Determina si hay diferencias sin guardar entre los permisos actuales y los pendientes de edición.
+ * @returns {boolean} true si existe al menos un cambio pendiente
+ */
 function isDirty() {
   if (!current || !pending) return false;
   for (const role of ROLE_ORDER) {
@@ -109,6 +122,10 @@ function isDirty() {
   return false;
 }
 
+/**
+ * Calcula la lista de cambios de permisos pendientes de guardar, comparando estado actual contra el editado.
+ * @returns {Array<Object>} cambios con { role, perm, from, to, affectedUsers }
+ */
 function pendingChanges() {
   if (!current || !pending)
     return [];
@@ -126,6 +143,10 @@ function pendingChanges() {
   return out;
 }
 
+/**
+ * Cuenta cuántos usuarios en total quedan afectados por los cambios de permisos pendientes.
+ * @returns {number} cantidad de usuarios afectados
+ */
 function totalAffected() {
   const roles = new Set(pendingChanges().map((c) => c.role));
   let n = 0;
@@ -133,12 +154,24 @@ function totalAffected() {
   return n;
 }
 
+/**
+ * Determina qué roles tienen activo un permiso dado, según el estado actual (guardado) del sistema.
+ * @param {string} perm - clave del permiso
+ * @returns {Array<string>} roles que tienen ese permiso activo
+ */
 function rolesUsingPerm(perm) {
   if (!current)
     return [];
   return ROLE_ORDER.filter((r) => !!(current[r] || {})[perm]);
 }
 
+/**
+ * Punto de entrada de la vista Roles y permisos: arma las pestañas por rol, la matriz de permisos editable
+ * y el panel de cambios pendientes, con guardado, descarte, atajos de teclado y sincronización en tiempo real.
+ * @param {Object} params - parámetros de la vista
+ * @param {Object} params.user - usuario autenticado
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderRoles({ user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
@@ -187,6 +220,12 @@ export async function renderRoles({ user }) {
 
   roleCard.appendChild(renderLoading('Cargando roles y permisos…'));
 
+  /**
+   * Handler de eventos realtime de roles: sincroniza cambios de nombre o permisos hechos por otros usuarios,
+   * mostrando un banner de conflicto si hay ediciones locales sin guardar que colisionan.
+   * @param {CustomEvent} e - evento 'gcm:realtime' recibido
+   * @returns {void}
+   */
   const onRealtime = (e) => {
     const t = e.detail?.event;
     const payload = e.detail || {};
@@ -258,6 +297,10 @@ export async function renderRoles({ user }) {
     }
   });
 
+  /**
+   * Actualiza los contadores de usuarios por rol mostrados en las pestañas y en la tarjeta del rol activo.
+   * @returns {void}
+   */
   const refreshCountBadges = () => {
     const usersLoaded = usersCache.isLoaded();
     for (const role of ROLE_ORDER) {
@@ -287,6 +330,11 @@ export async function renderRoles({ user }) {
     refreshCountBadges();
   });
 
+  /**
+   * Handler global de teclado: Ctrl/Cmd+S guarda los cambios pendientes, Escape los descarta (si no hay foco en un input ni modal abierto).
+   * @param {KeyboardEvent} e - evento de teclado
+   * @returns {void}
+   */
   const onKey = (e) => {
     const tag = (e.target?.tagName || '').toUpperCase();
     const typing = tag === 'INPUT' || tag === 'TEXTAREA';
@@ -301,6 +349,10 @@ export async function renderRoles({ user }) {
   };
   document.addEventListener('keydown', onKey);
 
+  /**
+   * Redibuja la barra de pestañas de roles, marcando la pestaña activa y el contador de usuarios de cada rol.
+   * @returns {void}
+   */
   function renderTabs() {
     tabsBar.innerHTML = '';
     const usersLoaded = usersCache.isLoaded();
@@ -337,6 +389,11 @@ export async function renderRoles({ user }) {
     }
   }
 
+  /**
+   * Redibuja la tarjeta principal del rol activo: cabecera con nombre editable, contador de usuarios,
+   * resumen de permisos activos y las acciones "Apagar todo" / "Restaurar".
+   * @returns {void}
+   */
   function renderRoleCard() {
     roleCard.innerHTML = '';
     if (!current) {
@@ -404,6 +461,13 @@ export async function renderRoles({ user }) {
     roleCard.appendChild(card);
   }
 
+  /**
+   * Arma los grupos de permisos (Tickets, Administración, Reportes y "Otros" para permisos sin categoría) de un rol.
+   * @param {string} role - clave del rol
+   * @param {Object} perms - permisos pendientes de edición del rol
+   * @param {Object} currentPerms - permisos actuales (guardados) del rol
+   * @returns {Array<HTMLElement>} nodos de cada grupo de permisos
+   */
   function renderPermissionGroups(role, perms, currentPerms) {
     const listed = new Set(PERMISSION_GROUPS.flatMap((g) => g.perms));
     const orphans = PERMISSION_KEYS.filter((p) => !listed.has(p));
@@ -425,6 +489,12 @@ export async function renderRoles({ user }) {
 
   const LABEL_MAX = 80;
 
+  /**
+   * Renderiza el nombre del rol: en modo lectura muestra el texto con botón de editar; en modo edición muestra
+   * un input con botones de guardar/cancelar.
+   * @param {string} role - clave del rol
+   * @returns {HTMLElement} nodo del bloque de nombre del rol
+   */
   function renderLabelBlock(role) {
     const edit = editingLabels.get(role);
     if (!edit) {
@@ -476,6 +546,11 @@ export async function renderRoles({ user }) {
     ]);
   }
 
+  /**
+   * Inicia la edición en línea del nombre de un rol: guarda el estado de edición y enfoca el input recién creado.
+   * @param {string} role - clave del rol
+   * @returns {void}
+   */
   function startEditLabel(role) {
     editingLabels.set(role, { value: getRoleLabel(role), error: null, saving: false });
     renderTabs();
@@ -486,6 +561,12 @@ export async function renderRoles({ user }) {
     });
   }
 
+  /**
+   * Actualiza el estado de edición del nombre de un rol y refresca el bloque en pantalla, preservando el foco y el cursor.
+   * @param {string} role - clave del rol
+   * @param {Object} patch - cambios parciales al estado de edición (value, error, saving)
+   * @returns {void}
+   */
   function updateEditLabel(role, patch) {
     const cur = editingLabels.get(role);
     if (!cur) return;
@@ -505,6 +586,11 @@ export async function renderRoles({ user }) {
     }
   }
 
+  /**
+   * Valida y guarda el nuevo nombre de un rol contra la API, mostrando errores de validación o del servidor.
+   * @param {string} role - clave del rol
+   * @returns {Promise<void>}
+   */
   async function saveEditLabel(role) {
     const edit = editingLabels.get(role);
     if (!edit || edit.saving) return;
@@ -539,12 +625,27 @@ export async function renderRoles({ user }) {
     }
   }
 
+  /**
+   * Cancela la edición en línea del nombre de un rol, descartando los cambios no guardados.
+   * @param {string} role - clave del rol
+   * @returns {void}
+   */
   function cancelEditLabel(role) {
     if (!editingLabels.has(role)) return;
     editingLabels.delete(role);
     renderRoleCard();
   }
 
+  /**
+   * Renderiza la fila de un permiso individual dentro de un grupo: etiqueta, descripción, badges de crítico/cambio
+   * y el interruptor (toggle) para activarlo o desactivarlo.
+   * @param {Object} params - datos de la fila
+   * @param {string} params.role - clave del rol
+   * @param {string} params.perm - clave del permiso
+   * @param {Object} params.perms - permisos pendientes de edición del rol
+   * @param {Object} params.currentPerms - permisos actuales (guardados) del rol
+   * @returns {HTMLElement} nodo de la fila de permiso
+   */
   function renderPermRow({ role, perm, perms, currentPerms }) {
     const isOn = !!perms[perm];
     const wasOn = !!currentPerms[perm];
@@ -579,6 +680,16 @@ export async function renderRoles({ user }) {
     ]);
   }
 
+  /**
+   * Renderiza el interruptor visual (switch) de un permiso, reflejando su estado y si tiene cambios sin guardar.
+   * @param {Object} params - datos del interruptor
+   * @param {string} params.role - clave del rol
+   * @param {string} params.perm - clave del permiso
+   * @param {boolean} params.isOn - estado pendiente (editado) del permiso
+   * @param {boolean} params.changed - si el estado pendiente difiere del actual guardado
+   * @param {boolean} params.wasOn - estado actual (guardado) del permiso
+   * @returns {HTMLElement} nodo del interruptor
+   */
   function renderToggle({ role, perm, isOn, changed, wasOn }) {
     const bgClass = isOn ? 'bg-brand-navy' : 'bg-slate-300';
     return h('button.relative.inline-flex.items-center.w-9.h-5.rounded-full.transition-colors', {
@@ -603,6 +714,12 @@ export async function renderRoles({ user }) {
     ]);
   }
 
+  /**
+   * Invierte el estado pendiente (encendido/apagado) de un permiso para un rol y redibuja la tarjeta y el panel de cambios.
+   * @param {string} role - clave del rol
+   * @param {string} perm - clave del permiso
+   * @returns {void}
+   */
   function togglePerm(role, perm) {
     if (!pending[role]) pending[role] = {};
     pending[role][perm] = !pending[role][perm];
@@ -610,6 +727,11 @@ export async function renderRoles({ user }) {
     renderPending();
   }
 
+  /**
+   * Pide confirmación y, si se acepta, apaga (en el estado pendiente) todos los permisos activos de un rol.
+   * @param {string} role - clave del rol
+   * @returns {void}
+   */
   function disableRole(role) {
     const perms = pending[role] || {};
     const enabledCount = PERMISSION_KEYS.filter((p) => perms[p]).length;
@@ -628,6 +750,11 @@ export async function renderRoles({ user }) {
     });
   }
 
+  /**
+   * Restaura los permisos pendientes de un rol al último estado guardado en el servidor, descartando ediciones locales.
+   * @param {string} role - clave del rol
+   * @returns {void}
+   */
   function resetRole(role) {
     pending[role] = { ...(current[role] || {}) };
     renderRoleCard();
@@ -641,6 +768,11 @@ export async function renderRoles({ user }) {
     role: 'alert',
   });
 
+  /**
+   * Redibuja el panel lateral de cambios pendientes: resumen de usuarios/cambios afectados, lista detallada
+   * agrupada por rol, y los botones de guardar/descartar.
+   * @returns {void}
+   */
   function renderPending() {
     pendingCard.innerHTML = '';
     const changes = pendingChanges();
@@ -729,6 +861,10 @@ export async function renderRoles({ user }) {
     ]));
   }
 
+  /**
+   * Redibuja el pie de página con la fecha de la última modificación local de permisos.
+   * @returns {void}
+   */
   function renderFooter() {
     const last = lastModifiedAt();
     if (!last) {
@@ -738,10 +874,19 @@ export async function renderRoles({ user }) {
     footer.textContent = `Última modificación local: ${last}`;
   }
 
+  /**
+   * Formatea la fecha de la última carga/modificación de permisos en formato local.
+   * @returns {string|null} fecha formateada, o null si aún no se registró ninguna
+   */
   function lastModifiedAt() {
     return loadedAt ? loadedAt.toLocaleString('es-ES') : null;
   }
 
+  /**
+   * Envía a la API los cambios de permisos pendientes (uno por cada rol modificado) y actualiza el estado local
+   * si todos se guardan correctamente; muestra error si alguno falla.
+   * @returns {Promise<void>}
+   */
   async function save() {
     if (!isDirty() || saving) return;
     saving = true;
@@ -784,6 +929,10 @@ export async function renderRoles({ user }) {
     }
   }
 
+  /**
+   * Descarta todos los cambios de permisos pendientes, restaurando el estado editado al último guardado.
+   * @returns {void}
+   */
   function discard() {
     if (!isDirty()) return;
     pending = JSON.parse(JSON.stringify(current));
@@ -796,6 +945,10 @@ export async function renderRoles({ user }) {
     toast('Cambios descartados', 'info', 1800);
   }
 
+  /**
+   * Recarga los roles y permisos desde el servidor, pidiendo confirmación si hay cambios locales sin guardar.
+   * @returns {Promise<void>}
+   */
   async function refresh() {
     if (isDirty()) {
       if (!confirm('Tienes cambios sin guardar. ¿Recargar y perderlos?')) return;
@@ -850,6 +1003,11 @@ export async function renderRoles({ user }) {
   return root;
 }
 
+/**
+ * Renderiza un indicador de carga (spinner + mensaje) usado mientras se obtienen datos.
+ * @param {string} message - texto a mostrar junto al spinner
+ * @returns {HTMLElement} nodo del indicador de carga
+ */
 function renderLoading(message) {
   return h('div.flex.items-center.justify-center.gap-2.py-10.text-sm.text-slate-600', {
     role: 'status',
@@ -863,6 +1021,14 @@ function renderLoading(message) {
   ]);
 }
 
+/**
+ * Abre el asistente modal de 2 pasos para eliminar un rol o un permiso, reasignando los usuarios/roles afectados
+ * a una alternativa antes de confirmar la eliminación irreversible.
+ * @param {Object} params - datos del elemento a eliminar
+ * @param {string} params.type - 'role' o 'permission'
+ * @param {string} params.target - clave del rol o permiso a eliminar
+ * @returns {void}
+ */
 function openReassignWizard({ type, target }) {
   const isRole = type === 'role';
   const targetLabel = isRole ? getRoleLabel(target) : (PERMISSION_LABELS[target] || target);
@@ -874,10 +1040,20 @@ function openReassignWizard({ type, target }) {
   let step = 1;
   let chosen = null;
 
+  /**
+   * Renderiza el indicador numérico de paso del asistente (ej. "01", "02").
+   * @param {number} n - número de paso
+   * @returns {HTMLElement} nodo del indicador de paso
+   */
   const stepIndicator = (n) => h('span.font-mono.text-slate-500.tabular-nums', { class: 'text-[10px]' }, `0${n}`);
   const step1 = h('div', {});
   const step2 = h('div.hidden', {});
 
+  /**
+   * Renderiza el paso 1 del asistente: lista de usuarios o roles afectados por la eliminación y el selector
+   * de la alternativa a la que se reasignarán.
+   * @returns {void}
+   */
   function renderStep1() {
     step1.innerHTML = '';
     step1.appendChild(h('div.text-sm.text-slate-600.mb-4', {}, [
@@ -943,6 +1119,10 @@ function openReassignWizard({ type, target }) {
     }
   }
 
+  /**
+   * Renderiza el paso 2 del asistente: aviso de acción irreversible y resumen de lo que se va a aplicar.
+   * @returns {void}
+   */
   function renderStep2() {
     step2.innerHTML = '';
     step2.appendChild(h('div.flex.items-start.gap-3.p-3.rounded-md.bg-amber-50.border.border-amber-200.mb-4', {}, [
@@ -965,6 +1145,10 @@ function openReassignWizard({ type, target }) {
     ]));
   }
 
+  /**
+   * Habilita o deshabilita el botón "Continuar" del paso 1 según si ya se eligió una alternativa de reasignación.
+   * @returns {void}
+   */
   function updateContinueEnabled() {
     const btns = step1.querySelectorAll('[data-wizard-action]');
     btns.forEach((b) => {
@@ -987,6 +1171,11 @@ function openReassignWizard({ type, target }) {
     h('h3#gcm-modal-title.text-base.font-semibold.text-slate-800', {}, `Eliminar «${targetLabel}»`),
   ]);
 
+  /**
+   * Cambia el paso activo del asistente (1 o 2), actualizando la visibilidad de los pasos y el título del modal.
+   * @param {number} n - número de paso al que navegar (1 o 2)
+   * @returns {void}
+   */
   function goToStep(n) {
     step = n;
     if (n === 1) {

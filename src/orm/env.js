@@ -1,11 +1,24 @@
 /* Documentado por: Miguel Flores */
 'use strict'
 
+/**
+ * Convierte un valor de variable de entorno a booleano ('true' case-insensitive), usando
+ * un fallback cuando el valor está ausente o vacío.
+ * @param {*} v - valor crudo (típicamente string de process.env)
+ * @param {boolean} [fallback=false] - valor por defecto si v está vacío/ausente
+ * @returns {boolean} valor booleano resuelto
+ */
 function bool(v, fallback = false) {
   if (v === undefined || v === null || v === '') return fallback;
   return String(v).toLowerCase() === 'true';
 }
 
+/**
+ * Convierte un valor de variable de entorno a entero, usando un fallback si no es numérico.
+ * @param {*} v - valor crudo (típicamente string de process.env)
+ * @param {number} [fallback] - valor por defecto si v no es un número válido
+ * @returns {number} valor entero resuelto
+ */
 function int(v, fallback) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : fallback;

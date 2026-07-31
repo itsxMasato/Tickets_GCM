@@ -14,6 +14,13 @@ const LIMITS = {
 
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
 
+/**
+ * Muestra u oculta el mensaje de error de un campo del formulario y actualiza sus atributos ARIA de accesibilidad.
+ * @param {HTMLElement} input - campo del formulario asociado al error
+ * @param {HTMLElement} errorEl - elemento donde se muestra el mensaje de error
+ * @param {string|null} message - mensaje de error a mostrar, o null/vacío para limpiarlo
+ * @returns {void}
+ */
 function setFieldError(input, errorEl, message) {
   if (message) {
     errorEl.textContent = message;
@@ -27,6 +34,12 @@ function setFieldError(input, errorEl, message) {
   }
 }
 
+/**
+ * Arma el formulario de creación de un nuevo ticket, con validación de campos, selector de categoría/prioridad, adjuntos y panel de ayuda lateral.
+ * @param {Object} params - parámetros de la ruta
+ * @param {Object} params.user - usuario autenticado
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderTicketNew({ user }) {
   const root = h('div.flex.flex-col.gap-4.max-w-5xl', {});
 
@@ -182,11 +195,19 @@ export async function renderTicketNew({ user }) {
     prioList,
   ]));
 
+  /**
+   * Oculta todos los mensajes de error de campo y el banner general del formulario.
+   * @returns {void}
+   */
   function clearAllErrors() {
     [titleErr, descErr, catErr].forEach((e) => e.classList.add('hidden'));
     banner.classList.add('hidden'); banner.textContent = '';
   }
 
+  /**
+   * Valida los campos obligatorios del formulario (título y descripción) y arma el payload a enviar si son válidos.
+   * @returns {{ok: boolean, firstInvalid?: HTMLElement, payload?: Object}} resultado de la validación
+   */
   function validate() {
     let firstInvalid = null;
     const title = titleInput.value.trim();
@@ -230,6 +251,11 @@ export async function renderTicketNew({ user }) {
     };
   }
 
+  /**
+   * Muestra el banner de error general del formulario con el mensaje dado.
+   * @param {string} msg - mensaje a mostrar
+   * @returns {void}
+   */
   function showBanner(msg) {
     banner.textContent = msg;
     banner.classList.remove('hidden');
@@ -240,6 +266,11 @@ export async function renderTicketNew({ user }) {
   catSel.addEventListener('change', () => setFieldError(catSel, catErr, null));
 
   let submitting = false;
+  /**
+   * Maneja el envío del formulario: valida los campos, crea el ticket vía API, sube los adjuntos pendientes y navega al detalle del ticket creado.
+   * @param {Event} e - evento de submit del formulario
+   * @returns {Promise<void>}
+   */
   async function onSubmit(e) {
     e.preventDefault();
     if (submitting) return;

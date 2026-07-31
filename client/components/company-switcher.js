@@ -6,6 +6,14 @@ import { toast } from '../utils/toast.js';
 import { reconnectSocket } from '../socket.js';
 import { hasMultipleCompanies } from '../utils/permissions.js';
 
+/**
+ * Renderiza el selector de empresa activa en el topbar, visible solo cuando el
+ * usuario pertenece a más de una empresa. Permite cambiar de empresa activa,
+ * reconectando el socket y notificando el cambio al resto de la app.
+ * @param {Object} params - parámetros de renderizado
+ * @param {Object} params.user - usuario actual (incluye memberships y active_company_id)
+ * @returns {HTMLElement|null} elemento div raíz del switcher, o null si no aplica
+ */
 export function renderCompanySwitcher({ user }) {
   if (!hasMultipleCompanies(user)) return null;
 
@@ -55,12 +63,35 @@ export function renderCompanySwitcher({ user }) {
 
   const root = h('div.relative', {}, [trigger, menu]);
 
+  /**
+   * Indica si el menú de selección de empresa está actualmente abierto.
+   * @returns {boolean} true si el menú está visible
+   */
   function isOpen() { return !menu.classList.contains('hidden'); }
+  /**
+   * Muestra el menú de selección de empresa y actualiza el estado de accesibilidad del trigger.
+   * @returns {void}
+   */
   function openMenu() { menu.classList.remove('hidden'); trigger.setAttribute('aria-expanded', 'true'); }
+  /**
+   * Oculta el menú de selección de empresa y actualiza el estado de accesibilidad del trigger.
+   * @returns {void}
+   */
   function closeMenu() { menu.classList.add('hidden'); trigger.setAttribute('aria-expanded', 'false'); }
+  /**
+   * Alterna la visibilidad del menú de selección de empresa.
+   * @returns {void}
+   */
   function toggleMenu() { isOpen() ? closeMenu() : openMenu(); }
 
   let switching = false;
+  /**
+   * Cambia la empresa activa del usuario: llama a la API, actualiza el estado global,
+   * reconecta el socket y muestra un toast con el resultado. Evita cambios concurrentes
+   * o redundantes (misma empresa ya activa).
+   * @param {string|number} companyId - id de la empresa a activar
+   * @returns {Promise<void>}
+   */
   async function switchTo(companyId) {
     if (switching || String(companyId) === String(user.active_company_id)) return;
     switching = true;
@@ -78,7 +109,16 @@ export function renderCompanySwitcher({ user }) {
     }
   }
 
+  /**
+   * Cierra el menú si un click ocurre fuera de él (listener global en el documento).
+   * @returns {void}
+   */
   const onDocClick = () => { if (isOpen()) closeMenu(); };
+  /**
+   * Cierra el menú al presionar la tecla Escape (listener global en el documento).
+   * @param {KeyboardEvent} e - evento de teclado
+   * @returns {void}
+   */
   const onKey = (e) => { if (e.key === 'Escape' && isOpen()) closeMenu(); };
   document.addEventListener('click', onDocClick, { capture: true });
   document.addEventListener('keydown', onKey);

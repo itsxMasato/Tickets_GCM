@@ -50,12 +50,24 @@ const TABLE_COLUMNS = [
   { key: 'created',  label: 'Creado' },
 ];
 
+/**
+ * Convierte un valor de fecha (string con o sin "T") a un objeto Date, tolerando el formato de fecha del backend.
+ * @param {string} value - valor de fecha a convertir
+ * @returns {Date|null} fecha convertida, o null si no es válida
+ */
 function toDate(value) {
   if (!value) return null;
   const d = new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z');
   return isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * Arma la vista de reportes de tickets: filtros, KPIs, tabla paginada, exportación y gráficos de análisis (estado, prioridad, área, responsables y tendencia diaria).
+ * @param {Object} params - parámetros de la ruta
+ * @param {Object} [params.query] - filtros iniciales tomados de la URL
+ * @param {Object} params.user - usuario autenticado
+ * @returns {Promise<HTMLElement>} nodo raíz de la vista
+ */
 export async function renderReports({ query, user }) {
   const root = h('div.flex.flex-col.gap-4', {});
 
@@ -115,6 +127,10 @@ export async function renderReports({ query, user }) {
   let cachedAll = [];
   let currentPage = 1;
 
+  /**
+   * Inicializa el componente de listado (mountDataList) una sola vez, si todavía no fue creado.
+   * @returns {void}
+   */
   function ensureDataList() {
     if (dataList) return;
     dataList = mountDataList({
@@ -126,6 +142,11 @@ export async function renderReports({ query, user }) {
     });
   }
 
+  /**
+   * Arma el HTML de una fila de la tabla de tickets para el listado de escritorio.
+   * @param {Object} t - ticket a renderizar
+   * @returns {string} HTML de la fila de tabla
+   */
   function tableRow(t) {
     const rowCls = t.priority === 'urgente' ? 'border-l-4 border-l-accent' : '';
     const assigned = t.assigned_to_name
@@ -150,6 +171,11 @@ export async function renderReports({ query, user }) {
     `;
   }
 
+  /**
+   * Arma la tarjeta de un ticket para el listado en formato mobile.
+   * @param {Object} t - ticket a renderizar
+   * @returns {HTMLElement} tarjeta de ticket
+   */
   function renderMobileCard(t) {
     return h('button.card.text-left.flex.flex-col.gap-2.p-3.transition', {
       class: 'hover:border-brand-ocean hover:shadow-card focus:outline-none focus:ring-2 focus:ring-brand-ocean/60',
@@ -179,6 +205,10 @@ export async function renderReports({ query, user }) {
     ]);
   }
 
+  /**
+   * Carga los usuarios activos desde la API y llena el selector de filtro "Responsable".
+   * @returns {Promise<void>}
+   */
   async function populateAssignedUsers() {
     try {
       const users = await api.users.list({ active: true });
@@ -190,6 +220,10 @@ export async function renderReports({ query, user }) {
     }
   }
 
+  /**
+   * Aplica los filtros actuales, los sincroniza con la URL, recarga todos los tickets desde la API y redibuja KPIs, gráficos y tabla.
+   * @returns {Promise<void>}
+   */
   async function render() {
     filters.status = statusSel.value;
     filters.priority = prioSel.value;
@@ -230,6 +264,10 @@ export async function renderReports({ query, user }) {
     }
   }
 
+  /**
+   * Recalcula la página actual y redibuja el listado con la porción de tickets correspondiente, actualizando el paginador.
+   * @returns {void}
+   */
   function renderTablePage() {
     const total = cachedAll.length;
     const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -245,6 +283,11 @@ export async function renderReports({ query, user }) {
     nextBtn.disabled = currentPage >= pageCount;
   }
 
+  /**
+   * Calcula los KPIs y dibuja todos los gráficos (por estado, prioridad, área, responsables y tendencia diaria) a partir de los tickets filtrados.
+   * @param {Array<Object>} tickets - tickets filtrados a analizar
+   * @returns {void}
+   */
   function drawChartsAndKpis(tickets) {
     const total = tickets.length;
     const byStatus = STATUS.map((s) => ({ key: s, c: tickets.filter((t) => t.status === s).length }));
@@ -269,6 +312,11 @@ export async function renderReports({ query, user }) {
     trendWrap.appendChild(dailyTrendChart(tickets));
   }
 
+  /**
+   * Calcula el promedio de días entre creación y cierre de los tickets que ya fueron cerrados.
+   * @param {Array<Object>} tickets - tickets a analizar
+   * @returns {number|null} promedio de días de resolución, o null si no hay tickets cerrados
+   */
   function avgResolutionDays(tickets) {
     const durations = [];
     for (const t of tickets) {
@@ -282,6 +330,18 @@ export async function renderReports({ query, user }) {
     return durations.reduce((a, b) => a + b, 0) / durations.length;
   }
 
+  /**
+   * Arma una tarjeta de indicador (KPI) para el panel de reportes, con tono de color, ícono, badge opcional y animación de pulso.
+   * @param {Object} params - configuración de la tarjeta
+   * @param {string} params.label - etiqueta del indicador
+   * @param {number|string} params.value - valor a mostrar
+   * @param {string} [params.hint] - texto de ayuda debajo del valor
+   * @param {string} [params.tone] - variante visual de color
+   * @param {string} [params.icon] - path del ícono a mostrar
+   * @param {string} [params.badge] - texto de una insignia opcional
+   * @param {boolean} [params.pulse] - si true, anima el ícono con pulso
+   * @returns {HTMLElement} tarjeta de indicador
+   */
   function kpiCard({ label, value, hint = '', tone = '', icon = null, badge = '', pulse = false }) {
     const t = KPI_TONE[tone] || KPI_TONE[''];
     return h('div.card.flex.flex-col.gap-3', { class: t.border }, [
@@ -297,6 +357,15 @@ export async function renderReports({ query, user }) {
     ]);
   }
 
+  /**
+   * Arma un gráfico de barras horizontales con la distribución de tickets según una dimensión (estado, prioridad o área).
+   * @param {string} title - título del gráfico
+   * @param {Array<Object>} data - conteos por clave ({ key, c })
+   * @param {Array<string>} order - orden de las claves a mostrar
+   * @param {Object} labelMap - mapa de clave a etiqueta legible
+   * @param {Object} colorMap - mapa de clave a clase de color de la barra
+   * @returns {HTMLElement} tarjeta con el gráfico de barras
+   */
   function barChart(title, data, order, labelMap, colorMap) {
     const max = Math.max(1, ...data.map((d) => d.c));
     const totalAll = data.reduce((a, d) => a + d.c, 0);
@@ -319,6 +388,11 @@ export async function renderReports({ query, user }) {
     ]);
   }
 
+  /**
+   * Arma el gráfico de carga de trabajo con los responsables que tienen más tickets asignados.
+   * @param {Array<Object>} tickets - tickets a analizar
+   * @returns {HTMLElement} tarjeta con el gráfico de top responsables
+   */
   function topAssigneesChart(tickets) {
     const counts = new Map();
     for (const t of tickets) {
@@ -346,6 +420,11 @@ export async function renderReports({ query, user }) {
     ]);
   }
 
+  /**
+   * Arma el gráfico de barras verticales con la cantidad de tickets creados por día, dentro del rango de fechas filtrado (o los últimos 30 días por defecto, con tope de 60 días).
+   * @param {Array<Object>} tickets - tickets a analizar
+   * @returns {HTMLElement} tarjeta con el gráfico de tendencia diaria
+   */
   function dailyTrendChart(tickets) {
     const MAX_DAYS = 60;
     const today = new Date();
@@ -405,6 +484,11 @@ export async function renderReports({ query, user }) {
     ]);
   }
 
+  /**
+   * Maneja la exportación del reporte: confirma la contraseña del usuario, obtiene todos los tickets filtrados y genera el archivo Excel o PDF.
+   * @param {string} format - formato de exportación ('pdf' o 'excel')
+   * @returns {Promise<void>}
+   */
   async function doExport(format) {
     const formatLabel = format === 'pdf' ? 'PDF' : 'Excel';
     const setBusy = (busy, labelText = 'Exportar') => {

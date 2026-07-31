@@ -1,6 +1,8 @@
 /* Documentado por: Miguel Flores */
 'use strict'
 
+// Agrupa y reexporta todas las EntitySchema de la capa ORM (TypeORM/SQL Server),
+// para registrarlas en el DataSource y para que otros módulos ORM las importen por nombre.
 module.exports = {
   User:                    require('./user.entity'),
   Category:                require('./category.entity'),

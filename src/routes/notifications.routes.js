@@ -5,6 +5,12 @@ const router = express.Router();
 const notificationsService = require('../services/notifications.service');
 const requireAuth = require('../middleware/requireAuth');
 
+/**
+ * GET / - Lista las notificaciones del usuario autenticado, más recientes primero.
+ * Acepta ?limit= (máx 100, default 30) y ?unread=true para filtrar solo no leídas.
+ * Además emite un log de diagnóstico ([diag:bell]) con detalle de la consulta.
+ * @returns {Promise<void>} responde con { notifications }
+ */
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const { limit, unread } = req.query;
@@ -27,6 +33,10 @@ router.get('/', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /unread-count - Devuelve la cantidad de notificaciones no leídas del usuario autenticado.
+ * @returns {Promise<void>} responde con { count }
+ */
 router.get('/unread-count', requireAuth, async (req, res, next) => {
   try {
     const c = await notificationsService.getUnreadCountAsync(req.user.id);
@@ -34,6 +44,11 @@ router.get('/unread-count', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * POST /mark-read - Marca como leídas una o varias notificaciones del usuario autenticado
+ * según lo indicado en el body (ids específicos o todas).
+ * @returns {Promise<void>} responde con el resultado de la operación de marcado
+ */
 router.post('/mark-read', requireAuth, async (req, res, next) => {
   try {
     const result = await notificationsService.markRead(req.user.id, req.body || {});

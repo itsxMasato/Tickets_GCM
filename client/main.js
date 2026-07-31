@@ -45,6 +45,11 @@ const app = document.getElementById('app');
 
 let appShown = false;
 let loginSplashActive = false;
+/**
+ * Revela el contenedor #app y oculta el overlay de carga inicial (y el splash de login si ya no debe
+ * mostrarse), coordinándose con el script inline de index.html que controla la visibilidad del splash.
+ * @returns {void}
+ */
 function showAppWhenReady() {
   if (!appShown) {
     appShown = true;
@@ -71,6 +76,12 @@ function showAppWhenReady() {
   });
 }
 
+/**
+ * Reemplaza el contenido de #app con el nodo de vista dado, ejecutando antes el cleanup de la vista
+ * anterior si lo tiene (_gcmCleanup). Muestra un mensaje de error si el nodo no es válido.
+ * @param {Node} node - nodo de la nueva vista a montar
+ * @returns {void}
+ */
 function mount(node) {
   if (app.firstElementChild && app.firstElementChild._gcmCleanup) {
     try { app.firstElementChild._gcmCleanup(); } catch {}
@@ -88,6 +99,13 @@ function mount(node) {
   app.appendChild(fallback);
 }
 
+/**
+ * Maneja el flujo posterior a un login exitoso: guarda el usuario en el estado, muestra el splash
+ * (mínimo 5s), navega al dashboard, y en paralelo inicializa etiquetas de roles, conecta el socket
+ * y trae las notificaciones iniciales antes de ocultar el splash.
+ * @param {Object} user - usuario autenticado devuelto por el login
+ * @returns {Promise<void>}
+ */
 async function onLogin(user) {
   setState({ user });
   const splashShownAt = Date.now();
@@ -119,6 +137,11 @@ async function onLogin(user) {
   })();
 }
 
+/**
+ * Cierra la sesión: invalida la sesión en el backend, cierra sesión en Firebase, limpia el estado
+ * de la app y navega a /login.
+ * @returns {Promise<void>}
+ */
 async function onLogout() {
   try { await api.auth.logout(); } catch {}
   await signOutFirebase();
@@ -126,6 +149,10 @@ async function onLogout() {
   go('/login');
 }
 
+/**
+ * Refresca el contador de notificaciones no leídas y la lista reciente de notificaciones en el estado global.
+ * @returns {Promise<void>}
+ */
 async function refreshBell() {
   try {
     const [unreadRes, listRes] = await Promise.allSettled([
@@ -138,11 +165,24 @@ async function refreshBell() {
   } catch {}
 }
 
+/**
+ * Emite un CustomEvent 'gcm:realtime' en window con el nombre de evento y los datos dados,
+ * para que las vistas suscritas (vía utils/realtime.js) reaccionen a cambios en tiempo real.
+ * @param {string} event - nombre del evento realtime (ej. 'ticket:created')
+ * @param {Object} detail - datos adicionales del evento
+ * @returns {void}
+ */
 function emitRealtime(event, detail) {
   window.dispatchEvent(new CustomEvent('gcm:realtime', { detail: { event, ...detail } }));
 }
 
 let realtimeWired = false;
+/**
+ * Conecta los eventos de socket.io del backend con el bus de eventos 'gcm:realtime' de la app
+ * (una sola vez por sesión): reenvía eventos de tickets, usuarios, roles, categorías, empresas,
+ * áreas y membresías, y además refresca la campana de notificaciones al recibir una nueva o al reconectar.
+ * @returns {void}
+ */
 function wireRealtime() {
   if (realtimeWired) return;
   realtimeWired = true;
@@ -201,6 +241,13 @@ if (typeof window !== 'undefined') {
   window.addEventListener('gcm:help', gcmHelpHandler);
 }
 
+/**
+ * Envuelve el nodo/resultado de una vista dentro del layout general de la app (sidebar, topbar, etc.),
+ * combinando la función de limpieza propia de la vista con la del layout si ambas existen.
+ * @param {(Node|{view: Node, cleanup?: Function})} view - vista renderizada, o un nodo con _gcmCleanup
+ * @param {Object} user - usuario autenticado actual
+ * @returns {(Node|null)} nodo raíz con el layout aplicado, o null si no hay vista
+ */
 function withLayout(view, user) {
   if (!view)
     return null;
@@ -221,6 +268,12 @@ function withLayout(view, user) {
   return wrapper;
 }
 
+/**
+ * Normaliza una ruta cruda del hash a un path canónico: asegura barra inicial, colapsa barras repetidas,
+ * quita la barra final (salvo raíz) y usa '/login' como valor por defecto.
+ * @param {string} rawPath - path crudo extraído del hash de la URL
+ * @returns {string} path normalizado
+ */
 function normalizePath(rawPath) {
   if (!rawPath) return '/login';
   let normalized = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
@@ -232,6 +285,15 @@ function normalizePath(rawPath) {
   return normalized;
 }
 
+/**
+ * Router principal de la app: normaliza el path, exige sesión autenticada (salvo /login),
+ * aplica restricciones de acceso por rol (rutas exclusivas de SAC y de administrador de plataforma),
+ * empareja el path contra los handlers registrados extrayendo params, y monta la vista resultante
+ * envuelta en el layout.
+ * @param {string} rawPath - path crudo extraído del hash de la URL
+ * @param {Object} query - parámetros de query string ya parseados
+ * @returns {Promise<void>}
+ */
 async function dispatch(rawPath, query) {
   const path = normalizePath(rawPath);
   const user = getState().user;
@@ -296,6 +358,10 @@ async function dispatch(rawPath, query) {
   showAppWhenReady();
 }
 
+/**
+ * Handler del evento 'hashchange': parsea el hash actual en path y query, y despacha la navegación.
+ * @returns {void}
+ */
 function onHashChange() {
   const raw = (location.hash || '#/login').replace(/^#/, '');
   const [path, qs] = raw.split('?');
@@ -312,6 +378,12 @@ window.addEventListener('gcm:unauthorized', () => {
   go('/login');
 });
 
+/**
+ * Punto de arranque de la app: inicializa Firebase en segundo plano, resetea el estado de usuario,
+ * fuerza el hash a #/login si no hay uno, dispara la primera navegación y registra el listener
+ * de cambios de hash.
+ * @returns {Promise<void>}
+ */
 async function bootstrap() {
   void initializeFirebase().catch((error) => {
     console.warn('[firebase] No se pudo inicializar Firestore:', error);

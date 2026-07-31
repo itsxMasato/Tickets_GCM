@@ -3,6 +3,9 @@
 
 const { EntitySchema } = require('typeorm');
 
+// Entidad ORM: tabla `audit_log`. Registro de auditoría de acciones del sistema: quién
+// (user_id), qué tipo de acción (action_type), sobre qué entidad (target_type/target_id/
+// target_code), con descripción y valores antes/después (old_value/new_value) e ip_address.
 module.exports = new EntitySchema({
   name: 'AuditLog',
   tableName: 'audit_log',

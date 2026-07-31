@@ -15,6 +15,12 @@ const firebaseConfig = {
 
 let firebaseInitPromise = null;
 
+/**
+ * Inicializa la app de Firebase (o reutiliza la existente), configura Firestore y Auth con persistencia
+ * de sesión de navegador, y escribe un documento de bootstrap en Firestore para confirmar conectividad.
+ * Reutiliza la misma promesa en llamadas subsiguientes.
+ * @returns {Promise<{app: Object, db: Object, auth: Object}>} referencias inicializadas de Firebase
+ */
 export async function initializeFirebase() {
   if (firebaseInitPromise) return firebaseInitPromise;
 
@@ -38,6 +44,12 @@ export async function initializeFirebase() {
   return firebaseInitPromise;
 }
 
+/**
+ * Inicia sesión en Firebase Auth con email y contraseña, y devuelve el ID token junto al usuario.
+ * @param {string} email - email sintético asociado al usuario en Firebase Auth
+ * @param {string} password - contraseña del usuario
+ * @returns {Promise<{idToken: string, user: Object}>} token de ID y usuario autenticado de Firebase
+ */
 export async function signInWithFirebaseEmail(email, password) {
   const appInfo = await initializeFirebase();
   const auth = appInfo.auth;
@@ -47,6 +59,13 @@ export async function signInWithFirebaseEmail(email, password) {
   return { idToken, user: userCred.user };
 }
 
+/**
+ * Verifica que la contraseña dada corresponda al usuario actualmente logueado. Primero intenta
+ * verificarla contra el backend; si esa vía no está disponible, resuelve el email del usuario y
+ * hace un fallback autenticando directamente contra Firebase Auth.
+ * @param {string} password - contraseña a verificar
+ * @returns {Promise<boolean>} true si la contraseña es correcta (o lanza un error con status 401 si no lo es)
+ */
 export async function verifyCurrentPassword(password) {
   try {
     await api.auth.verifyPassword({ password });
@@ -69,6 +88,10 @@ export async function verifyCurrentPassword(password) {
   }
 }
 
+/**
+ * Cierra la sesión activa de Firebase Auth, si existe. No lanza si falla, solo registra un warning.
+ * @returns {Promise<void>}
+ */
 export async function signOutFirebase() {
   try {
     const appInfo = await initializeFirebase();
