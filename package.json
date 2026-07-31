@@ -17,11 +17,9 @@
     "build:client": "vite build",
     "build": "pnpm build:css && pnpm build:client",
     "start": "node src/server.js",
-    "db:migrate": "node src/db/migrate.js",
     "orm:smoke": "node scripts/orm-smoke.js",
     "smoke:multitenant": "node scripts/smoke-multitenant.js",
-    "firebase-seed": "node scripts/firebase-seed.js",
-    "camaronera:seed": "node scripts/seed-camaronera-data.js"
+    "firebase-seed": "node scripts/firebase-seed.js"
   },
   "keywords": [
     "tickets",
@@ -34,7 +32,6 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "better-sqlite3": "^12.10.1",
     "connect-sqlite3": "^0.9.16",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

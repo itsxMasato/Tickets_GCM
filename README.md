@@ -24,9 +24,10 @@ Sistema interno de tickets con flujo por áreas: **supervisor de campo → SAC �
 - **Auth**: express-session + connect-sqlite3 (store de sesiones en `data/sessions.db`) + bcrypt
 - **Persistencia activa**: **Firestore** (vía `firebase-admin` server-side, `firebase` client-side)
   - Todos los servicios (`auth`, `tickets`, `categories`, `notifications`, `audit`, `stats`, `role-labels`, `roles`, `attachments`) leen y escriben contra Firestore.
-- **Capa legada / en preparación** (convive, no se usa en runtime todavía):
-  - `src/db/` — schema SQLite + seed (referencia; el código de servicios ya no la usa).
-  - `src/orm/` — TypeORM + driver `mssql`, 8 EntitySchema y `DataSource` con inicialización perezosa. Diseñada para la migración SQLite/Firestore → SQL Server.
+- **Capa preparada para SQL Server** (convive, no se usa en runtime todavía):
+  - `src/db/schema.mssql.sql` — DDL de SQL Server listo para ejecutar (13 tablas, ver el propio archivo para las decisiones de diseño).
+  - `src/orm/` — TypeORM, 13 EntitySchema y `DataSource` con inicialización perezosa (fallback a SQLite local solo para desarrollo/smoke tests, vía `DISABLE_MSSQL=true`).
+  - `src/db/seed-multitenant.js` — seed de datos de prueba multiempresa contra la capa ORM.
 - **Uploads**: multer, directorio `uploads/`
 - **Frontend**: Vite 5 + Tailwind 3 + JS (módulos ES, hash router)
 - **Exportes**: SheetJS y jsPDF vía CDN
@@ -37,7 +38,6 @@ Sistema interno de tickets con flujo por áreas: **supervisor de campo → SAC �
 pnpm install
 cp .env.example .env
 # Completar variables de Firebase (ver docs/FIREBASE_SETUP.md) y, opcionalmente, MSSQL_*
-pnpm db:migrate     # solo crea/asegura el schema SQLite de referencia
 pnpm dev:all
 ```
 
@@ -48,7 +48,7 @@ Abrir `http://localhost:5173` (Vite, con proxy al backend en `:3000`).
 ```bash
 PORT=3000
 SESSION_SECRET=<largo-y-aleatorio>
-DB_PATH=./data/tickets.db          # SQLite (referencia)
+DB_PATH=./data/tickets.db          # SQLite local, solo para el fallback de src/orm/ en dev (DISABLE_MSSQL=true)
 UPLOAD_DIR=./uploads
 MAX_UPLOAD_MB=10
 
@@ -101,9 +101,9 @@ Códigos de error uniformes `{ error: { code, message } }`: 400 `VALIDATION_ERRO
 - `pnpm dev:all` — Los tres en paralelo (concurrently).
 - `pnpm build` — Build de CSS + frontend (`public/dist/`).
 - `pnpm start` — Producción (asume `build` previo).
-- `pnpm db:migrate` — Aplica `src/db/schema.sql` + seed en SQLite de referencia.
-- `pnpm orm:smoke` — Smoke test de la conexión TypeORM/SQL Server (las 8 entidades).
-- `pnpm firebase-seed` — Script de seed contra Firestore.
+- `pnpm orm:smoke` — Smoke test de la conexión TypeORM/SQL Server (las 13 entidades).
+- `pnpm smoke:multitenant` — Prueba funcional del modelo multiempresa contra la capa ORM.
+- `pnpm firebase-seed` — Script de seed contra Firestore (crea el admin inicial temporal si la base está vacía).
 
 ## Estructura
 
