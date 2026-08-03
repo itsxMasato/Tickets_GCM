@@ -10,10 +10,10 @@ public/css/styles.css
 # (img/, videos/, css/) y se sirven con express.static.
 public/dist/
 
-# Output del build de Netlify (netlify.toml: publish = "dist"). Netlify lo
-# reconstruye desde cero en cada deploy vía `pnpm run build`; no hace falta
-# commitearlo, y tenerlo commiteado ya había dejado una carpeta dist/dist/
-# duplicada y desactualizada en el repo.
+# Output del build de Vite (`pnpm run build`, ver vite.config.js `outDir`).
+# Render lo reconstruye desde cero en cada deploy; no hace falta commitearlo,
+# y tenerlo commiteado ya había dejado una carpeta dist/dist/ duplicada y
+# desactualizada en el repo.
 /dist/
 *.log
 .DS_Store

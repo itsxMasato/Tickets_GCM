@@ -31,10 +31,6 @@ const sessionStore = new SQLiteStore({
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://ticketsgcm.netlify.app',
-  'https://tickets-gcm.netlify.app',
-  'https://www.ticketsgcm.netlify.app',
-  'https://www.tickets-gcm.netlify.app',
 ];
 const ALLOWED_ORIGINS = Array.from(new Set([
   process.env.ALLOWED_ORIGIN,
@@ -62,12 +58,11 @@ function createApp() {
       if (!origin) return callback(null, true);
       const isAllowed =
         ALLOWED_ORIGINS.includes(origin) ||
-        /\.netlify\.app$/i.test(origin) ||
         /\.onrender\.com$/i.test(origin);
       if (isAllowed) {
         return callback(null, origin);
       }
-      console.warn('[cors] Origen rechazado:', origin, '— no coincide con ALLOWED_ORIGINS ni con *.netlify.app / *.onrender.com');
+      console.warn('[cors] Origen rechazado:', origin, '— no coincide con ALLOWED_ORIGINS ni con *.onrender.com');
       return callback(null, false);
     },
     credentials: true,
@@ -106,10 +101,8 @@ function createApp() {
   }));
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
-  // Build de Vite (mismo directorio que publica Netlify, ver vite.config.js
-  // `outDir` y netlify.toml `publish = "dist"`) — sirve /assets/*.js|css cuando
-  // el servidor Express corre standalone (sin Netlify por delante) y ya se
-  // corrió `pnpm build`.
+  // Build de Vite (ver vite.config.js `outDir`) — sirve /assets/*.js|css una
+  // vez que corrió `pnpm build`; Express sirve el frontend standalone.
   app.use(express.static(path.join(__dirname, '..', 'dist')));
   app.get('/favicon.ico', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'img', 'Logo.png'));

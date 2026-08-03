@@ -36,7 +36,7 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: ALLOWED_ORIGIN
-        value: https://ticketsgcm.netlify.app
+        value: https://tickets-gcm-api.onrender.com
       # Fotos de perfil y adjuntos de tickets viven en el disco persistente
       # montado en /data (ver `disk` arriba) — sin esto, se perderían en
       # cada redeploy igual que antes.
