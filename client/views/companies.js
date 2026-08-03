@@ -3,7 +3,7 @@ import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { toast } from '../utils/toast.js';
 import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
-import { verifyCurrentPassword } from '../firebase.js';
+import { verifyCurrentPassword } from '../auth-reverify.js';
 import { emptyState } from '../components/empty-state.js';
 import { usersCache } from '../utils/users-cache.js';
 import { canManageCompanies, ROLES } from '../utils/permissions.js';
@@ -22,6 +22,9 @@ const CODE_PREFIX_RE = /^[A-Z0-9]{1,6}$/;
 const ROLES_FALLBACK = (Array.isArray(ROLES) && ROLES.length)
   ? ROLES
   : ['supervisor_campo', 'sac', 'admin_area', 'jefe_inmediato'];
+
+// Roles elegibles como encargado de empresa: administrador de área o jefe inmediato.
+const RESPONSIBLE_ROLES = ['admin_area', 'jefe_inmediato'];
 
 let companies = [];
 let selectedId = null;
@@ -442,28 +445,28 @@ export async function renderCompanies({ user }) {
     wireClear(codePrefix, codePrefixErr);
 
     /**
-     * Puebla el select de encargado con los administradores de área activos, preservando el valor actual aunque ya no califique.
+     * Puebla el select de encargado con administradores de área y jefes inmediatos activos, preservando el valor actual aunque ya no califique.
      * @returns {void}
      */
     function populateResponsible() {
-      const users = usersCache.get().filter((u) => u.active && u.role === 'admin_area');
+      const users = usersCache.get().filter((u) => u.active && RESPONSIBLE_ROLES.includes(u.role));
       responsible.innerHTML = '';
       const currentId = company.responsible_user_id != null ? String(company.responsible_user_id) : null;
       const currentInList = currentId != null && users.some((u) => String(u.id) === currentId);
       if (!users.length && !currentId) {
-        responsible.appendChild(h('option', { value: '', disabled: 'disabled' }, 'No hay administradores de área activos'));
+        responsible.appendChild(h('option', { value: '', disabled: 'disabled' }, 'No hay administradores de área ni jefes inmediatos activos'));
         return;
       }
       responsible.appendChild(h('option', { value: '' }, '— Selecciona un encargado —'));
       if (currentId && !currentInList) {
         const currentUser = usersCache.get().find((u) => String(u.id) === currentId);
         const label = currentUser
-          ? `${currentUser.full_name || currentUser.username} (actual — ya no es admin. de área activo)`
+          ? `${currentUser.full_name || currentUser.username} (actual — ya no elegible como encargado)`
           : `Encargado actual #${currentId} (ya no disponible)`;
         responsible.appendChild(h('option', { value: currentId, selected: 'selected' }, label));
       }
       for (const u of users) {
-        const o = h('option', { value: String(u.id) }, `${u.full_name || u.username} (${u.username || u.id})`);
+        const o = h('option', { value: String(u.id) }, `${u.full_name || u.username} (${getRoleLabel(u.role)})`);
         if (currentId === String(u.id)) o.selected = 'selected';
         responsible.appendChild(o);
       }
@@ -506,7 +509,7 @@ export async function renderCompanies({ user }) {
       h('div', {}, [
         h('label.label', {}, 'Encargado *'),
         responsible,
-        h('p.text-xs.text-slate-500.mt-1', {}, 'Solo se listan usuarios activos con rol Administrador de área.'),
+        h('p.text-xs.text-slate-500.mt-1', {}, 'Solo se listan usuarios activos con rol Administrador de área o Jefe inmediato.'),
         responsibleErr,
       ]),
       banner,
@@ -541,6 +544,11 @@ export async function renderCompanies({ user }) {
                 responsible_user_id: responsibleVal,
               });
               toast('Empresa actualizada', 'success');
+              if (selectedId === company.id) selectedId = null;
+              if (activeDetailModal?.cleanup) {
+                activeDetailModal.cleanup();
+                activeDetailModal = null;
+              }
               await reloadAll();
             } catch (e) {
               banner.textContent = e.message;
@@ -869,19 +877,19 @@ function openCompanyModal(company, onSaved) {
   wireClear(location, locationErr); wireClear(responsible, responsibleErr);
 
   /**
-   * Puebla el select de encargado del modal de creación/edición con los administradores de área activos.
+   * Puebla el select de encargado del modal de creación/edición con administradores de área y jefes inmediatos activos.
    * @returns {void}
    */
   function populateResponsibleNew() {
-    const users = usersCache.get().filter((u) => u.active && u.role === 'admin_area');
+    const users = usersCache.get().filter((u) => u.active && RESPONSIBLE_ROLES.includes(u.role));
     responsible.innerHTML = '';
     if (!users.length) {
-      responsible.appendChild(h('option', { value: '', disabled: 'disabled' }, 'No hay administradores de área activos'));
+      responsible.appendChild(h('option', { value: '', disabled: 'disabled' }, 'No hay administradores de área ni jefes inmediatos activos'));
       return;
     }
     responsible.appendChild(h('option', { value: '' }, '— Selecciona un encargado —'));
     for (const u of users) {
-      const o = h('option', { value: String(u.id) }, `${u.full_name || u.username} (${u.username || u.id})`);
+      const o = h('option', { value: String(u.id) }, `${u.full_name || u.username} (${getRoleLabel(u.role)})`);
       if (company?.responsible_user_id && String(company?.responsible_user_id) === String(u.id)) o.selected = 'selected';
       responsible.appendChild(o);
     }
@@ -902,7 +910,7 @@ function openCompanyModal(company, onSaved) {
       h('p.text-xs.text-slate-500.mt-1', {}, 'Define la nomenclatura de los tickets de esta empresa, ej. N7 → N7-000001. Solo letras/números, máx. 6 caracteres.'),
       codePrefixErr,
     ]),
-h('div', {}, [h('label.label', {}, 'Encargado *'), responsible, h('p.text-xs.text-slate-500.mt-1', {}, 'Solo se listan usuarios activos con rol Administrador de área.'), responsibleErr]),
+h('div', {}, [h('label.label', {}, 'Encargado *'), responsible, h('p.text-xs.text-slate-500.mt-1', {}, 'Solo se listan usuarios activos con rol Administrador de área o Jefe inmediato.'), responsibleErr]),
     banner,
   ]);
 

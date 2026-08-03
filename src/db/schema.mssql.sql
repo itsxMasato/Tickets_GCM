@@ -129,10 +129,14 @@ CREATE TABLE dbo.users (
   created_at          DATETIME2       NOT NULL CONSTRAINT DF_users_created_at DEFAULT (SYSUTCDATETIME()),
   CONSTRAINT PK_users PRIMARY KEY CLUSTERED (id),
   CONSTRAINT UQ_users_username UNIQUE (username),
-  CONSTRAINT UQ_users_email UNIQUE (email),
   CONSTRAINT CK_users_role CHECK (role IN ('supervisor_campo','sac','admin_area','jefe_inmediato')),
   CONSTRAINT CK_users_area CHECK (area IS NULL OR area IN ('operaciones','logistica','mantenimiento','sistemas','otro'))
 );
+GO
+-- email es NULL-able (no todos los usuarios tienen uno); un UNIQUE CONSTRAINT normal en SQL
+-- Server trata múltiples NULL como valores duplicados (a diferencia de Postgres), lo que
+-- rompería con más de un usuario sin email. Un índice único filtrado ignora los NULL.
+CREATE UNIQUE INDEX UQ_users_email ON dbo.users(email) WHERE email IS NOT NULL;
 GO
 
 -- ────────────────────────────────────────────────────────────────────────
@@ -155,10 +159,13 @@ CREATE TABLE dbo.companies (
   updated_at            DATETIME2       NOT NULL CONSTRAINT DF_companies_updated_at DEFAULT (SYSUTCDATETIME()),
   CONSTRAINT PK_companies PRIMARY KEY CLUSTERED (id),
   CONSTRAINT UQ_companies_slug UNIQUE (slug),
-  CONSTRAINT UQ_companies_code_prefix UNIQUE (code_prefix),
   CONSTRAINT FK_companies_responsible_user FOREIGN KEY (responsible_user_id)
     REFERENCES dbo.users(id) ON DELETE NO ACTION
 );
+GO
+-- code_prefix es NULL-able (no todas las empresas generan código de ticket con prefijo);
+-- mismo motivo que UQ_users_email arriba: índice único filtrado en vez de UNIQUE CONSTRAINT.
+CREATE UNIQUE INDEX UQ_companies_code_prefix ON dbo.companies(code_prefix) WHERE code_prefix IS NOT NULL;
 GO
 
 -- ────────────────────────────────────────────────────────────────────────
@@ -201,12 +208,18 @@ CREATE INDEX IX_ucm_company_active ON dbo.user_company_memberships(company_id, a
 GO
 
 -- ────────────────────────────────────────────────────────────────────────
--- role_permissions — overrides de los 6 permisos configurables, por
--- empresa y por rol (ver roles.service.js#PERMISSION_KEYS)
+-- role_permissions — overrides de los 6 permisos configurables, por rol
+-- (ver roles.service.js#PERMISSION_KEYS). Son globales a la plataforma hoy
+-- (igual que en Firestore, un doc por rol sin empresa) — company_id queda
+-- NULL-able y sin usar, reservado para si algún día se implementan permisos
+-- por empresa (la UNIQUE constraint de abajo ya funciona igual con
+-- company_id siempre NULL: SQL Server trata los NULL como iguales entre sí
+-- a los efectos de una UNIQUE constraint, así que sigue habiendo como
+-- máximo una fila por (role, permission_key)).
 -- ────────────────────────────────────────────────────────────────────────
 CREATE TABLE dbo.role_permissions (
   id              INT IDENTITY(1,1) NOT NULL,
-  company_id      INT             NOT NULL,
+  company_id      INT             NULL,
   role            NVARCHAR(30)    NOT NULL,
   permission_key  NVARCHAR(50)    NOT NULL,
   [value]         BIT             NOT NULL,
@@ -423,6 +436,9 @@ CREATE TABLE dbo.calendar_events (
   end_at      DATETIME2       NOT NULL,
   color       NVARCHAR(20)    NULL,
   type        NVARCHAR(20)    NOT NULL CONSTRAINT DF_calendar_events_type DEFAULT ('personal'),
+  -- active: borrado lógico (mismo patrón que users/companies/categories). deleteEvent()
+  -- en calendar.service.js lo pone en 0 en vez de borrar la fila; listEvents() lo filtra.
+  active      BIT             NOT NULL CONSTRAINT DF_calendar_events_active DEFAULT (1),
   created_at  DATETIME2       NOT NULL CONSTRAINT DF_calendar_events_created_at DEFAULT (SYSUTCDATETIME()),
   updated_at  DATETIME2       NOT NULL CONSTRAINT DF_calendar_events_updated_at DEFAULT (SYSUTCDATETIME()),
   CONSTRAINT PK_calendar_events PRIMARY KEY CLUSTERED (id),

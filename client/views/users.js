@@ -4,7 +4,7 @@ import { api, assetUrl } from '../api.js';
 import { go } from '../router.js';
 import { toast } from '../utils/toast.js';
 import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
-import { verifyCurrentPassword } from '../firebase.js';
+import { verifyCurrentPassword } from '../auth-reverify.js';
 import { AREA_LABEL, relativeFromNow, formatDateTime } from '../utils/format.js';
 import { getRoleLabel } from '../utils/role-labels.js';
 import { ROLES, AREAS } from '../utils/permissions.js';

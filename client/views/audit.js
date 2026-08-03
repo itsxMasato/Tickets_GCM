@@ -5,7 +5,7 @@ import { formatDateTime, fileSize, STATUS_LABEL, PRIORITY_LABEL, ROLE_LABEL, ARE
 import { emptyState } from '../components/empty-state.js';
 import { exportButton } from '../components/export-button.js';
 import { passwordConfirmModal, openModal } from '../components/modal.js';
-import { verifyCurrentPassword } from '../firebase.js';
+import { verifyCurrentPassword } from '../auth-reverify.js';
 import { exportToExcel, exportListToPDF } from '../utils/exports.js';
 import { toast } from '../utils/toast.js';
 import { setFilterInUrl, clearFiltersInUrl } from '../utils/url-filters.js';

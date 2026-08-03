@@ -1,69 +1,53 @@
 #!/usr/bin/env node
 /* Documentado por: Miguel Flores */
 'use strict'
-const firebaseAdmin = require('../src/firebaseAdmin');
+const path = require('path');
+try { require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') }); } catch (_) { }
+const orm = require('../src/orm');
 const { hashPassword } = require('../src/utils/password');
+const { ROLE_VALUES } = require('../src/orm/enums');
 
 async function run() {
   const argv = process.argv.slice(2);
   if (argv.length < 3) {
     console.error('Usage: node scripts/create-user.js <username> <email> <password> [role]');
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
-  const [username, email, password, role = 'admin'] = argv;
-  try {
-    firebaseAdmin.init();
-    if (!firebaseAdmin.isInitialized()) {
-      console.error('[create-user] Firebase Admin no inicializado:', firebaseAdmin.getInitializationError());
-      process.exit(2);
-    }
-    const db = firebaseAdmin.getFirestoreInstance();
-
-    const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
-    const normalizedUsername = username ? String(username).trim() : null;
-
-    const usersRef = db.collection('users');
-    const q1 = normalizedEmail ? usersRef.where('email_lower', '==', normalizedEmail).limit(1).get() : Promise.resolve({ empty: true });
-    const q2 = normalizedUsername ? usersRef.where('username_lower', '==', normalizedUsername.toLowerCase()).limit(1).get() : Promise.resolve({ empty: true });
-    const [snapEmail, snapUser] = await Promise.all([q1, q2]);
-    if ((snapEmail && !snapEmail.empty) || (snapUser && !snapUser.empty)) {
-      console.log('[create-user] Ya existe un usuario con ese email o nombre de usuario. No se creará.');
-      process.exit(0);
-    }
-
-    const hash = await hashPassword(password);
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-
-    const countersRef = db.collection('metadata').doc('counters');
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(countersRef);
-      const data = snap.exists ? snap.data() : {};
-      const current = Number(data.users) || 1;
-      const next = current + 1;
-      tx.set(countersRef, { users: next }, { merge: true });
-      const id = String(next);
-      const userDocRef = usersRef.doc(id);
-      const payload = {
-        username: normalizedUsername,
-        username_lower: normalizedUsername.toLowerCase(),
-        password_hash: hash,
-        full_name: 'SAC',
-        role: role,
-        area: null,
-        active: 1,
-        created_at: now,
-        email: email,
-        email_lower: normalizedEmail,
-      };
-      tx.set(userDocRef, payload);
-      console.log(`[create-user] Usuario creado: id=${id} username=${normalizedUsername} email=${normalizedEmail}`);
-    });
-    process.exit(0);
-  } catch (err) {
-    console.error('[create-user] Error:', err && err.stack ? err.stack : err);
-    process.exit(1);
+  const [username, email, password, role = 'sac'] = argv;
+  if (!ROLE_VALUES.includes(role)) {
+    console.error(`[create-user] Rol inválido: ${role}. Válidos: ${ROLE_VALUES.join(', ')}`);
+    process.exitCode = 2;
+    return;
   }
+
+  const normalizedEmail = email ? String(email).trim() : null;
+  const normalizedUsername = username ? String(username).trim() : null;
+
+  const repo = await orm.getRepository(orm.User);
+  const existing = await repo.findOneBy({ username: normalizedUsername });
+  const existingByEmail = normalizedEmail ? await repo.findOneBy({ email: normalizedEmail }) : null;
+  if (existing || existingByEmail) {
+    console.log('[create-user] Ya existe un usuario con ese email o nombre de usuario. No se creará.');
+    return;
+  }
+
+  const hash = await hashPassword(password);
+  const created = await repo.save({
+    username: normalizedUsername,
+    password_hash: hash,
+    full_name: 'SAC',
+    role,
+    area: null,
+    email: normalizedEmail,
+    active: true,
+  });
+  console.log(`[create-user] Usuario creado: id=${created.id} username=${normalizedUsername} email=${normalizedEmail}`);
 }
 
-run();
-
+run()
+  .catch((err) => {
+    console.error('[create-user] Error:', err && err.stack ? err.stack : err);
+    process.exitCode = 1;
+  })
+  .finally(() => orm.closeORM().catch(() => {}));

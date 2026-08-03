@@ -7,7 +7,7 @@ import { statusBadge, priorityBadge } from '../components/badge.js';
 import { renderChat } from '../components/chat.js';
 import { chatComposer } from '../components/chat-composer.js';
 import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
-import { verifyCurrentPassword } from '../firebase.js';
+import { verifyCurrentPassword } from '../auth-reverify.js';
 import { canAssign, canEditMeta, canComment, canUpload, canSeeTicket, nextStates } from '../utils/permissions.js';
 import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, formatDateTime, relativeFromNow } from '../utils/format.js';
 import { getRoleLabel } from '../utils/role-labels.js';

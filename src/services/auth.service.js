@@ -1,9 +1,7 @@
 /* Documentado por: Miguel Flores */
 'use strict'
-const firestoreData = require('../firestoreData');
+const orm = require('../orm');
 const { verifyPassword, hashPassword } = require('../utils/password');
-const { syncFirebaseAuthUser } = require('../utils/firebase-auth-sync');
-const { deriveAuthEmail } = require('../utils/deriveAuthEmail');
 const auditService = require('./audit.service');
 const {
   validationError,
@@ -11,10 +9,9 @@ const {
   conflictError,
   forbiddenError,
   requireString,
-  optionalString,
-  isOneOf,
 } = require('../utils/validators');
 const { ROLE_VALUES } = require('../orm/enums');
+const { scopeUsersByCompany } = require('../utils/scope');
 const membershipsService = require('./memberships.service');
 
 const LIMITS = {
@@ -44,23 +41,14 @@ function emitUser(event, user, opts = {}) {
 }
 
 /**
- * Determina si un valor de estado de usuario representa "activo", interpretando las distintas formas en que puede venir almacenado (0, false, '0', 'false' se consideran inactivo).
- * @param {*} value - valor crudo del campo active
- * @returns {Boolean} true si el usuario está activo
- */
-function isUserActive(value) {
-  return value === 0 || value === false || value === '0' || value === 'false' ? false : true;
-}
-
-/**
- * Convierte un registro de usuario de Firestore al formato plano expuesto por la API, normalizando el flag de administrador de plataforma.
- * @param {Object} row - registro crudo de usuario
- * @returns {Object|null} usuario serializado, o null si no se recibió registro
+ * Convierte una fila de usuario de la base al formato plano expuesto por la API.
+ * @param {Object} row - fila cruda de usuario
+ * @returns {Object|null} usuario serializado, o null si no se recibió fila
  */
 function serialize(row) {
   if (!row)
     return null;
-  const isPlatformAdmin = row.isPlatformAdmin === true || row.is_platform_admin === true || row.is_platform_admin === 1 || row.isPlatformAdmin === 1 || row.isPlatformAdmin === '1' || row.is_platform_admin === '1';
+  const isPlatformAdmin = !!row.is_platform_admin;
   return {
     id: row.id,
     username: row.username,
@@ -69,7 +57,7 @@ function serialize(row) {
     area: row.area || null,
     email: row.email || null,
     avatar_url: row.avatar_url || null,
-    active: isUserActive(row.active) ? 1 : 0,
+    active: row.active ? 1 : 0,
     is_platform_admin: isPlatformAdmin,
     isPlatformAdmin: isPlatformAdmin,
     created_at: row.created_at instanceof Date
@@ -84,7 +72,7 @@ function serialize(row) {
  * @returns {Object} usuario saneado
  */
 function sanitize(user) {
-  const isPlatformAdmin = user && (user.isPlatformAdmin === true || user.is_platform_admin === true || user.is_platform_admin === 1 || user.isPlatformAdmin === 1 || user.isPlatformAdmin === '1' || user.is_platform_admin === '1');
+  const isPlatformAdmin = !!(user && user.is_platform_admin);
   return {
     id: user.id,
     username: user.username,
@@ -93,10 +81,35 @@ function sanitize(user) {
     area: user.area || null,
     email: user.email || null,
     avatar_url: user.avatar_url || null,
-    active: isUserActive(user.active),
+    active: !!user.active,
     is_platform_admin: isPlatformAdmin,
     isPlatformAdmin: isPlatformAdmin,
   };
+}
+
+/**
+ * Busca un usuario por username o email (case-insensitive por collation de SQL Server),
+ * probando en orden: username exacto, email exacto, y si el identificador tiene formato
+ * de email, el username de la parte local (antes del @) como último recurso.
+ * @param {String} identifier - username o email ingresado por el usuario
+ * @returns {Promise<Object|null>} usuario encontrado, o null
+ */
+async function findUserByIdentifier(identifier) {
+  const normalized = typeof identifier === 'string' ? identifier.trim() : '';
+  if (!normalized) return null;
+  const repo = await orm.getRepository(orm.User);
+
+  let user = await repo.findOneBy({ username: normalized });
+  if (user) return user;
+
+  user = await repo.findOneBy({ email: normalized });
+  if (user) return user;
+
+  if (normalized.includes('@')) {
+    const local = normalized.split('@')[0];
+    user = await repo.findOneBy({ username: local });
+  }
+  return user;
 }
 
 /**
@@ -110,7 +123,7 @@ async function login(username, password) {
     throw validationError('Debe ingresar usuario y contraseña.');
   }
 
-  const user = await firestoreData.getUserByIdentifier(username);
+  const user = await findUserByIdentifier(username);
   if (!user) throw validationError('Credenciales inválidas.');
   if (!user.active) throw validationError('Usuario inactivo. Contacte al administrador.');
 
@@ -130,7 +143,8 @@ async function verifyPasswordForUser(userId, password) {
   if (!password) {
     throw validationError('Debe ingresar su contraseña.');
   }
-  const user = await firestoreData.getUserById(userId);
+  const repo = await orm.getRepository(orm.User);
+  const user = await repo.findOneBy({ id: Number(userId) });
   if (!user) {
     throw validationError('Usuario no encontrado.');
   }
@@ -147,13 +161,16 @@ async function verifyPasswordForUser(userId, password) {
  * @returns {Promise<Object>} usuario serializado
  */
 async function getById(id) {
-  const user = await firestoreData.getUserById(id);
+  const repo = await orm.getRepository(orm.User);
+  const user = await repo.findOneBy({ id: Number(id) });
   if (!user) throw notFoundError('Usuario no encontrado.');
   return serialize(user);
 }
 
 /**
- * Crea un nuevo usuario validando todos sus campos, sincroniza la cuenta en Firebase Auth, opcionalmente crea su membresía de empresa, gestiona la transferencia del rol de administrador inicial (bootstrap) si corresponde, y notifica la creación en tiempo real.
+ * Crea un nuevo usuario validando todos sus campos, opcionalmente crea su membresía de
+ * empresa, gestiona la transferencia del rol de administrador inicial (bootstrap) si
+ * corresponde, y notifica la creación en tiempo real.
  * @param {Object} params - datos del nuevo usuario
  * @param {String} params.username - nombre de usuario
  * @param {String} params.password - contraseña en texto plano
@@ -198,61 +215,48 @@ async function createUser({ username, password, full_name, role, area, email, co
     throw validationError(`La contraseña no puede superar los ${LIMITS.password.max} caracteres.`);
   }
 
+  const repo = await orm.getRepository(orm.User);
+  const existing = await repo.findOneBy({ username: cleanUsername });
+  if (existing || (cleanEmail && await repo.findOneBy({ email: cleanEmail }))) {
+    throw conflictError('El nombre de usuario ya existe.');
+  }
+
   const hash = await hashPassword(password);
+  let created;
   try {
-    const created = await firestoreData.createUser({
+    created = await repo.save({
       username: cleanUsername,
       password_hash: hash,
       full_name: cleanFullName,
       role,
       area: cleanArea,
       email: cleanEmail,
+      active: true,
     });
-
-    await syncFirebaseAuthUser({
-      authClient: require('../firebaseAdmin').getAuth(),
-      user: {
-        username: cleanUsername,
-        full_name: cleanFullName,
-        email: deriveAuthEmail({ username: cleanUsername, email: cleanEmail }),
-      },
-      password,
-    }).catch((syncErr) => {
-      console.warn('[auth.service] firebase auth sync failed on create', syncErr.stack || syncErr.message);
-      auditService.logAsync({
-        user_id: null,
-        action_type: 'firebase_auth_sync_failed',
-        target_type: 'user',
-        target_id: created.id,
-        target_code: cleanUsername,
-        description: `No se pudo sincronizar la cuenta de Firebase Auth de "${cleanUsername}" al crearla: ${syncErr.message}`,
-        new_value: { username: cleanUsername, context: 'create' },
-      }).catch(() => {});
-    });
-
-    let row = await getById(created.id);
-    if (company_id) {
-      try {
-        await membershipsService.create(created.id, { company_id: Number(company_id), role }, requester, { allowSACCreate: true });
-      } catch (memErr) {
-        console.warn('[auth.service] membership creation failed during user create:', memErr.stack || memErr.message);
-        throw memErr;
-      }
-    }
-
-    row = await transferBootstrapAdminIfNeeded(requester, row);
-    emitUser('user:created', row);
-    return row;
   } catch (err) {
-    if (err.code === 'CONFLICT') {
+    if (err && (err.number === 2627 || err.number === 2601)) {
       throw conflictError('El nombre de usuario ya existe.');
     }
     throw err;
   }
+
+  let row = await getById(created.id);
+  if (company_id) {
+    try {
+      await membershipsService.create(created.id, { company_id: Number(company_id), role }, requester, { allowSACCreate: true });
+    } catch (memErr) {
+      console.warn('[auth.service] membership creation failed during user create:', memErr.stack || memErr.message);
+      throw memErr;
+    }
+  }
+
+  row = await transferBootstrapAdminIfNeeded(requester, row);
+  emitUser('user:created', row);
+  return row;
 }
 
 /**
- * Si el usuario que crea el nuevo registro es la cuenta de administrador inicial (bootstrap) y el usuario creado es SAC, transfiere el rol de administrador de plataforma al nuevo usuario y elimina la cuenta bootstrap (incluida su cuenta de Firebase Auth). Registra la operación en auditoría.
+ * Si el usuario que crea el nuevo registro es la cuenta de administrador inicial (bootstrap) y el usuario creado es SAC, transfiere el rol de administrador de plataforma al nuevo usuario y elimina la cuenta bootstrap. Registra la operación en auditoría.
  * @param {Object} requester - usuario que realiza la creación
  * @param {Object} createdUser - usuario recién creado
  * @returns {Promise<Object>} usuario creado, posiblemente actualizado tras la transferencia
@@ -260,23 +264,13 @@ async function createUser({ username, password, full_name, role, area, email, co
 async function transferBootstrapAdminIfNeeded(requester, createdUser) {
   if (!requester || createdUser.role !== 'sac') return createdUser;
 
-  const requesterFull = await firestoreData.getUserById(requester.id);
+  const repo = await orm.getRepository(orm.User);
+  const requesterFull = await repo.findOneBy({ id: Number(requester.id) });
   if (!requesterFull || !requesterFull.is_bootstrap) return createdUser;
 
   try {
-    await firestoreData.updateUser(createdUser.id, { is_platform_admin: true });
-
-    const email = deriveAuthEmail(requesterFull);
-    if (email) {
-      const auth = require('../firebaseAdmin').getAuth();
-      try {
-        const authUser = await auth.getUserByEmail(email);
-        await auth.deleteUser(authUser.uid);
-      } catch (e) {
-        if (e.code !== 'auth/user-not-found') throw e;
-      }
-    }
-    await firestoreData.deleteUser(requesterFull.id);
+    await repo.update({ id: createdUser.id }, { is_platform_admin: true });
+    await repo.delete({ id: requesterFull.id });
 
     auditService.logAsync({
       user_id: null,
@@ -295,7 +289,7 @@ async function transferBootstrapAdminIfNeeded(requester, createdUser) {
 }
 
 /**
- * Actualiza los datos de un usuario aplicando reglas de negocio: impide auto-desactivación y auto-cambio de rol, protege al único SAC y al único administrador de plataforma, gestiona permisos de administrador de plataforma, sincroniza cambios con Firebase Auth y notifica el cambio (o la desactivación) en tiempo real.
+ * Actualiza los datos de un usuario aplicando reglas de negocio: impide auto-desactivación y auto-cambio de rol, protege al único SAC y al único administrador de plataforma, gestiona permisos de administrador de plataforma y notifica el cambio (o la desactivación) en tiempo real.
  * @param {String|Number} id - id del usuario a actualizar
  * @param {Object} [changes] - campos a actualizar (full_name, role, area, active, password, email, username, company_id, is_platform_admin)
  * @param {Object} currentUser - usuario que realiza la actualización
@@ -315,28 +309,27 @@ async function updateUser(
     }
   }
 
+  const repo = await orm.getRepository(orm.User);
   const before = await getById(id);
 
   const patch = {};
-    if ((active !== undefined && (active === 0 || active === false)) || (role !== undefined && role !== 'sac')) {
-      const target = await getById(id);
-      if (target.role === 'sac') {
-        const sacUsers = await firestoreData.listUsers({ role: 'sac', active: true });
-        if (Array.isArray(sacUsers) && sacUsers.length <= 1) {
-          throw forbiddenError('No se puede desactivar o cambiar el rol del único usuario con rol SAC. Crea otro SAC activo primero.');
-        }
+  if ((active !== undefined && (active === 0 || active === false)) || (role !== undefined && role !== 'sac')) {
+    if (before.role === 'sac') {
+      const sacUsers = await repo.find({ where: { role: 'sac', active: true } });
+      if (Array.isArray(sacUsers) && sacUsers.length <= 1) {
+        throw forbiddenError('No se puede desactivar o cambiar el rol del único usuario con rol SAC. Crea otro SAC activo primero.');
       }
     }
-    if (active !== undefined && (active === 0 || active === false)) {
-      const target = await getById(id);
-      if (target.is_platform_admin) {
-        const activeUsers = await firestoreData.listUsers({ active: true });
-        const otherAdmins = (activeUsers || []).filter((u) => u.is_platform_admin && Number(u.id) !== Number(id));
-        if (otherAdmins.length === 0) {
-          throw forbiddenError('No se puede desactivar al único administrador de plataforma. Asigná otro primero.');
-        }
+  }
+  if (active !== undefined && (active === 0 || active === false)) {
+    if (before.is_platform_admin) {
+      const activeAdmins = await repo.count({ where: { active: true, is_platform_admin: true } });
+      const otherAdmins = activeAdmins - (before.id === Number(id) ? 1 : 0);
+      if (otherAdmins <= 0) {
+        throw forbiddenError('No se puede desactivar al único administrador de plataforma. Asigná otro primero.');
       }
     }
+  }
 
   if (is_platform_admin !== undefined) {
     if (!currentUser || !currentUser.isPlatformAdmin) {
@@ -344,9 +337,8 @@ async function updateUser(
     }
     const wantsPlatformAdmin = !!is_platform_admin;
     if (!wantsPlatformAdmin && before.is_platform_admin) {
-      const activeUsers = await firestoreData.listUsers({ active: true });
-      const otherAdmins = (activeUsers || []).filter((u) => u.is_platform_admin && Number(u.id) !== Number(id));
-      if (otherAdmins.length === 0) {
+      const activeAdmins = await repo.count({ where: { active: true, is_platform_admin: true } });
+      if (activeAdmins - 1 <= 0) {
         throw forbiddenError('No se puede quitar el permiso al único administrador de plataforma. Asigná otro primero.');
       }
     }
@@ -364,6 +356,8 @@ async function updateUser(
     if (!LIMITS.username.pattern.test(clean)) {
       throw validationError('El usuario sólo puede contener letras, dígitos, puntos, guiones y guiones bajos.');
     }
+    const conflict = await repo.findOneBy({ username: clean });
+    if (conflict && conflict.id !== Number(id)) throw conflictError('El nombre de usuario ya existe.');
     patch.username = clean;
   }
   if (role !== undefined) {
@@ -387,16 +381,19 @@ async function updateUser(
     } else if (typeof email !== 'string' || email.length > LIMITS.email.max || !LIMITS.email.pattern.test(email)) {
       throw validationError('Email inválido.');
     } else {
-      patch.email = email.trim();
+      const clean = email.trim();
+      const conflict = await repo.findOneBy({ email: clean });
+      if (conflict && conflict.id !== Number(id)) throw conflictError('Ese correo ya está en uso por otro usuario.');
+      patch.email = clean;
     }
   }
   if (active !== undefined) {
     if (typeof active === 'boolean') {
-      patch.active = active ? 1 : 0;
+      patch.active = active;
     } else if (active === 1 || active === '1' || active === 'true') {
-      patch.active = 1;
+      patch.active = true;
     } else if (active === 0 || active === '0' || active === 'false') {
-      patch.active = 0;
+      patch.active = false;
     } else {
       throw validationError('Estado (active) inválido.');
     }
@@ -415,16 +412,12 @@ async function updateUser(
     return before;
   }
 
-  let row = before;
   if (Object.keys(patch).length > 0) {
     try {
-      row = await firestoreData.updateUser(id, patch);
+      await repo.update({ id: Number(id) }, patch);
     } catch (err) {
-      if (err.code === 'NOT_FOUND') {
-        throw notFoundError('Usuario no encontrado.');
-      }
-      if (err.code === 'CONFLICT') {
-        throw conflictError(err.message);
+      if (err && (err.number === 2627 || err.number === 2601)) {
+        throw conflictError('El nombre de usuario o email ya está en uso.');
       }
       throw err;
     }
@@ -446,36 +439,6 @@ async function updateUser(
     }
   }
 
-  const shouldSyncFirebase = password || patch.email !== undefined || patch.username !== undefined || patch.full_name !== undefined;
-  if (shouldSyncFirebase) {
-    const newEmail = deriveAuthEmail({
-      username: patch.username !== undefined ? patch.username : before.username,
-      email: patch.email !== undefined ? patch.email : before.email,
-    });
-    const currentEmail = deriveAuthEmail({ username: before.username, email: before.email });
-
-    await syncFirebaseAuthUser({
-      authClient: require('../firebaseAdmin').getAuth(),
-      user: {
-        username: patch.username !== undefined ? patch.username : before.username,
-        full_name: patch.full_name !== undefined ? patch.full_name : before.full_name,
-        email: newEmail,
-      },
-      currentEmail,
-      password,
-    }).catch((syncErr) => {
-      console.warn('[auth.service] firebase auth sync failed on update', syncErr.stack || syncErr.message);
-      auditService.logAsync({
-        user_id: null,
-        action_type: 'firebase_auth_sync_failed',
-        target_type: 'user',
-        target_id: id,
-        target_code: patch.username !== undefined ? patch.username : before.username,
-        description: `No se pudo sincronizar la cuenta de Firebase Auth de "${before.username}" al actualizarla: ${syncErr.message}`,
-        new_value: { fields_changed: Object.keys(patch), context: 'update' },
-      }).catch(() => {});
-    });
-  }
   const after = await getById(id);
 
   if (before.active && !after.active) {
@@ -498,8 +461,9 @@ async function updateUser(
  */
 async function updateAvatar(userId, avatarUrl) {
   const before = await getById(userId);
-  const row = await firestoreData.updateUser(userId, { avatar_url: avatarUrl });
-  const after = serialize(row);
+  const repo = await orm.getRepository(orm.User);
+  await repo.update({ id: Number(userId) }, { avatar_url: avatarUrl });
+  const after = await getById(userId);
   emitUser('user:updated', after, { changes: { avatar_url: { from: before.avatar_url ?? null, to: after.avatar_url } } });
   return after;
 }
@@ -511,9 +475,19 @@ async function updateAvatar(userId, avatarUrl) {
  * @returns {Promise<Array>} usuarios serializados
  */
 async function listUsers({ role, active, area } = {}, requester = null) {
-  const rows = await firestoreData.listUsers({ role, active, area }, requester);
-  return rows.map(serialize);
+  const repo = await orm.getRepository(orm.User);
+  const where = {};
+  if (role) where.role = role;
+  if (active !== undefined) where.active = !!active;
+  if (area) where.area = area;
+  const rows = await repo.find({ where });
+
+  if (!requester || requester.isPlatformAdmin || requester.role === 'sac' || requester.activeCompanyId == null) {
+    return rows.map(serialize);
+  }
+  const membershipRepo = await orm.getRepository(orm.UserCompanyMembership);
+  const memberships = await membershipRepo.find();
+  return scopeUsersByCompany(rows, memberships, requester).map(serialize);
 }
 
 module.exports = { login, verifyPasswordForUser, getById, sanitize, createUser, updateUser, updateAvatar, listUsers };
-

@@ -39,6 +39,7 @@ module.exports = {
   Company: Entities.Company,
   UserCompanyMembership:   Entities.UserCompanyMembership,
   RolePermission:          Entities.RolePermission,
+  RoleLabel:               Entities.RoleLabel,
 
   RoleEnum, ROLE_VALUES,
   TicketStatusEnum, TICKET_STATUS_VALUES,

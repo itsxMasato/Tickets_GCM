@@ -1,10 +1,9 @@
 /* Documentado por: Miguel Flores */
 'use strict'
 
-const firestore = require('../firestore');
-const firestoreData = require('../firestoreData');
+const orm = require('../orm');
+const ticketsService = require('./tickets.service');
 const auditService = require('./audit.service');
-const { toId, getTicketById } = firestoreData;
 const {
   validationError, notFoundError, forbiddenError,
   requireString, optionalString, optionalEnum,
@@ -12,15 +11,14 @@ const {
 const { CALENDAR_EVENT_TYPE_VALUES, CALENDAR_EVENT_COLORS } = require('../orm/enums');
 
 /**
- * Convierte un valor de fecha a formato SQL ("YYYY-MM-DD HH:mm:ss"), devolviendo null si es inválido o vacío.
- * @param {Date|String|Number} value - fecha a convertir
- * @returns {String|null} fecha en formato SQL, o null si no es válida
+ * Convierte un id a Number cuando corresponde, o lo deja como está.
+ * @param {String|Number} id - id a normalizar
+ * @returns {Number|String|null} id normalizado
  */
-function toSqlDate(value) {
-  if (!value) return null;
-  const d = value instanceof Date ? value : new Date(value);
-  if (isNaN(d.getTime())) return null;
-  return d.toISOString().replace('T', ' ').slice(0, 19);
+function toId(id) {
+  if (id === undefined || id === null) return null;
+  const n = Number(id);
+  return Number.isFinite(n) && String(id).trim() !== '' ? n : id;
 }
 
 /**
@@ -31,9 +29,9 @@ function toSqlDate(value) {
 function decorate(row) {
   if (!row) return null;
   return {
-    id: toId(row.id),
-    user_id: toId(row.user_id),
-    ticket_id: row.ticket_id != null ? toId(row.ticket_id) : null,
+    id: row.id,
+    user_id: row.user_id,
+    ticket_id: row.ticket_id ?? null,
     title: row.title || '',
     notes: row.notes || null,
     start_at: row.start_at || null,
@@ -66,21 +64,19 @@ function validateEventPayload(payload, { partial = false } = {}) {
   }
 
   if (!partial || payload.start_at !== undefined) {
-    const start = toSqlDate(payload.start_at);
+    const start = toDate(payload.start_at);
     if (!start) throw validationError('La fecha de inicio es obligatoria.');
     out.start_at = start;
   }
 
   if (!partial || payload.end_at !== undefined) {
-    const end = toSqlDate(payload.end_at);
+    const end = toDate(payload.end_at);
     if (!end) throw validationError('La fecha de fin es obligatoria.');
     out.end_at = end;
   }
 
-  if (out.start_at && out.end_at) {
-    if (new Date(out.start_at.replace(' ', 'T')) >= new Date(out.end_at.replace(' ', 'T'))) {
-      throw validationError('La hora de fin debe ser posterior a la hora de inicio.');
-    }
+  if (out.start_at && out.end_at && out.start_at >= out.end_at) {
+    throw validationError('La hora de fin debe ser posterior a la hora de inicio.');
   }
 
   if (payload.color !== undefined && payload.color !== null && payload.color !== '') {
@@ -108,6 +104,29 @@ function validateEventPayload(payload, { partial = false } = {}) {
 }
 
 /**
+ * Convierte un valor de fecha a Date, devolviendo null si es inválido o vacío.
+ * @param {Date|String|Number} value - fecha a convertir
+ * @returns {Date|null} fecha convertida, o null si no es válida
+ */
+function toDate(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Verifica que un ticket exista, usando el repositorio ORM directamente (no depende de
+ * tickets.service.js/firestoreData — solo necesita confirmar existencia).
+ * @param {String|Number} ticketId - id del ticket a verificar
+ * @returns {Promise<Boolean>} true si el ticket existe
+ */
+async function ticketExists(ticketId) {
+  const repo = await orm.getRepository(orm.Ticket);
+  const ticket = await repo.findOneBy({ id: Number(ticketId) });
+  return !!ticket;
+}
+
+/**
  * Lista los eventos de calendario activos de un usuario dentro de un rango de fechas, ordenados por fecha de inicio.
  * @param {Object} params - parámetros de consulta
  * @param {Object} params.user - usuario dueño de los eventos
@@ -116,26 +135,19 @@ function validateEventPayload(payload, { partial = false } = {}) {
  * @returns {Promise<Array>} eventos del usuario en el rango indicado
  */
 async function listEvents({ user, from, to }) {
-  const fromSql = toSqlDate(from) || '1970-01-01 00:00:00';
-  const toSql = toSqlDate(to) || '2999-12-31 23:59:59';
+  const fromDate = toDate(from) || new Date('1970-01-01T00:00:00Z');
+  const toDateVal = toDate(to) || new Date('2999-12-31T23:59:59Z');
 
-  const rows = await firestore.findMany(
-    'calendar_events',
-    [
-      ['user_id', '==', toId(user.id)],
-    ]
-  );
+  const repo = await orm.getRepository(orm.CalendarEvent);
+  const rows = await repo.createQueryBuilder('calendar_events')
+    .where('calendar_events.user_id = :userId', { userId: Number(user.id) })
+    .andWhere('calendar_events.active = :active', { active: 1 })
+    .andWhere('calendar_events.start_at <= :toDate', { toDate: toDateVal })
+    .andWhere('calendar_events.end_at >= :fromDate', { fromDate })
+    .orderBy('calendar_events.start_at', 'ASC')
+    .getMany();
 
-  return rows
-    .filter((row) => row.active !== 0 && row.active !== false)
-    .filter((row) => row.start_at <= toSql && row.end_at >= fromSql)
-    .sort((a, b) => {
-      if (a.start_at === b.start_at) return 0;
-      if (a.start_at === undefined || a.start_at === null) return 1;
-      if (b.start_at === undefined || b.start_at === null) return -1;
-      return a.start_at < b.start_at ? -1 : 1;
-    })
-    .map(decorate);
+  return rows.map(decorate);
 }
 
 /**
@@ -146,23 +158,20 @@ async function listEvents({ user, from, to }) {
  */
 async function createEvent(payload, user) {
   const data = validateEventPayload(payload, { partial: false });
-  if (data.ticket_id != null) {
-    const ticket = await getTicketById(data.ticket_id);
-    if (!ticket) throw validationError('El ticket indicado no existe.');
+  if (data.ticket_id != null && !(await ticketExists(data.ticket_id))) {
+    throw validationError('El ticket indicado no existe.');
   }
-  const now = firestore.nowSql();
-  const doc = await firestore.createDoc('calendar_events', {
-    user_id: toId(user.id),
-    ticket_id: data.ticket_id != null ? toId(data.ticket_id) : null,
+  const repo = await orm.getRepository(orm.CalendarEvent);
+  const doc = await repo.save({
+    user_id: Number(user.id),
+    ticket_id: data.ticket_id != null ? Number(data.ticket_id) : null,
     title: data.title,
     notes: data.notes || null,
     start_at: data.start_at,
     end_at: data.end_at,
     color: data.color || 'ocean',
     type: data.type || (data.ticket_id ? 'ticket_linked' : 'personal'),
-    active: 1,
-    created_at: now,
-    updated_at: now,
+    active: true,
   });
   const decorated = decorate(doc);
 
@@ -189,9 +198,11 @@ async function createEvent(payload, user) {
  * @returns {Promise<Object>} evento actualizado decorado
  */
 async function updateEvent(id, payload, user) {
-  const existing = decorate(await firestore.getById('calendar_events', id));
+  const repo = await orm.getRepository(orm.CalendarEvent);
+  const existingRow = await repo.findOneBy({ id: Number(id) });
+  const existing = decorate(existingRow);
   if (!existing) throw notFoundError('Evento de calendario no encontrado.');
-  if (toId(existing.user_id) !== toId(user.id)) {
+  if (Number(existing.user_id) !== Number(user.id)) {
     throw forbiddenError('No puedes modificar eventos de otro usuario.');
   }
   const patch = validateEventPayload(payload, { partial: true });
@@ -200,21 +211,19 @@ async function updateEvent(id, payload, user) {
 
   const newStart = patch.start_at || existing.start_at;
   const newEnd = patch.end_at || existing.end_at;
-  if (new Date(newStart.replace(' ', 'T')) >= new Date(newEnd.replace(' ', 'T'))) {
+  if (new Date(newStart) >= new Date(newEnd)) {
     throw validationError('La hora de fin debe ser posterior a la hora de inicio.');
   }
 
-  if (patch.ticket_id !== undefined && patch.ticket_id != null) {
-    const ticket = await getTicketById(patch.ticket_id);
-    if (!ticket) throw validationError('El ticket indicado no existe.');
+  if (patch.ticket_id !== undefined && patch.ticket_id != null && !(await ticketExists(patch.ticket_id))) {
+    throw validationError('El ticket indicado no existe.');
   }
 
-  patch.updated_at = firestore.nowSql();
   if (patch.ticket_id !== undefined) {
     patch.type = patch.ticket_id ? 'ticket_linked' : 'personal';
   }
-  const updated = await firestore.updateDoc('calendar_events', id, patch);
-  const decorated = decorate(updated);
+  await repo.update({ id: existing.id }, patch);
+  const decorated = decorate(await repo.findOneBy({ id: existing.id }));
 
   await auditService.logAsync({
     user_id: user.id,
@@ -239,12 +248,13 @@ async function updateEvent(id, payload, user) {
  * @returns {Promise<Object>} objeto con el id del evento eliminado
  */
 async function deleteEvent(id, user) {
-  const existing = decorate(await firestore.getById('calendar_events', id));
+  const repo = await orm.getRepository(orm.CalendarEvent);
+  const existing = decorate(await repo.findOneBy({ id: Number(id) }));
   if (!existing) throw notFoundError('Evento de calendario no encontrado.');
-  if (toId(existing.user_id) !== toId(user.id)) {
+  if (Number(existing.user_id) !== Number(user.id)) {
     throw forbiddenError('No puedes eliminar eventos de otro usuario.');
   }
-  await firestore.updateDoc('calendar_events', id, { active: 0, updated_at: firestore.nowSql() });
+  await repo.update({ id: existing.id }, { active: false });
 
   await auditService.logAsync({
     user_id: user.id,
@@ -270,7 +280,7 @@ async function deleteEvent(id, user) {
  */
 async function listSchedulableTickets(user, { limit = 30 } = {}) {
   const allowedStatuses = new Set(['recibido', 'asignado', 'en_proceso']);
-  const result = await firestoreData.listTickets({}, user, { limit: Math.max(limit * 5, 100) });
+  const result = await ticketsService.listTickets({ limit: String(Math.max(limit * 5, 100)) }, user);
   return (result.tickets || [])
     .filter((t) => allowedStatuses.has(t.status))
     .slice(0, limit);
@@ -296,9 +306,7 @@ module.exports = {
   updateEvent,
   deleteEvent,
   listSchedulableTickets,
-  toSqlDate,
   validateEventPayload,
   CALENDAR_EVENT_COLORS,
   CALENDAR_EVENT_TYPE_VALUES,
 };
-

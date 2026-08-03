@@ -36,7 +36,7 @@ Esto vale para: tickets, categorías, usuarios, comentarios, asignaciones, attac
 - ✅ **SAC por empresa + platform admin.** Cada empresa tiene su SAC local. El platform admin es el único que cruza. **No es una identidad fija de una persona** — es el flag `users.is_platform_admin`, transferible desde Usuarios → Editar usuario por quien ya tenga el flag (ver §5.4). Si la persona a cargo hoy deja el puesto, se le otorga el flag a quien la reemplace y luego se le revoca a la saliente; el sistema bloquea quedarse sin ningún platform admin activo.
 - ✅ **Multi-membresía.** Un usuario puede pertenecer a varias empresas con roles distintos en cada una. Ejemplo: un jefe puede ser `jefe_inmediato` en GCM Norte y `admin_area` en GCM Sur.
 - ✅ **Membresía default.** Si el usuario pertenece a varias, una queda marcada como default y el login va directo a esa (sin selector). Si tiene varias y ninguna es default, el login muestra un selector.
-- ✅ **Stack técnico.** TypeORM + SQL Server. La capa de Firestore queda solo si Firebase Auth se usa; el resto de la data migra a MSSQL.
+- ✅ **Stack técnico.** TypeORM + SQL Server, sin ninguna dependencia de Firebase/Firestore (cutover completo, ver commit del corte).
 - ✅ **Cutover = ventana de mantenimiento de 2-5 min** (Fase 10). La app queda degradada durante la ventana. Backup completo previo.
 
 ---
@@ -205,7 +205,7 @@ El platform admin **no es una identidad fija de una persona** — es el flag `us
 - Solo alguien que **ya** es platform admin puede otorgar o revocar el flag — un SAC común no puede.
 - No se puede revocar el flag al **único** platform admin activo (`403 FORBIDDEN`), ni tampoco desactivar esa cuenta como atajo para saltarse la protección — ambos caminos se validan.
 
-**Vía de emergencia (sin acceso a la UI):** `node scripts/set-platform-admin.js <id> [true|false]` contra el Firestore del proyecto — requiere acceso al `service-account.json` / consola de Firebase, no a una cuenta de usuario específica de la app. Documentar quién en la organización tiene ese acceso (además de quien hoy es platform admin) es la única pieza que sigue dependiendo de coordinación humana, no de código.
+**Vía de emergencia (sin acceso a la UI):** `node scripts/set-platform-admin.js <id> [true|false]` contra SQL Server directamente — requiere acceso a las credenciales `MSSQL_*` del entorno, no a una cuenta de usuario específica de la app. Documentar quién en la organización tiene ese acceso (además de quien hoy es platform admin) es la única pieza que sigue dependiendo de coordinación humana, no de código.
 
 ---
 
@@ -440,7 +440,7 @@ client/api.js                                               🔜 Fase 4
 ### Eliminar (eventual, Fase 11)
 
 ```
-src/firestoreData.js     — solo si Firebase Auth no se usa
+src/firestoreData.js     — ✅ eliminado (cutover completo a SQL Server)
 ```
 
 ### Documentación

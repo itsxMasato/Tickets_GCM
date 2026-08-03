@@ -106,6 +106,11 @@ function createApp() {
   }));
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
+  // Build de Vite (mismo directorio que publica Netlify, ver vite.config.js
+  // `outDir` y netlify.toml `publish = "dist"`) — sirve /assets/*.js|css cuando
+  // el servidor Express corre standalone (sin Netlify por delante) y ya se
+  // corrió `pnpm build`.
+  app.use(express.static(path.join(__dirname, '..', 'dist')));
   app.get('/favicon.ico', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'img', 'Logo.png'));
   });
@@ -134,7 +139,7 @@ function createApp() {
   });
 
   const fs = require('fs');
-  const distIndex = path.join(__dirname, '..', 'public', 'dist', 'index.html');
+  const distIndex = path.join(__dirname, '..', 'dist', 'index.html');
   const rootIndex = path.join(__dirname, '..', 'public', 'index.html');
   const spaIndex = fs.existsSync(distIndex) ? distIndex : (fs.existsSync(rootIndex) ? rootIndex : null);
   if (spaIndex) {

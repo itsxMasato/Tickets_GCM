@@ -1,6 +1,7 @@
 /* Documentado por: Miguel Flores */
 'use strict'
-const firestoreData = require('../firestoreData');
+const { In } = require('typeorm');
+const orm = require('../orm');
 const { validationError } = require('../utils/validators');
 
 /**
@@ -18,7 +19,7 @@ async function emitNotification(userId, event) {
 }
 
 /**
- * Crea una notificación para un usuario, la persiste en Firestore y emite el conteo de no leídas en tiempo real.
+ * Crea una notificación para un usuario, la persiste y emite el conteo de no leídas en tiempo real.
  * @param {Object} params - datos de la notificación
  * @param {String} params.user_id - id del usuario destinatario
  * @param {String} params.type - tipo de notificación
@@ -31,8 +32,16 @@ async function create({ user_id, type, ticket_id, title, body }) {
   if (!user_id || !type || !title) {
     throw validationError('Notificación incompleta.');
   }
-  const notification = await firestoreData.createNotification({ user_id, type, ticket_id, title, body });
-  const unread = await firestoreData.getUnreadCount(user_id);
+  const repo = await orm.getRepository(orm.Notification);
+  const notification = await repo.save({
+    user_id: Number(user_id),
+    type,
+    ticket_id: ticket_id != null ? Number(ticket_id) : null,
+    title,
+    body: body || null,
+    read: false,
+  });
+  const unread = await getUnreadCount(user_id);
   await emitNotification(user_id, { unread });
   return notification;
 }
@@ -57,7 +66,8 @@ async function createAsync({ user_id, type, ticket_id, title, body }) {
  * @returns {Promise<Number>} cantidad de notificaciones no leídas
  */
 async function getUnreadCount(userId) {
-  return firestoreData.getUnreadCount(userId);
+  const repo = await orm.getRepository(orm.Notification);
+  return repo.count({ where: { user_id: Number(userId), read: false } });
 }
 
 /**
@@ -78,7 +88,10 @@ async function getUnreadCountAsync(userId) {
  * @returns {Promise<Array>} notificaciones del usuario
  */
 async function listForUser(userId, { limit = 20, onlyUnread = false } = {}) {
-  return firestoreData.listNotificationsForUser(userId, { limit, onlyUnread });
+  const repo = await orm.getRepository(orm.Notification);
+  const where = { user_id: Number(userId) };
+  if (onlyUnread) where.read = false;
+  return repo.find({ where, order: { created_at: 'DESC' }, take: limit });
 }
 
 /**
@@ -87,8 +100,17 @@ async function listForUser(userId, { limit = 20, onlyUnread = false } = {}) {
  * @param {Object} [payload] - detalle de qué notificaciones marcar como leídas (ids específicos o todas)
  * @returns {Promise<Object>} resultado de la operación de actualización
  */
-async function markRead(userId, payload = {}) {
-  return firestoreData.markNotificationsRead(userId, payload);
+async function markRead(userId, { all = false, ids = [] } = {}) {
+  const repo = await orm.getRepository(orm.Notification);
+  if (all) {
+    const result = await repo.update({ user_id: Number(userId), read: false }, { read: true });
+    return { updated: result.affected || 0 };
+  }
+  if (ids.length) {
+    const result = await repo.update({ id: In(ids.map(Number)), user_id: Number(userId) }, { read: true });
+    return { updated: result.affected || 0 };
+  }
+  return { updated: 0 };
 }
 
 module.exports = {
@@ -99,4 +121,3 @@ module.exports = {
   getUnreadCountAsync,
   markRead,
 };
-

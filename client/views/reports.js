@@ -10,10 +10,11 @@ import { exportButton } from '../components/export-button.js';
 import { toast } from '../utils/toast.js';
 import { mountDataList } from '../components/data-list.js';
 import { passwordConfirmModal } from '../components/modal.js';
-import { verifyCurrentPassword } from '../firebase.js';
+import { verifyCurrentPassword } from '../auth-reverify.js';
 import { ICON, svg } from '../utils/icons.js';
 import { avatarColor, initials } from '../utils/avatar.js';
 import { getRoleLabel } from '../utils/role-labels.js';
+import { isSAC, isPlatformAdmin } from '../utils/permissions.js';
 
 const STATUS = ['recibido', 'asignado', 'en_proceso', 'solucionado', 'cerrado', 'reabierto'];
 const PRIORITIES = ['baja', 'media', 'alta', 'urgente'];
@@ -30,6 +31,13 @@ const PRIORITY_BAR_COLOR = { baja: 'bg-slate-400', media: 'bg-blue-500', alta: '
 const AREA_BAR_COLOR = {
   operaciones: 'bg-brand-ocean', logistica: 'bg-violet-500', mantenimiento: 'bg-amber-500',
   sistemas: 'bg-blue-500', otro: 'bg-slate-400', [NO_AREA]: 'bg-slate-300',
+};
+// Tailwind JIT no puede resolver clases construidas en runtime (ej. reemplazar 'bg-' por 'stroke-'),
+// así que para los trazos SVG del donut usamos directamente el hex detrás de cada clase bg-* de arriba.
+const BG_CLASS_HEX = {
+  'bg-slate-400': '#94a3b8', 'bg-blue-500': '#3b82f6', 'bg-amber-500': '#f59e0b',
+  'bg-emerald-500': '#10b981', 'bg-slate-600': '#475569', 'bg-orange-500': '#f97316',
+  'bg-brand-ocean': '#16ace4',
 };
 
 const KPI_TONE = {
@@ -80,23 +88,29 @@ export async function renderReports({ query, user }) {
     exportBtn,
   ]));
 
-  const filters = { status: query?.status || '', priority: query?.priority || '', area: query?.area || '', assigned_to: query?.assigned_to || '', date_from: query?.date_from || '', date_to: query?.date_to || '', search: query?.search || '' };
+  const canFilterByCompany = isSAC(user) || isPlatformAdmin(user);
+  const filters = { status: query?.status || '', priority: query?.priority || '', area: query?.area || '', assigned_to: query?.assigned_to || '', company_id: canFilterByCompany ? query?.company_id || '' : '', date_from: query?.date_from || '', date_to: query?.date_to || '', search: query?.search || '' };
   const filtersBar = h('div.card.grid.grid-cols-1.gap-4.items-end', { class: 'sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6' });
   const search = h('input.input', { type: 'search', placeholder: 'Ej: GCM-2849…' });
   const statusSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los estados'), ...STATUS.map((s) => h('option', { value: s, selected: filters.status === s ? '' : null }, STATUS_LABEL[s]))]);
   const prioSel = h('select.input', {}, [h('option', { value: '' }, 'Todas las prioridades'), ...PRIORITIES.map((p) => h('option', { value: p, selected: filters.priority === p ? '' : null }, PRIORITY_LABEL[p]))]);
   const areaSel = h('select.input', {}, [h('option', { value: '' }, 'Todas las áreas'), ...Object.entries(AREA_LABEL).map(([k, v]) => h('option', { value: k, selected: filters.area === k ? '' : null }, v))]);
   const assignedSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los responsables')]);
+  const companySel = h('select.input', {}, [h('option', { value: '' }, 'Todas las empresas')]);
+  let companyNames = {};
   const from = h('input.input', { type: 'date', value: filters.date_from });
   const to = h('input.input', { type: 'date', value: filters.date_to });
   const apply = h('button.btn.btn-primary.flex-1', { onclick: () => render() }, 'Aplicar');
-  const clearBtn = h('button.btn.btn-ghost', { onclick: () => { clearFiltersInUrl(); Object.assign(filters, { status: '', priority: '', area: '', assigned_to: '', date_from: '', date_to: '', search: '' }); search.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; from.value=''; to.value=''; render(); } }, 'Limpiar');
+  const clearBtn = h('button.btn.btn-ghost', { onclick: () => { clearFiltersInUrl(); Object.assign(filters, { status: '', priority: '', area: '', assigned_to: '', company_id: '', date_from: '', date_to: '', search: '' }); search.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; companySel.value=''; from.value=''; to.value=''; render(); } }, 'Limpiar');
 
   filtersBar.appendChild(h('div.space-y-1', {}, [h('label.label', {}, 'Búsqueda'), search]));
   filtersBar.appendChild(h('div.space-y-1', {}, [h('label.label', {}, 'Estado'), statusSel]));
   filtersBar.appendChild(h('div.space-y-1', {}, [h('label.label', {}, 'Prioridad'), prioSel]));
   filtersBar.appendChild(h('div.space-y-1', {}, [h('label.label', {}, 'Área'), areaSel]));
   filtersBar.appendChild(h('div.space-y-1', {}, [h('label.label', {}, 'Responsable'), assignedSel]));
+  if (canFilterByCompany) {
+    filtersBar.appendChild(h('div.space-y-1', {}, [h('label.label', {}, 'Empresa'), companySel]));
+  }
   filtersBar.appendChild(h('div.space-y-1', {}, [h('label.label', {}, 'Desde'), from]));
   filtersBar.appendChild(h('div.space-y-1', {}, [h('label.label', {}, 'Hasta'), to]));
   filtersBar.appendChild(h('div.flex.gap-2', {}, [apply, clearBtn]));
@@ -119,8 +133,9 @@ export async function renderReports({ query, user }) {
 
   const chartsRow1 = h('div.grid.grid-cols-1.gap-3', { class: 'lg:grid-cols-2' });
   const chartsRow2 = h('div.grid.grid-cols-1.gap-3', { class: 'lg:grid-cols-2' });
+  const chartsRow3 = h('div.grid.grid-cols-1.gap-3', { class: 'lg:grid-cols-2' });
   const trendWrap = h('div', {});
-  const charts = h('div.flex.flex-col.gap-3', {}, [chartsRow1, chartsRow2, trendWrap]);
+  const charts = h('div.flex.flex-col.gap-3', {}, [chartsRow1, chartsRow2, chartsRow3, trendWrap]);
   root.appendChild(charts);
 
   let dataList = null;
@@ -221,6 +236,25 @@ export async function renderReports({ query, user }) {
   }
 
   /**
+   * Carga las empresas visibles para el usuario y llena el select de "Empresa" (solo SAC/admin de plataforma).
+   * @returns {Promise<void>}
+   */
+  async function populateCompanies() {
+    if (!canFilterByCompany) return;
+    try {
+      const { companies } = await api.companies.list();
+      companyNames = Object.fromEntries((companies || []).map((c) => [String(c.id), c.name]));
+      const options = (companies || [])
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map((c) => h('option', { value: String(c.id), selected: String(filters.company_id) === String(c.id) ? '' : null }, `${c.code_prefix ? `${c.code_prefix} — ` : ''}${c.name}`));
+      companySel.innerHTML = '<option value="">Todas las empresas</option>';
+      options.forEach((opt) => companySel.appendChild(opt));
+    } catch {
+      companySel.innerHTML = '<option value="">Todas las empresas</option>';
+    }
+  }
+
+  /**
    * Aplica los filtros actuales, los sincroniza con la URL, recarga todos los tickets desde la API y redibuja KPIs, gráficos y tabla.
    * @returns {Promise<void>}
    */
@@ -229,6 +263,7 @@ export async function renderReports({ query, user }) {
     filters.priority = prioSel.value;
     filters.area = areaSel.value;
     filters.assigned_to = assignedSel.value;
+    filters.company_id = canFilterByCompany ? companySel.value : '';
     filters.search = search.value.trim();
     filters.date_from = from.value;
     filters.date_to = to.value;
@@ -237,6 +272,7 @@ export async function renderReports({ query, user }) {
     setFilterInUrl('status', filters.status);
     setFilterInUrl('priority', filters.priority);
     setFilterInUrl('area', filters.area);
+    setFilterInUrl('company_id', filters.company_id);
     setFilterInUrl('assigned_to', filters.assigned_to);
     setFilterInUrl('date_from', filters.date_from);
     setFilterInUrl('date_to', filters.date_to);
@@ -248,6 +284,7 @@ export async function renderReports({ query, user }) {
     pagerPageLabel.textContent = '';
     chartsRow1.innerHTML = '';
     chartsRow2.innerHTML = '';
+    chartsRow3.innerHTML = '';
     trendWrap.innerHTML = '';
     kpis.innerHTML = '';
     try {
@@ -305,11 +342,41 @@ export async function renderReports({ query, user }) {
     kpis.appendChild(kpiCard({ label: 'Urgentes', value: byPrio.find((x) => x.key === 'urgente')?.c || 0, tone: 'accent', icon: ICON.alert, badge: 'Crítico', pulse: true }));
     kpis.appendChild(kpiCard({ label: 'Resolución prom.', value: avgDays == null ? '—' : `${avgDays.toFixed(1)} d`, hint: 'Creado → cerrado', tone: '', icon: ICON.clock }));
 
-    chartsRow1.appendChild(barChart('Por estado', byStatus, STATUS, STATUS_LABEL, STATUS_BAR_COLOR));
+    chartsRow1.appendChild(donutChart('Por estado', byStatus, STATUS, STATUS_LABEL, STATUS_BAR_COLOR));
     chartsRow1.appendChild(barChart('Por prioridad', byPrio, PRIORITIES, PRIORITY_LABEL, PRIORITY_BAR_COLOR));
     chartsRow2.appendChild(barChart('Por área', byArea, AREA_ORDER, AREA_CHART_LABEL, AREA_BAR_COLOR));
     chartsRow2.appendChild(topAssigneesChart(tickets));
+
+    if (canFilterByCompany) {
+      const byCompany = companyBreakdown(tickets);
+      if (byCompany.length > 1) {
+        chartsRow3.appendChild(entityBarChart('Tickets por empresa', byCompany.map((c) => ({ key: c.id, label: c.name, value: c.count, valueLabel: `${c.count} ticket${c.count === 1 ? '' : 's'}` }))));
+        const withResolution = byCompany.filter((c) => c.avgDays != null);
+        if (withResolution.length) {
+          chartsRow3.appendChild(entityBarChart('Resolución promedio por empresa', withResolution.map((c) => ({ key: c.id, label: c.name, value: c.avgDays, valueLabel: `${c.avgDays.toFixed(1)} d` }))));
+        }
+      }
+    }
+
     trendWrap.appendChild(dailyTrendChart(tickets));
+  }
+
+  /**
+   * Agrupa los tickets por empresa (usando el nombre resuelto vía companyNames), calculando conteo y resolución promedio de cada una.
+   * @param {Array<Object>} tickets - tickets a analizar
+   * @returns {Array<{id: string, name: string, count: number, avgDays: number|null}>} desglose por empresa, ordenado por conteo descendente
+   */
+  function companyBreakdown(tickets) {
+    const groups = new Map();
+    for (const t of tickets) {
+      if (t.company_id == null) continue;
+      const id = String(t.company_id);
+      if (!groups.has(id)) groups.set(id, []);
+      groups.get(id).push(t);
+    }
+    return Array.from(groups.entries())
+      .map(([id, group]) => ({ id, name: companyNames[id] || `Empresa #${id}`, count: group.length, avgDays: avgResolutionDays(group) }))
+      .sort((a, b) => b.count - a.count);
   }
 
   /**
@@ -389,6 +456,117 @@ export async function renderReports({ query, user }) {
   }
 
   /**
+   * Arma un gráfico de barras horizontales de una sola escala para comparar entidades arbitrarias (ej. empresas) por magnitud, con etiqueta de valor directa.
+   * @param {string} title - título del gráfico
+   * @param {Array<{key: string, label: string, value: number, valueLabel: string}>} entries - entidades a comparar (ya ordenadas de mayor a menor)
+   * @returns {HTMLElement} tarjeta con el gráfico de barras
+   */
+  function entityBarChart(title, entries) {
+    const max = Math.max(1, ...entries.map((e) => e.value));
+    return h('div.card', {}, [
+      h('h3.text-base.font-semibold.text-brand-ink.mb-4', {}, title),
+      entries.length
+        ? h('div.flex.flex-col.gap-3', {}, entries.slice(0, 8).map((e) => {
+            const pct = Math.round((e.value / max) * 100);
+            return h('div', {}, [
+              h('div.flex.items-center.justify-between.gap-2.text-xs.mb-1', {}, [
+                h('span.text-brand-ink.truncate', {}, e.label),
+                h('span.text-slate-500.flex-none', {}, e.valueLabel),
+              ]),
+              h('div.w-full.bg-surface.rounded-full.overflow-hidden', { class: 'h-2.5' }, [
+                h('div.h-full.bg-brand-ocean.rounded-full.transition-all', { style: { width: `${pct}%` } }),
+              ]),
+            ]);
+          }))
+        : h('p.text-sm.text-slate-500.py-6.text-center', {}, 'Sin datos para este filtro.'),
+    ]);
+  }
+
+  /**
+   * Arma un gráfico de dona (SVG) con la distribución de tickets según una dimensión categórica, con
+   * leyenda directa y tooltip al pasar el mouse sobre cada segmento. El color de cada clave es fijo
+   * (nunca rotado) según colorMap, igual que en barChart, para mantener la identidad visual entre gráficos.
+   * @param {string} title - título del gráfico
+   * @param {Array<Object>} data - conteos por clave ({ key, c })
+   * @param {Array<string>} order - orden fijo de las claves a dibujar
+   * @param {Object} labelMap - mapa de clave a etiqueta legible
+   * @param {Object} colorMap - mapa de clave a clase Tailwind bg-x (se usa tal cual en el punto de la leyenda, y traducida a stroke-x en el arco del SVG)
+   * @returns {HTMLElement} tarjeta con el gráfico de dona
+   */
+  function donutChart(title, data, order, labelMap, colorMap) {
+    const size = 168, r = 62, sw = 24, cx = size / 2, cy = size / 2;
+    const circumference = 2 * Math.PI * r;
+    const totalAll = data.reduce((a, d) => a + d.c, 0);
+    const gapLen = totalAll ? 3 : 0;
+
+    const tooltip = h('div.pointer-events-none.absolute.z-10.hidden.px-2.py-1.rounded-md.bg-brand.text-white.text-xs.shadow-pop.whitespace-nowrap', {
+      style: { transform: 'translate(-50%, -120%)' },
+    });
+
+    let svgEl;
+    const segEls = [];
+    let offset = 0;
+    for (const k of order) {
+      const v = data.find((d) => d.key === k)?.c || 0;
+      if (!v) continue;
+      const len = (v / totalAll) * circumference;
+      const dash = Math.max(len - gapLen, 0);
+      const strokeHex = BG_CLASS_HEX[colorMap[k]] || BG_CLASS_HEX['bg-brand-ocean'];
+      const pct = Math.round((v / totalAll) * 100);
+      const label = labelMap[k] || k;
+      const seg = h('circle', {
+        cx: String(cx), cy: String(cy), r: String(r), fill: 'none',
+        'stroke-width': String(sw),
+        stroke: strokeHex,
+        'stroke-linecap': 'round',
+        'stroke-dasharray': `${dash} ${circumference - dash}`,
+        'stroke-dashoffset': String(-offset),
+      });
+      seg.addEventListener('mouseenter', () => {
+        tooltip.textContent = `${label}: ${v} (${pct}%)`;
+        tooltip.classList.remove('hidden');
+      });
+      seg.addEventListener('mousemove', (e) => {
+        const rect = svgEl.getBoundingClientRect();
+        tooltip.style.left = `${e.clientX - rect.left}px`;
+        tooltip.style.top = `${e.clientY - rect.top}px`;
+      });
+      seg.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+      segEls.push(seg);
+      offset += len;
+    }
+
+    const group = h('g', { transform: `rotate(-90 ${cx} ${cy})` }, segEls);
+    svgEl = h('svg', { viewBox: `0 0 ${size} ${size}`, class: 'w-40 h-40', role: 'img', 'aria-label': title }, [
+      h('circle', { cx: String(cx), cy: String(cy), r: String(r), fill: 'none', 'stroke-width': String(sw), class: 'stroke-surface' }),
+      group,
+    ]);
+
+    const centerLabel = h('div.absolute.inset-0.flex.flex-col.items-center.justify-center.pointer-events-none', {}, [
+      h('div.text-2xl.font-bold.text-brand-ink', {}, String(totalAll)),
+      h('div.uppercase.tracking-wider.text-slate-500', { class: 'text-[10px]' }, 'tickets'),
+    ]);
+
+    const plotWrap = h('div.relative.w-40.mx-auto', {}, [svgEl, centerLabel, tooltip]);
+
+    const legend = h('div.grid.grid-cols-2.gap-x-4.gap-y-2.mt-4', {}, order.map((k) => {
+      const v = data.find((d) => d.key === k)?.c || 0;
+      const pct = totalAll ? Math.round((v / totalAll) * 100) : 0;
+      return h('div.flex.items-center.gap-2.text-xs', {}, [
+        h('span.w-2.5.h-2.5.rounded-full.flex-none', { class: colorMap[k] || 'bg-brand-ocean' }),
+        h('span.text-brand-ink.truncate', {}, labelMap[k] || k),
+        h('span.text-slate-500.flex-none.ml-auto', {}, totalAll ? `${v} (${pct}%)` : '0'),
+      ]);
+    }));
+
+    return h('div.card', {}, [
+      h('h3.text-base.font-semibold.text-brand-ink.mb-4', {}, title),
+      totalAll ? plotWrap : h('p.text-sm.text-slate-500.py-6.text-center', {}, 'Sin datos para este filtro.'),
+      totalAll ? legend : null,
+    ]);
+  }
+
+  /**
    * Arma el gráfico de carga de trabajo con los responsables que tienen más tickets asignados.
    * @param {Array<Object>} tickets - tickets a analizar
    * @returns {HTMLElement} tarjeta con el gráfico de top responsables
@@ -421,7 +599,9 @@ export async function renderReports({ query, user }) {
   }
 
   /**
-   * Arma el gráfico de barras verticales con la cantidad de tickets creados por día, dentro del rango de fechas filtrado (o los últimos 30 días por defecto, con tope de 60 días).
+   * Arma el gráfico de línea/área (SVG) con la cantidad de tickets creados por día, dentro del rango de
+   * fechas filtrado (o los últimos 30 días por defecto, con tope de 60 días). Incluye crosshair y tooltip
+   * al pasar el mouse, apropiado para una serie de tiempo (a diferencia de una comparación categórica).
    * @param {Array<Object>} tickets - tickets a analizar
    * @returns {HTMLElement} tarjeta con el gráfico de tendencia diaria
    */
@@ -460,27 +640,78 @@ export async function renderReports({ query, user }) {
     const max = Math.max(1, ...counts);
     const totalCount = counts.reduce((a, b) => a + b, 0);
     const avgPerDay = (totalCount / days).toFixed(1);
-    const labelStep = Math.max(1, Math.ceil(days / 8));
+    const labelStep = Math.max(1, Math.ceil(days / 7));
 
-    const bars = counts.map((c, i) => {
-      const heightPct = c === 0 ? 3 : Math.max(6, Math.round((c / max) * 100));
+    const W = 640, H = 200, padL = 6, padR = 6, padT = 14, padB = 26;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const xAt = (i) => (days > 1 ? padL + (i / (days - 1)) * plotW : padL + plotW / 2);
+    const yAt = (c) => padT + plotH - (c / max) * plotH;
+    const points = counts.map((c, i) => [xAt(i), yAt(c)]);
+    const baselineY = (padT + plotH).toFixed(1);
+    const linePath = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+    const areaPath = `${linePath} L${xAt(days - 1).toFixed(1)},${baselineY} L${xAt(0).toFixed(1)},${baselineY} Z`;
+
+    const xLabels = counts.map((_, i) => {
+      if (!(i === 0 || i === days - 1 || i % labelStep === 0)) return null;
       const day = new Date(start);
       day.setDate(day.getDate() + i);
-      const showLabel = i === 0 || i === days - 1 || i % labelStep === 0;
-      return h('div.flex-1.flex.flex-col.items-center.gap-1.min-w-0', {}, [
-        h('div.w-full.flex.items-end', { style: { height: '110px' }, title: `${formatDate(day.toISOString())}: ${c} ticket${c === 1 ? '' : 's'}` }, [
-          h('div.w-full.bg-brand-ocean.rounded-t.transition-all', { class: 'hover:bg-brand', style: { height: `${heightPct}%` } }),
-        ]),
-        h('div.text-slate-400.truncate.w-full.text-center', { class: 'text-[10px]' }, showLabel ? formatDate(day.toISOString()).slice(0, 6) : ''),
-      ]);
+      const anchor = i === 0 ? 'start' : i === days - 1 ? 'end' : 'middle';
+      return h('text', { x: xAt(i).toFixed(1), y: String(H - 8), 'text-anchor': anchor, class: 'fill-slate-400 text-[9px]' }, formatDate(day.toISOString()).slice(0, 6));
+    }).filter(Boolean);
+
+    const tooltip = h('div.pointer-events-none.absolute.z-10.hidden.px-2.py-1.rounded-md.bg-brand.text-white.text-xs.shadow-pop.whitespace-nowrap', {
+      style: { transform: 'translate(-50%, -130%)' },
     });
+    const crosshair = h('line', { x1: '0', y1: String(padT), x2: '0', y2: baselineY, class: 'stroke-surface-border-strong', 'stroke-width': '1', style: { display: 'none' } });
+    const dot = h('circle', { cx: '0', cy: '0', r: '4', class: 'fill-brand-ocean stroke-white', 'stroke-width': '2', style: { display: 'none' } });
+
+    let svgEl;
+    const overlay = h('rect', { x: String(padL), y: '0', width: String(plotW), height: String(H), fill: 'transparent' });
+    overlay.addEventListener('mousemove', (e) => {
+      const rect = svgEl.getBoundingClientRect();
+      const scaleX = W / rect.width;
+      const scaleY = H / rect.height;
+      const localX = (e.clientX - rect.left) * scaleX;
+      let idx = days > 1 ? Math.round(((localX - padL) / plotW) * (days - 1)) : 0;
+      idx = Math.max(0, Math.min(days - 1, idx));
+      const [px, py] = points[idx];
+      crosshair.setAttribute('x1', px.toFixed(1));
+      crosshair.setAttribute('x2', px.toFixed(1));
+      crosshair.style.display = '';
+      dot.setAttribute('cx', px.toFixed(1));
+      dot.setAttribute('cy', py.toFixed(1));
+      dot.style.display = '';
+      const day = new Date(start);
+      day.setDate(day.getDate() + idx);
+      const c = counts[idx];
+      tooltip.textContent = `${formatDate(day.toISOString())}: ${c} ticket${c === 1 ? '' : 's'}`;
+      tooltip.classList.remove('hidden');
+      tooltip.style.left = `${px / scaleX}px`;
+      tooltip.style.top = `${py / scaleY}px`;
+    });
+    overlay.addEventListener('mouseleave', () => {
+      crosshair.style.display = 'none';
+      dot.style.display = 'none';
+      tooltip.classList.add('hidden');
+    });
+
+    svgEl = h('svg', { viewBox: `0 0 ${W} ${H}`, class: 'w-full', style: { height: '180px' }, role: 'img', 'aria-label': 'Tendencia de creación de tickets' }, [
+      h('line', { x1: String(padL), y1: baselineY, x2: String(W - padR), y2: baselineY, class: 'stroke-surface-border', 'stroke-width': '1' }),
+      h('path', { d: areaPath, fill: '#16ace4', 'fill-opacity': '0.1', stroke: 'none' }),
+      h('path', { d: linePath, class: 'stroke-brand-ocean', 'stroke-width': '2', fill: 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
+      ...xLabels,
+      crosshair,
+      dot,
+      overlay,
+    ]);
 
     return h('div.card', {}, [
       h('div.flex.items-center.justify-between.flex-wrap.gap-2.mb-4', {}, [
         h('h3.text-base.font-semibold.text-brand-ink', {}, 'Tendencia de creación de tickets'),
         h('span.text-xs.text-slate-500', {}, `${totalCount} en ${days} días · Prom. ${avgPerDay}/día`),
       ]),
-      h('div.flex.items-end.gap-1', {}, bars),
+      h('div.relative', {}, [svgEl, tooltip]),
     ]);
   }
 
@@ -542,7 +773,7 @@ export async function renderReports({ query, user }) {
     }
   }
 
-  await populateAssignedUsers();
+  await Promise.all([populateAssignedUsers(), populateCompanies()]);
   await render();
   return root;
 }

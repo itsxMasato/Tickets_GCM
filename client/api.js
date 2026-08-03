@@ -48,7 +48,7 @@ export function assetUrl(path) {
   return buildUrl(path);
 }
 
-const AUTH_BOOTSTRAP_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/auth/firebase', '/api/auth/resolve-login', '/api/auth/me'];
+const AUTH_BOOTSTRAP_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/auth/me'];
 
 /**
  * Realiza una petición HTTP a la API incluyendo cookies de sesión, serializando el body a JSON
@@ -101,8 +101,6 @@ export const api = {
     logout: ()        => request('POST', '/api/auth/logout', {}),
     me:     ()        => request('GET',  '/api/auth/me'),
     verifyPassword: (body) => request('POST', '/api/auth/verify-password', { body }),
-    resolveLogin: (body) => request('POST', '/api/auth/resolve-login', { body }),
-    firebase: (body)  => request('POST', '/api/auth/firebase', { body }),
     setActiveCompany: (companyId) => request('POST', '/api/auth/active-company', { body: { company_id: companyId } }),
     uploadAvatar: (formData) => request('POST', '/api/auth/avatar', { body: formData }),
   },

@@ -16,5 +16,6 @@ module.exports = {
   Company: require('./company.entity'),
   UserCompanyMembership:   require('./user-company-membership.entity'),
   RolePermission:          require('./role-permission.entity'),
+  RoleLabel:               require('./role-label.entity'),
 };
 

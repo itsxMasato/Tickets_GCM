@@ -21,13 +21,11 @@ Sistema interno de tickets con flujo por áreas: **supervisor de campo → SAC �
 
 - **Node.js ≥ 18** + **pnpm**
 - **Backend**: Express 5 + Socket.IO 4
-- **Auth**: express-session + connect-sqlite3 (store de sesiones en `data/sessions.db`) + bcrypt
-- **Persistencia activa**: **Firestore** (vía `firebase-admin` server-side, `firebase` client-side)
-  - Todos los servicios (`auth`, `tickets`, `categories`, `notifications`, `audit`, `stats`, `role-labels`, `roles`, `attachments`) leen y escriben contra Firestore.
-- **Capa preparada para SQL Server** (convive, no se usa en runtime todavía):
-  - `src/db/schema.mssql.sql` — DDL de SQL Server listo para ejecutar (13 tablas, ver el propio archivo para las decisiones de diseño).
-  - `src/orm/` — TypeORM, 13 EntitySchema y `DataSource` con inicialización perezosa (fallback a SQLite local solo para desarrollo/smoke tests, vía `DISABLE_MSSQL=true`).
-  - `src/db/seed-multitenant.js` — seed de datos de prueba multiempresa contra la capa ORM.
+- **Auth**: express-session + connect-sqlite3 (store de sesiones en `data/sessions.db`) + bcrypt contra `users` en SQL Server
+- **Persistencia**: **SQL Server**, vía TypeORM (`src/orm/`)
+  - Todos los servicios (`auth`, `tickets`, `categories`, `notifications`, `audit`, `stats`, `role-labels`, `roles`, `attachments`, `companies`, `memberships`) leen y escriben contra SQL Server.
+  - `src/db/schema.mssql.sql` — DDL de SQL Server (13 tablas, ver el propio archivo para las decisiones de diseño).
+  - `src/orm/` — TypeORM, EntitySchema por tabla y `DataSource` con inicialización perezosa (fallback a SQLite local solo para desarrollo/smoke tests, vía `DISABLE_MSSQL=true`).
 - **Uploads**: multer, directorio `uploads/`
 - **Frontend**: Vite 5 + Tailwind 3 + JS (módulos ES, hash router)
 - **Exportes**: SheetJS y jsPDF vía CDN
@@ -37,7 +35,7 @@ Sistema interno de tickets con flujo por áreas: **supervisor de campo → SAC �
 ```bash
 pnpm install
 cp .env.example .env
-# Completar variables de Firebase (ver docs/FIREBASE_SETUP.md) y, opcionalmente, MSSQL_*
+# Completar las variables MSSQL_* (ver src/orm/env.js y src/db/schema.mssql.sql)
 pnpm dev:all
 ```
 
@@ -52,11 +50,8 @@ DB_PATH=./data/tickets.db          # SQLite local, solo para el fallback de src/
 UPLOAD_DIR=./uploads
 MAX_UPLOAD_MB=10
 
-# Firebase (obligatorio para arrancar — src/server.js sale si no inicializa)
-FIREBASE_SERVICE_ACCOUNT_PATH=./keys/service-account.json
-# o FIREBASE_SERVICE_ACCOUNT=<JSON string>
-
-# SQL Server (opcional, solo si se va a usar la capa TypeORM)
+# SQL Server (obligatorio para arrancar — src/server.js sale si el ORM no conecta,
+# salvo que DISABLE_MSSQL=true active el fallback SQLite de desarrollo)
 MSSQL_HOST=
 MSSQL_PORT=1433
 MSSQL_DATABASE=
@@ -66,9 +61,8 @@ MSSQL_ENCRYPT=false
 MSSQL_TRUST_CERT=true
 ORM_SYNCHRONIZE=false
 ORM_LOGGING=false
+DISABLE_MSSQL=false
 ```
-
-Detalle completo de setup Firebase en `docs/FIREBASE_SETUP.md`.
 
 ## Seguridad
 
@@ -78,10 +72,9 @@ No se documentan credenciales ni usuarios por defecto en este repositorio. Cualq
 
 | Prefijo | Endpoints | Notas |
 |---|---|---|
-| `POST /api/auth/login` | username + password → sesión | bcrypt contra `users` en Firestore |
+| `POST /api/auth/login` | username + password → sesión | bcrypt contra `users` en SQL Server |
 | `POST /api/auth/logout` | destruye sesión | |
 | `GET  /api/auth/me` | usuario actual | requireAuth |
-| `POST /api/auth/firebase` | intercambia ID token de Firebase por sesión local | |
 | `GET/POST/PATCH /api/users` | CRUD de usuarios | solo SAC |
 | `GET/POST/PATCH /api/categories` | CRUD de categorías | solo SAC |
 | `GET/POST/PATCH /api/tickets` | listado (filtrado por rol), creación, edición | |
@@ -103,26 +96,25 @@ Códigos de error uniformes `{ error: { code, message } }`: 400 `VALIDATION_ERRO
 - `pnpm start` — Producción (asume `build` previo).
 - `pnpm orm:smoke` — Smoke test de la conexión TypeORM/SQL Server (las 13 entidades).
 - `pnpm smoke:multitenant` — Prueba funcional del modelo multiempresa contra la capa ORM.
-- `pnpm firebase-seed` — Script de seed contra Firestore (crea el admin inicial temporal si la base está vacía).
+- `pnpm test` — Corre la suite de tests (`node --test`).
 
 ## Estructura
 
 ```
-src/                          Backend Express + Socket.IO + Firebase
+src/                          Backend Express + Socket.IO + ORM
   server.js, app.js           Entry points
   config/                     Resolución de .env
-  firebaseAdmin.js            Inicialización firebase-admin (obligatoria al boot)
-  firestore.js                Cliente Firestore
-  firestoreData.js            Capa de acceso a datos (la única usada en runtime)
-  routes/                     auth, users, categories, tickets, notifications, stats, roles, role-labels
+  routes/                     auth, users, categories, tickets, notifications, stats, roles, role-labels,
+                              companies, calendar
   services/                   Lógica de negocio (auth, tickets, categories, notifications, attachments,
-                              roles, role-labels, audit, stats) — todos sobre firestoreData
+                              roles, role-labels, audit, stats, companies, memberships, calendar) —
+                              todos sobre el ORM (SQL Server)
   middleware/                 requireAuth, requireRole, upload (multer), errorHandler
   sockets/                    Setup de Socket.IO con sessionMiddleware compartida
-  utils/                      validators, password, time
-  db/                         Schema SQLite + migrate + seed (referencia, sin uso en runtime)
-  orm/                        Capa TypeORM/SQL Server (8 EntitySchema + DataSource perezosa,
-                              repositories, enums compartidos) — preparada para migración futura
+  utils/                      validators, password, ids, scope, ticket-access, time
+  db/                         Schema SQLite legado + schema.mssql.sql (DDL de SQL Server)
+  orm/                        Capa TypeORM/SQL Server (EntitySchema por tabla, DataSource con
+                              fallback a SQLite en dev, repositories, enums compartidos)
 
 client/                       Frontend Vite
   views/                      login, dashboard, tickets-list, ticket-new, ticket-detail,
@@ -133,7 +125,7 @@ client/                       Frontend Vite
   utils/                      api, socket, socket-manager, format, dom, icons, toast,
                               role-labels, permissions, exports, realtime, ids,
                               users-cache, avatar
-  firebase.js                 Inicialización cliente Firebase (Firestore + Auth)
+  auth-reverify.js            Reverificación de contraseña (reautenticación para acciones sensibles)
   index.html, main.js, router.js, store.js, styles.css
 
 public/                       Assets estáticos servidos por Express
@@ -143,18 +135,16 @@ public/                       Assets estáticos servidos por Express
 
 scripts/                      Utilidades de mantenimiento
   orm-smoke.js                Smoke test SQL Server
-  firebase-seed.js            Seed inicial de Firestore
   audit-roles-responsive.js   Auditoría de UI
-  create-user.js, set-user-role.js
-                              Helpers de admin
+  create-user.js, set-user-role.js, set-platform-admin.js
+                              Helpers de admin (ORM)
 
 docs/
-  FIREBASE_SETUP.md           Setup de credenciales Firebase
   module-roles.md             Documentación del módulo /roles
+  MULTITENANT.md               Modelo multiempresa
 
 data/                         SQLite (sesiones + schema de referencia)
 uploads/                      Adjuntos subidos
-keys/                         Service account de Firebase (no versionado)
 ```
 
 ## Realtime
@@ -170,5 +160,5 @@ Eventos emitidos: `ticket:created/updated/assigned/status_changed/commented`, `a
 ## Documentación adicional
 
 - `docs/module-roles.md` — modelo, permisos y arquitectura de `/roles`.
-- `docs/FIREBASE_SETUP.md` — setup de credenciales Firebase paso a paso.
+- `docs/MULTITENANT.md` — modelo multiempresa.
 - `DESIGN_SYSTEM.md`, `DESIGN.md`, `PRODUCT.md`, `RESPONSIVE_RULES.md`, `UX_GUIDELINES.md`, `USER_FLOWS.md`, `COMPONENT_LIBRARY.md`, `LOGIN_DESIGN.md`, `TECHNICAL_INFO.md` — diseño de producto y sistema visual.

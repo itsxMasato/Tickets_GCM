@@ -5,7 +5,7 @@ import { statusBadge } from '../components/badge.js';
 import { relativeFromNow, STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL } from '../utils/format.js';
 import { setFilterInUrl, clearFiltersInUrl } from '../utils/url-filters.js';
 import { go } from '../router.js';
-import { isSAC, isJefe, isAdmin, canViewAllTickets, canCreateTicket } from '../utils/permissions.js';
+import { isSAC, isJefe, isAdmin, canViewAllTickets, canCreateTicket, isPlatformAdmin } from '../utils/permissions.js';
 import { exportToExcel, exportListToPDF, fetchAllForExport, TICKET_EXPORT_COLUMNS } from '../utils/exports.js';
 import { toast } from '../utils/toast.js';
 import { emptyState, EMPTY_STATES } from '../components/empty-state.js';
@@ -13,7 +13,7 @@ import { exportButton } from '../components/export-button.js';
 import { activeFiltersChips } from '../components/active-filters-chips.js';
 import { mountDataList } from '../components/data-list.js';
 import { passwordConfirmModal } from '../components/modal.js';
-import { verifyCurrentPassword } from '../firebase.js';
+import { verifyCurrentPassword } from '../auth-reverify.js';
 import { ICON, svg } from '../utils/icons.js';
 import { avatarColor, initials } from '../utils/avatar.js';
 import { getRoleLabel } from '../utils/role-labels.js';
@@ -104,12 +104,14 @@ export async function renderTicketsList({ query, user }) {
   root.appendChild(statsRow);
 
   const initialStatus = isJefe(user) && !query.status ? 'solucionado' : query.status || '';
+  const canFilterByCompany = isSAC(user) || isPlatformAdmin(user);
   const filters = {
     status: initialStatus,
     priority: query.priority || '',
     search: query.search || '',
     assigned_to: query.assigned_to || '',
     area: isJefe(user) ? '' : query.area || '',
+    company_id: canFilterByCompany ? query.company_id || '' : '',
     date_from: query.date_from || '',
     date_to: query.date_to || '',
     limit: 20,
@@ -130,12 +132,14 @@ export async function renderTicketsList({ query, user }) {
     ...Object.entries(AREA_LABEL).map(([k, v]) => h('option', { value: k, selected: filters.area === k ? '' : null }, v)),
   ]);
   const assignedSel = h('select.input', {}, [h('option', { value: '' }, 'Todos los responsables')]);
+  const companySel = h('select.input', {}, [h('option', { value: '' }, 'Todas las empresas')]);
+  let companyNames = {};
   const fromInput = h('input.input', { type: 'date', value: filters.date_from });
   const toInput = h('input.input', { type: 'date', value: filters.date_to });
   const applyBtn = h('button.btn.btn-primary', { onclick: () => applyFilters() }, 'Filtrar');
-  const resetBtn = h('button.btn.btn-ghost', { onclick: () => { clearFiltersInUrl(); Object.assign(filters, { status: '', priority: '', search: '', area: '', assigned_to: '', date_from: '', date_to: '' }); searchInput.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; fromInput.value=''; toInput.value=''; state.cursors = [null]; state.pageIndex = 0; render(); } }, 'Limpiar');
+  const resetBtn = h('button.btn.btn-ghost', { onclick: () => { clearFiltersInUrl(); Object.assign(filters, { status: '', priority: '', search: '', area: '', assigned_to: '', company_id: '', date_from: '', date_to: '' }); searchInput.value=''; statusSel.value=''; prioSel.value=''; areaSel.value=''; assignedSel.value=''; companySel.value=''; fromInput.value=''; toInput.value=''; state.cursors = [null]; state.pageIndex = 0; render(); } }, 'Limpiar');
 
-  for (const el of [searchInput, statusSel, prioSel, areaSel, assignedSel, fromInput, toInput]) {
+  for (const el of [searchInput, statusSel, prioSel, areaSel, assignedSel, companySel, fromInput, toInput]) {
     el.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); applyFilters(); }
     });
@@ -148,6 +152,9 @@ export async function renderTicketsList({ query, user }) {
     filtersBar.appendChild(h('div.w-full', { class: 'md:w-44' }, [h('label.label', {}, 'Área'), areaSel]));
   }
   filtersBar.appendChild(h('div.w-full', { class: 'md:w-44' }, [h('label.label', {}, 'Responsable'), assignedSel]));
+  if (canFilterByCompany) {
+    filtersBar.appendChild(h('div.w-full', { class: 'md:w-44' }, [h('label.label', {}, 'Empresa'), companySel]));
+  }
   filtersBar.appendChild(h('div.w-full', { class: 'md:w-40' }, [h('label.label', {}, 'Desde'), fromInput]));
   filtersBar.appendChild(h('div.w-full', { class: 'md:w-40' }, [h('label.label', {}, 'Hasta'), toInput]));
   filtersBar.appendChild(h('div.flex.gap-2.w-full', { class: 'md:w-auto' }, [applyBtn, resetBtn]));
@@ -354,6 +361,7 @@ export async function renderTicketsList({ query, user }) {
     filters.priority = prioSel.value;
     filters.area = isJefe(user) ? '' : areaSel.value;
     filters.assigned_to = assignedSel.value;
+    filters.company_id = canFilterByCompany ? companySel.value : '';
     filters.date_from = fromInput.value;
     filters.date_to = toInput.value;
 
@@ -362,6 +370,7 @@ export async function renderTicketsList({ query, user }) {
     setFilterInUrl('priority', filters.priority);
     setFilterInUrl('area', filters.area);
     setFilterInUrl('assigned_to', filters.assigned_to);
+    setFilterInUrl('company_id', filters.company_id);
     setFilterInUrl('date_from', filters.date_from);
     setFilterInUrl('date_to', filters.date_to);
 
@@ -401,6 +410,25 @@ export async function renderTicketsList({ query, user }) {
       options.forEach((opt) => assignedSel.appendChild(opt));
     } catch {
       assignedSel.innerHTML = '<option value="">Todos los responsables</option>';
+    }
+  }
+
+  /**
+   * Carga las empresas visibles para el usuario y llena el select de "Empresa" (solo SAC/admin de plataforma).
+   * @returns {Promise<void>}
+   */
+  async function populateCompanies() {
+    if (!canFilterByCompany) return;
+    try {
+      const { companies } = await api.companies.list();
+      companyNames = Object.fromEntries((companies || []).map((c) => [String(c.id), c.name]));
+      const options = (companies || [])
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map((c) => h('option', { value: String(c.id), selected: String(filters.company_id) === String(c.id) ? '' : null }, `${c.code_prefix ? `${c.code_prefix} — ` : ''}${c.name}`));
+      companySel.innerHTML = '<option value="">Todas las empresas</option>';
+      options.forEach((opt) => companySel.appendChild(opt));
+    } catch {
+      companySel.innerHTML = '<option value="">Todas las empresas</option>';
     }
   }
 
@@ -503,13 +531,14 @@ export async function renderTicketsList({ query, user }) {
         'priority': prioSel,
         'area': areaSel,
         'assigned_to': assignedSel,
+        'company_id': companySel,
         'date_from': fromInput,
         'date_to': toInput,
       };
       if (inputMap[filterKey]) inputMap[filterKey].value = '';
       setFilterInUrl(filterKey, '');
       applyFilters();
-    });
+    }, {}, companyNames);
     if (chips) filtersChipsWrap.appendChild(chips);
   }
 
@@ -599,7 +628,7 @@ export async function renderTicketsList({ query, user }) {
     }
   }
 
-  await populateAssignedUsers();
+  await Promise.all([populateAssignedUsers(), populateCompanies()]);
   await Promise.all([render(), loadStats()]);
 
   const evs = ['ticket:created', 'ticket:updated', 'ticket:assigned',

@@ -1,6 +1,7 @@
 /* Documentado por: Miguel Flores */
 'use strict'
-const firestoreData = require('../firestoreData');
+const { In } = require('typeorm');
+const orm = require('../orm');
 const auditService = require('./audit.service');
 const notificationsService = require('./notifications.service');
 const attachmentsService = require('./attachments.service');
@@ -103,6 +104,78 @@ function decorate(ticket) {
 }
 
 /**
+ * Resuelve el prefijo de código de una empresa (o 'TKT' si no tiene uno configurado) y
+ * genera el siguiente código secuencial libre para ese prefijo, reintentando si otra
+ * inserción concurrente ya tomó el número (choca contra la constraint UNIQUE de `code`).
+ * @param {String|Number|null} companyId - id de la empresa del ticket, o null
+ * @param {Object} manager - EntityManager de la transacción en curso
+ * @returns {Promise<String>} código único generado, ej. 'ZZCC-000038'
+ */
+async function generateUniqueCode(companyId, manager) {
+  let prefix = 'TKT';
+  if (companyId != null) {
+    const company = await manager.getRepository(orm.Company).findOneBy({ id: Number(companyId) });
+    if (company?.code_prefix) prefix = company.code_prefix;
+  }
+  const base = `${prefix}-`;
+  const ticketRepo = manager.getRepository(orm.Ticket);
+  const existingCodes = await ticketRepo.createQueryBuilder('t')
+    .select('t.code', 'code')
+    .where('t.code LIKE :pattern', { pattern: `${base}%` })
+    .getRawMany();
+  let maxSeq = 0;
+  for (const { code } of existingCodes) {
+    const n = parseInt(code.slice(base.length), 10);
+    if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+  }
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const code = `${base}${String(maxSeq + attempt).padStart(6, '0')}`;
+    const clash = await ticketRepo.findOneBy({ code });
+    if (!clash) return code;
+  }
+  throw new Error('No se pudo generar un código de ticket único tras varios intentos.');
+}
+
+/**
+ * Enriquece filas crudas de tickets con el nombre de la categoría y con nombre/área/rol
+ * de quien lo creó y de quien tiene asignado, resolviendo esas referencias en lote
+ * (una sola consulta por tabla relacionada, no N+1).
+ * @param {Array<Object>} rows - filas crudas de tickets (entidad Ticket)
+ * @returns {Promise<Array<Object>>} tickets enriquecidos con category_name/*_name/*_area/*_role
+ */
+async function enrichTickets(rows) {
+  if (!rows.length) return [];
+  const categoryIds = Array.from(new Set(rows.map((t) => t.category_id).filter((id) => id != null)));
+  const userIds = Array.from(new Set([
+    ...rows.map((t) => t.created_by),
+    ...rows.map((t) => t.assigned_to),
+  ].filter((id) => id != null)));
+
+  const [categories, users] = await Promise.all([
+    categoryIds.length ? (await orm.getRepository(orm.Category)).findBy({ id: In(categoryIds) }) : [],
+    userIds.length ? (await orm.getRepository(orm.User)).findBy({ id: In(userIds) }) : [],
+  ]);
+  const categoriesById = new Map(categories.map((c) => [c.id, c]));
+  const usersById = new Map(users.map((u) => [u.id, u]));
+
+  return rows.map((t) => {
+    const category = t.category_id != null ? categoriesById.get(t.category_id) : null;
+    const createdBy = t.created_by != null ? usersById.get(t.created_by) : null;
+    const assignedTo = t.assigned_to != null ? usersById.get(t.assigned_to) : null;
+    return {
+      ...t,
+      category_name: category?.name || null,
+      created_by_name: createdBy?.full_name || null,
+      created_by_area: createdBy?.area || null,
+      created_by_role: createdBy?.role || null,
+      assigned_to_name: assignedTo?.full_name || null,
+      assigned_to_area: assignedTo?.area || null,
+      assigned_to_role: assignedTo?.role || null,
+    };
+  });
+}
+
+/**
  * Crea un nuevo ticket para la empresa activa del usuario, notifica a todos los usuarios SAC y registra la creación en auditoría.
  * @param {Object} payload - datos del ticket (title, description, priority, category_id)
  * @param {Object} user - usuario que crea el ticket
@@ -116,11 +189,35 @@ async function createTicket(payload, user) {
   const description = requireString(payload.description, 'descripción', 5000);
   const priority = optionalEnum(payload.priority, 'prioridad', PRIORITIES) || 'media';
   const category_id = payload.category_id ? parseInt(payload.category_id, 10) : null;
+  const companyId = user.activeCompanyId != null ? Number(user.activeCompanyId) : null;
 
-  const ticket = await firestoreData.createTicket({ title, description, category_id, priority }, user);
+  const ds = await orm.getDataSource();
+  const created = await ds.transaction(async (manager) => {
+    let category = null;
+    if (category_id) {
+      category = await manager.getRepository(orm.Category).findOneBy({ id: category_id });
+    }
+    const code = await generateUniqueCode(companyId, manager);
+    return manager.getRepository(orm.Ticket).save({
+      code,
+      title,
+      description,
+      category_id,
+      area: category?.area || null,
+      company_id: companyId,
+      status: 'recibido',
+      priority,
+      created_by: Number(user.id),
+      assigned_to: null,
+      closed_by: null,
+    });
+  });
+
+  const [ticket] = await enrichTickets([created]);
   const decorated = decorate(ticket);
 
-  const sacUsers = await firestoreData.listUsers({ role: 'sac', active: true });
+  const sacRepo = await orm.getRepository(orm.User);
+  const sacUsers = await sacRepo.find({ where: { role: 'sac', active: true } });
   for (const sacUser of sacUsers) {
     await notificationsService.createAsync({
       user_id: sacUser.id,
@@ -147,7 +244,75 @@ async function createTicket(payload, user) {
 }
 
 /**
- * Lista tickets paginados aplicando filtros y el alcance de visibilidad del usuario.
+ * Codifica un cursor de paginación en base64 a partir de created_at e id de una fila.
+ * @param {Object} row - fila con campos created_at (Date) e id
+ * @returns {String|null} cursor codificado en base64, o null si no hay fila
+ */
+function encodeCursor(row) {
+  if (!row) return null;
+  return Buffer.from(JSON.stringify([new Date(row.created_at).toISOString(), row.id])).toString('base64');
+}
+
+/**
+ * Decodifica un cursor de paginación generado por encodeCursor.
+ * @param {String} cursor - cursor codificado en base64
+ * @returns {[Date, Number]|null} par [created_at, id] decodificado, o null si el cursor es inválido/vacío
+ */
+function decodeCursor(cursor) {
+  if (!cursor) return null;
+  try {
+    const [createdAt, id] = JSON.parse(Buffer.from(cursor, 'base64').toString('utf8'));
+    return [new Date(createdAt), Number(id)];
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Aplica los filtros de búsqueda y el alcance de visibilidad por rol/empresa a un
+ * QueryBuilder de Ticket.
+ * @param {Object} qb - QueryBuilder de TypeORM sobre Ticket, alias 't'
+ * @param {Object} filters - filtros (status, priority, category_id, assigned_to, company_id, area, date_from, date_to, search)
+ * @param {Object} user - usuario que realiza la consulta
+ * @returns {Object} el mismo QueryBuilder, con los WHERE aplicados
+ */
+function applyTicketScope(qb, filters, user) {
+  if (user.role === 'jefe_inmediato') {
+    // jefe_inmediato solo ve tickets solucionados de su empresa/área (ver ticket-access.js#canViewTicket)
+    qb.andWhere('t.status = :jefeStatus', { jefeStatus: 'solucionado' });
+  } else if (filters.status) {
+    qb.andWhere('t.status = :status', { status: filters.status });
+  }
+  if (filters.priority) qb.andWhere('t.priority = :priority', { priority: filters.priority });
+  if (filters.category_id) qb.andWhere('t.category_id = :categoryId', { categoryId: Number(filters.category_id) });
+  if (filters.assigned_to) qb.andWhere('t.assigned_to = :assignedTo', { assignedTo: Number(filters.assigned_to) });
+  if (filters.company_id) qb.andWhere('t.company_id = :companyId', { companyId: Number(filters.company_id) });
+  if (filters.area && user.role !== 'jefe_inmediato') qb.andWhere('t.area = :area', { area: filters.area });
+  if (filters.date_from) qb.andWhere('t.created_at >= :dateFrom', { dateFrom: new Date(filters.date_from) });
+  if (filters.date_to) {
+    const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(filters.date_to) ? new Date(`${filters.date_to}T23:59:59.999Z`) : new Date(filters.date_to);
+    qb.andWhere('t.created_at <= :dateTo', { dateTo });
+  }
+  if (filters.search) {
+    qb.andWhere('(t.title LIKE :needle OR t.code LIKE :needle OR t.description LIKE :needle)', { needle: `%${filters.search}%` });
+  }
+
+  if (user.role === 'supervisor_campo') {
+    qb.andWhere('t.created_by = :requesterId', { requesterId: Number(user.id) });
+  } else if (user.role === 'admin_area') {
+    qb.andWhere('(t.created_by = :requesterId OR t.assigned_to = :requesterId)', { requesterId: Number(user.id) });
+  }
+
+  const companyScoped = user.role !== 'sac' && user.activeCompanyId != null && !user.isPlatformAdmin;
+  if (companyScoped) {
+    qb.andWhere('(t.company_id IS NULL OR t.company_id = :activeCompanyId)', { activeCompanyId: Number(user.activeCompanyId) });
+  }
+  return qb;
+}
+
+/**
+ * Lista tickets paginados (keyset por created_at+id) aplicando filtros y el alcance de
+ * visibilidad del usuario.
  * @param {Object} filters - filtros de búsqueda y paginación (incluye limit, cursor)
  * @param {Object} user - usuario que realiza la consulta
  * @returns {Promise<Object>} resultado paginado con tickets decorados
@@ -155,21 +320,104 @@ async function createTicket(payload, user) {
 async function listTickets(filters, user) {
   const limit = Math.min(100, Math.max(1, parseInt(filters.limit || '25', 10)));
   const cursor = typeof filters.cursor === 'string' && filters.cursor ? filters.cursor : null;
-  const result = await firestoreData.listTickets(filters, user, { cursor, limit });
-  return { ...result, tickets: result.tickets.map(decorate) };
+
+  const repo = await orm.getRepository(orm.Ticket);
+  const pageQb = applyTicketScope(repo.createQueryBuilder('t'), filters, user)
+    .orderBy('t.created_at', 'DESC')
+    .addOrderBy('t.id', 'DESC')
+    .take(limit + 1);
+
+  const cursorState = decodeCursor(cursor);
+  if (cursorState) {
+    const [cCreatedAt, cId] = cursorState;
+    pageQb.andWhere('(t.created_at < :cCreatedAt OR (t.created_at = :cCreatedAt AND t.id < :cId))', { cCreatedAt, cId });
+  }
+
+  const rows = await pageQb.getMany();
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? encodeCursor(pageRows[pageRows.length - 1]) : null;
+
+  const total = filters.search ? null : await applyTicketScope(repo.createQueryBuilder('t'), filters, user).getCount();
+
+  const enriched = await enrichTickets(pageRows);
+  return { total, limit, hasMore, nextCursor, tickets: enriched.map(decorate) };
 }
 
 /**
- * Obtiene el detalle de un ticket por id, validando que el usuario tenga permiso para verlo.
+ * Obtiene el detalle completo de un ticket: datos decorados, asignaciones, comentarios,
+ * adjuntos e historial de auditoría relacionado, validando que el usuario tenga permiso
+ * para verlo.
  * @param {String|Number} id - id del ticket
  * @param {Object} user - usuario que solicita el ticket
- * @returns {Promise<Object>} ticket decorado
+ * @returns {Promise<Object>} ticket decorado con { assignments, comments, attachments, history }
  */
 async function getTicket(id, user) {
-  const ticket = await firestoreData.getTicketDetail(id, user);
-  if (!ticket) throw notFoundError('Ticket no encontrado.');
+  const ticketRepo = await orm.getRepository(orm.Ticket);
+  const raw = await ticketRepo.findOneBy({ id: Number(id) });
+  if (!raw) throw notFoundError('Ticket no encontrado.');
+  const [ticket] = await enrichTickets([raw]);
   if (!canView(ticket, user)) throw forbiddenError();
-  return decorate(ticket);
+
+  const [assignmentRepo, commentRepo, attachmentRepo, auditRepo] = await Promise.all([
+    orm.getRepository(orm.TicketAssignment),
+    orm.getRepository(orm.TicketComment),
+    orm.getRepository(orm.Attachment),
+    orm.getRepository(orm.AuditLog),
+  ]);
+  const [assignments, comments, attachments, historyEntries] = await Promise.all([
+    assignmentRepo.find({ where: { ticket_id: ticket.id }, order: { assigned_at: 'ASC' } }),
+    commentRepo.find({ where: { ticket_id: ticket.id }, order: { created_at: 'ASC' } }),
+    attachmentRepo.find({ where: { ticket_id: ticket.id }, order: { uploaded_at: 'ASC' } }),
+    auditRepo.find({ where: { target_type: 'ticket', target_id: ticket.id }, order: { created_at: 'ASC' }, take: 200 }),
+  ]);
+
+  const userIds = Array.from(new Set([
+    ...assignments.flatMap((a) => [a.from_user_id, a.to_user_id, a.assigned_by]),
+    ...comments.map((c) => c.user_id),
+    ...attachments.map((a) => a.user_id),
+    ...historyEntries.map((h) => h.user_id),
+  ].filter((v) => v != null)));
+  const userRepo = await orm.getRepository(orm.User);
+  const users = userIds.length ? await userRepo.findBy({ id: In(userIds) }) : [];
+  const usersById = new Map(users.map((u) => [u.id, u]));
+
+  const decorated = decorate(ticket);
+  return {
+    ...decorated,
+    assignments: assignments.map((a) => ({
+      ...a,
+      from_user_name: usersById.get(a.from_user_id)?.full_name || null,
+      to_user_name: usersById.get(a.to_user_id)?.full_name || null,
+      assigned_by_name: usersById.get(a.assigned_by)?.full_name || null,
+    })),
+    comments: comments.map((c) => ({
+      ...c,
+      user_name: usersById.get(c.user_id)?.full_name || null,
+      user_role: usersById.get(c.user_id)?.role || null,
+    })),
+    attachments: attachments.map((a) => ({
+      ...a,
+      user_name: usersById.get(a.user_id)?.full_name || null,
+      user_role: usersById.get(a.user_id)?.role || null,
+    })),
+    history: historyEntries.map((h) => ({
+      ...h,
+      user_name: usersById.get(h.user_id)?.full_name || null,
+      old_value: parseJsonMaybe(h.old_value),
+      new_value: parseJsonMaybe(h.new_value),
+    })),
+  };
+}
+
+/**
+ * Parsea un valor de old_value/new_value desde JSON si es un string parseable, o lo devuelve tal cual.
+ * @param {*} value - valor crudo almacenado en la columna
+ * @returns {*} valor parseado, o el original si no era JSON válido
+ */
+function parseJsonMaybe(value) {
+  if (typeof value !== 'string' || !value) return value;
+  try { return JSON.parse(value); } catch (_) { return value; }
 }
 
 /**
@@ -180,21 +428,31 @@ async function getTicket(id, user) {
  * @returns {Promise<Object>} ticket actualizado decorado
  */
 async function updateTicket(id, payload, user) {
-  const ticket = await firestoreData.getTicketById(id);
-  if (!ticket) throw notFoundError('Ticket no encontrado.');
+  const repo = await orm.getRepository(orm.Ticket);
+  const raw = await repo.findOneBy({ id: Number(id) });
+  if (!raw) throw notFoundError('Ticket no encontrado.');
+  const [ticket] = await enrichTickets([raw]);
   if (!canEditMeta(ticket, user)) throw forbiddenError();
 
   const patch = {};
   if (payload.title !== undefined) patch.title = requireString(payload.title, 'título', 200);
   if (payload.description !== undefined) patch.description = requireString(payload.description, 'descripción', 5000);
   if (payload.priority !== undefined) patch.priority = optionalEnum(payload.priority, 'prioridad', PRIORITIES) || ticket.priority;
-  if (payload.category_id !== undefined) patch.category_id = payload.category_id ? parseInt(payload.category_id, 10) : null;
-
-  if (Object.keys(patch).length === 0) {
-    return decorate(await firestoreData.getTicketDetail(id, user));
+  if (payload.category_id !== undefined) {
+    const cid = payload.category_id ? parseInt(payload.category_id, 10) : null;
+    if (cid) {
+      const category = await (await orm.getRepository(orm.Category)).findOneBy({ id: cid });
+      if (!category) throw validationError('La categoría seleccionada no existe.');
+    }
+    patch.category_id = cid;
   }
 
-  const updated = await firestoreData.updateTicket(id, patch);
+  if (Object.keys(patch).length === 0) {
+    return decorate(ticket);
+  }
+
+  await repo.update({ id: ticket.id }, patch);
+  const [updated] = await enrichTickets([await repo.findOneBy({ id: ticket.id })]);
   const decorated = decorate(updated);
   emit('ticket:updated', { ticketId: id, ticket: decorated, by: user.id }, { room: 'tickets' });
   return decorated;
@@ -208,21 +466,43 @@ async function updateTicket(id, payload, user) {
  * @returns {Promise<Object>} ticket actualizado decorado
  */
 async function assignTicket(id, payload, user) {
-  const ticket = await firestoreData.getTicketById(id);
-  if (!ticket) throw notFoundError('Ticket no encontrado.');
+  const repo = await orm.getRepository(orm.Ticket);
+  const raw = await repo.findOneBy({ id: Number(id) });
+  if (!raw) throw notFoundError('Ticket no encontrado.');
+  const [ticket] = await enrichTickets([raw]);
   if (!canAssign(ticket, user)) throw forbiddenError('Solo SAC o jefes inmediatos pueden asignar tickets.');
   const to_user_id = parseInt(payload.to_user_id, 10);
   if (!to_user_id) throw validationError('Debe indicar el encargado destino.');
   const notes = optionalString(payload.notes, 'notas', 1000) || null;
 
-  let updated;
-  try {
-    updated = await firestoreData.assignTicket(id, to_user_id, user, notes);
-  } catch (err) {
-    if (err.code === 'NOT_FOUND') throw notFoundError(err.message);
-    if (err.code === 'VALIDATION_ERROR') throw validationError(err.message);
-    throw err;
+  const userRepo = await orm.getRepository(orm.User);
+  const target = await userRepo.findOneBy({ id: to_user_id });
+  if (!target) throw notFoundError('El usuario destino no existe.');
+  if (!target.active) throw validationError('El usuario destino está inactivo.');
+  if (target.role !== 'admin_area' && target.role !== 'jefe_inmediato') {
+    throw validationError('El ticket debe asignarse a un administrador de área o jefe inmediato.');
   }
+
+  const ds = await orm.getDataSource();
+  await ds.transaction(async (manager) => {
+    const fromUserId = raw.assigned_to || null;
+    const newStatus = raw.status === 'recibido' || raw.status === 'reabierto' ? 'asignado' : raw.status;
+    await manager.getRepository(orm.TicketAssignment).save({
+      ticket_id: ticket.id,
+      from_user_id: fromUserId,
+      to_user_id,
+      assigned_by: Number(user.id),
+      notes,
+    });
+    await manager.getRepository(orm.Ticket).update({ id: ticket.id }, {
+      assigned_to: to_user_id,
+      area: target.area || null,
+      status: newStatus,
+      closed_at: null,
+    });
+  });
+
+  const [updated] = await enrichTickets([await repo.findOneBy({ id: ticket.id })]);
   const decorated = decorate(updated);
 
   await notificationsService.createAsync({
@@ -268,8 +548,10 @@ async function changeStatus(id, payload, user) {
   if (!next) throw validationError('Debe indicar un estado válido.');
   const comment = optionalString(payload.comment, 'comentario', 2000) || null;
 
-  const ticket = await firestoreData.getTicketWithArea(id);
-  if (!ticket) throw notFoundError('Ticket no encontrado.');
+  const repo = await orm.getRepository(orm.Ticket);
+  const raw = await repo.findOneBy({ id: Number(id) });
+  if (!raw) throw notFoundError('Ticket no encontrado.');
+  const [ticket] = await enrichTickets([raw]);
   if (!canView(ticket, user)) throw forbiddenError();
   if (!canChangeStatus(ticket, user, next)) throw forbiddenError('No puede cambiar a este estado.');
 
@@ -278,15 +560,22 @@ async function changeStatus(id, payload, user) {
     throw conflictError(`Transición no permitida: ${ticket.status} → ${next}.`);
   }
 
-  let updated;
-  try {
-    updated = await firestoreData.changeTicketStatus(id, next, comment, user);
-  } catch (err) {
-    if (err.code === 'CONFLICT')
-      throw conflictError(err.message);
-    if (err.code === 'NOT_FOUND') throw notFoundError(err.message);
-    throw err;
-  }
+  const ds = await orm.getDataSource();
+  await ds.transaction(async (manager) => {
+    const patch = { status: next };
+    patch.closed_at = next === 'cerrado' ? new Date() : null;
+    await manager.getRepository(orm.Ticket).update({ id: ticket.id }, patch);
+    if (comment) {
+      await manager.getRepository(orm.TicketComment).save({
+        ticket_id: ticket.id,
+        user_id: Number(user.id),
+        comment,
+        attachment_id: null,
+      });
+    }
+  });
+
+  const [updated] = await enrichTickets([await repo.findOneBy({ id: ticket.id })]);
   const decorated = decorate(updated);
 
   const counterpart = next === 'cerrado' || next === 'solucionado'
@@ -303,8 +592,9 @@ async function changeStatus(id, payload, user) {
   }
 
   if (next === 'solucionado' && ticket.area) {
-    const users = await firestoreData.listUsers({ role: 'jefe_inmediato', active: true });
-    const jefe = users.find((u) => u.area === ticket.area && u.id !== user.id);
+    const userRepo = await orm.getRepository(orm.User);
+    const jefes = await userRepo.find({ where: { role: 'jefe_inmediato', active: true, area: ticket.area } });
+    const jefe = jefes.find((u) => u.id !== user.id);
     if (jefe) {
       await notificationsService.createAsync({
         user_id: jefe.id,
@@ -317,7 +607,8 @@ async function changeStatus(id, payload, user) {
   }
 
   if (next === 'cerrado') {
-    const sacUsers = await firestoreData.listUsers({ role: 'sac', active: true });
+    const userRepo = await orm.getRepository(orm.User);
+    const sacUsers = await userRepo.find({ where: { role: 'sac', active: true } });
     for (const u of sacUsers) {
       if (u.id === user.id) continue;
       await notificationsService.createAsync({
@@ -371,12 +662,20 @@ async function changeStatus(id, payload, user) {
 async function addComment(id, payload, user) {
   const comment = requireString(payload.comment, 'comentario', 4000);
 
-  const ticket = await firestoreData.getTicketWithArea(id);
-  if (!ticket) throw notFoundError('Ticket no encontrado.');
+  const repo = await orm.getRepository(orm.Ticket);
+  const raw = await repo.findOneBy({ id: Number(id) });
+  if (!raw) throw notFoundError('Ticket no encontrado.');
+  const [ticket] = await enrichTickets([raw]);
   if (!canView(ticket, user)) throw forbiddenError();
 
-  const row = await firestoreData.addComment(id, comment, user);
-  const decorated = decorate(ticket);
+  const commentRepo = await orm.getRepository(orm.TicketComment);
+  const row = await commentRepo.save({
+    ticket_id: ticket.id,
+    user_id: Number(user.id),
+    comment,
+    attachment_id: null,
+  });
+  const decoratedComment = { ...row, user_name: user.full_name, user_role: user.role };
 
   const counterpart = ticket.assigned_to === user.id ? ticket.created_by : ticket.assigned_to;
   if (counterpart && counterpart !== user.id) {
@@ -400,8 +699,8 @@ async function addComment(id, payload, user) {
     new_value: { comment },
   });
 
-  emit('ticket:commented', { ticketId: id, comment: row }, { user: ticket.assigned_to, role: 'sac', room: 'tickets' });
-  return row;
+  emit('ticket:commented', { ticketId: id, comment: decoratedComment }, { user: ticket.assigned_to, role: 'sac', room: 'tickets' });
+  return decoratedComment;
 }
 
 /**
@@ -412,8 +711,10 @@ async function addComment(id, payload, user) {
  * @returns {Promise<Object>} adjunto creado con datos del usuario
  */
 async function addAttachment(id, file, user) {
-  const ticket = await firestoreData.getTicketWithArea(id);
-  if (!ticket) throw notFoundError('Ticket no encontrado.');
+  const repo = await orm.getRepository(orm.Ticket);
+  const raw = await repo.findOneBy({ id: Number(id) });
+  if (!raw) throw notFoundError('Ticket no encontrado.');
+  const [ticket] = await enrichTickets([raw]);
   if (!canView(ticket, user)) throw forbiddenError();
 
   const attachmentId = await attachmentsService.createAsync({
@@ -425,7 +726,6 @@ async function addAttachment(id, file, user) {
     size: file.size,
   });
   const row = await attachmentsService.createWithJoin(attachmentId);
-  const decorated = decorate(ticket);
 
   const counterpart = ticket.assigned_to === user.id ? ticket.created_by : ticket.assigned_to;
   if (counterpart && counterpart !== user.id) {
@@ -479,4 +779,3 @@ module.exports = {
   canView, canEditMeta, canAssign, canClose, canReopen, canChangeStatus,
   TRANSITIONS, STATUS_LABEL, TICKET_STATUS,
 };
-

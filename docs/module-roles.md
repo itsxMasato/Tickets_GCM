@@ -37,13 +37,13 @@
 
 *Crítico = badge Rojo Camarón (`bg-accent/10 text-accent`) junto a la etiqueta y dot Rojo Camarón en el panel de cambios pendientes, para que el SAC no se los pierda. `CRITICAL_PERMS = { manageUsers, assign, createTicket }`.
 
-Defaults viven en `src/services/roles.service.js → DEFAULTS`. Se aplican si el documento `role_permissions/<role>` no existe en Firestore.
+Defaults viven en `src/services/roles.service.js → DEFAULTS`. Se aplican si el rol no tiene filas propias en `role_permissions`.
 
 ### Persistencia
 
-- **Storage:** Firestore, colección `role_permissions`, un documento por rol (`{role}.ts` con los 6 booleanos normalizados).
-- **Lectura:** `GET /api/roles` devuelve `{ roles: { [role]: perms } }`. Si un rol no tiene documento, el backend aplica `DEFAULTS[role]`. La normalización (`normalizePermissions`) garantiza exactamente las 6 claves booleanas.
-- **Escritura:** `PATCH /api/roles/:role` con `{ perms: { ...6 booleanos } }`. Se usa `set(..., { merge: true })`. Si hay cambios respecto al snapshot, escribe audit + emite socket a todos los SAC.
+- **Storage:** SQL Server (vía TypeORM), tabla `role_permissions` — una fila por (rol, permission_key), globales a la plataforma (`company_id` existe en la tabla pero queda NULL, reservado por si algún día se implementan permisos por empresa).
+- **Lectura:** `GET /api/roles` devuelve `{ roles: { [role]: perms } }`. Si un rol no tiene filas propias, el backend aplica `DEFAULTS[role]`. La normalización (`normalizePermissions`) garantiza exactamente las 6 claves booleanas.
+- **Escritura:** `PATCH /api/roles/:role` con `{ perms: { ...6 booleanos } }`. Se hace upsert por (rol, permission_key). Si hay cambios respecto al snapshot, escribe audit + emite socket a todos los SAC.
 
 ## 3. Arquitectura
 
@@ -74,7 +74,7 @@ Defaults viven en `src/services/roles.service.js → DEFAULTS`. Se aplican si el
 └─────────────────────────────────────────────────────────────┘
                 │
                 ▼
-            Firestore `role_permissions/<role>`
+            SQL Server `role_permissions` (fila por rol+permission_key)
 ```
 
 ## 4. Estructura de la vista
@@ -134,8 +134,8 @@ DELETE /api/roles/permissions/:key → 204
 El body del PATCH es siempre completo (los 6 permisos), no un diff. Esto es deliberado: un PATCH parcial podría borrar permisos no enviados en un cliente buggy. La normalización backend garantiza booleanos.
 
 **Reglas de los DELETE** (centralizadas en `src/services/roles.service.js → deleteRole / deletePermission`):
-- `DELETE /api/roles/:role`: `role === 'sac'` → 403 `ROLE_PROTECTED` (inamovible). Si hay usuarios con ese rol y no llega `reassignTo` (o es inválido) → 409 `REASSIGN_REQUIRED`. Reasigna usuarios con `firestoreData.updateUser` en paralelo, luego borra `role_permissions/<role>`. Audit: `role_deleted`.
-- `DELETE /api/roles/permissions/:key`: si el permiso está en `DEFAULTS[role] === true` y el rol nunca se customizó → 409 `PERMISSION_IN_USE_BY_DEFAULT`. Si está activo en algún rol y no llega `replacement` → 409 `REPLACEMENT_REQUIRED`. Si el permiso es crítico (`manageUsers`, `assign`, `createTicket`), `replacement` debe estar activo en **todos** los roles donde estaba el permiso original → 409 `CRITICAL_PERMISSION_REQUIRES_FULL_COVERAGE` si falta alguno. Aplica el cambio con `batch.set(ref, { [key]: false, [replacement]: true }, { merge: true })`. Audit: `permission_deleted`.
+- `DELETE /api/roles/:role`: `role === 'sac'` → 403 `ROLE_PROTECTED` (inamovible). Si hay usuarios con ese rol y no llega `reassignTo` (o es inválido) → 409 `REASSIGN_REQUIRED`. Reasigna usuarios con un `UPDATE` masivo sobre `users`, luego borra las filas de `role_permissions` de ese rol. Audit: `role_deleted`.
+- `DELETE /api/roles/permissions/:key`: si el permiso está en `DEFAULTS[role] === true` y el rol nunca se customizó → 409 `PERMISSION_IN_USE_BY_DEFAULT`. Si está activo en algún rol y no llega `replacement` → 409 `REPLACEMENT_REQUIRED`. Si el permiso es crítico (`manageUsers`, `assign`, `createTicket`), `replacement` debe estar activo en **todos** los roles donde estaba el permiso original → 409 `CRITICAL_PERMISSION_REQUIRES_FULL_COVERAGE` si falta alguno. Aplica el cambio con upsert de las filas `(role, key, false)` y `(role, replacement, true)` por cada rol afectado. Audit: `permission_deleted`.
 - Ambos emiten realtime: `role:deleted` y `permission:deleted` a `{ role: 'sac', broadcast: true }`.
 
 ### Back → Front (realtime)
@@ -163,7 +163,7 @@ Socket event `role:permissions_updated`:
 
 - **Lista por rol con descripciones, no matriz-tabla.** Antes era una grilla 4×6 con celdas togglables: compacto, pero el nombre del permiso era lo único que se veía, sin contexto sobre qué habilitaba. La lista vertical con descripción operativa por permiso reduce el "¿esto qué hace?" que era el mayor tropiezo en pruebas. La matriz perdía vertical space y obligaba a sticky-left en mobile; la lista scrollea natural.
 - **Panel lateral sticky, no tabs.** En desktop el panel sticky (360px) muestra el diff en tiempo real mientras el usuario mueve toggles; en mobile colapsa bajo la lista (grid 1 col). Mismo patrón que la antigua matriz.
-- **Optimistic UI ligero, no "guardar al toggle".** La acción destructiva (escribir en Firestore + broadcast + audit) se concentra en `Guardar cambios`. Los toggles amarillos y el fondo `bg-amber-50` en la fila marcan el delta visual.
+- **Optimistic UI ligero, no "guardar al toggle".** La acción destructiva (escribir en SQL Server + broadcast + audit) se concentra en `Guardar cambios`. Los toggles amarillos y el fondo `bg-amber-50` en la fila marcan el delta visual.
 - **Anti-borrado por PATCH completo.** Cada PATCH envía los 6 permisos del estado pendiente, no sólo los cambiados. Si un cliente tuviera un bug que omite una clave, el backend no la borra gracias a `normalizePermissions` + `set(..., { merge: true })`.
 - **Cambios paralelos → banner, no overwrite.** Si otro SAC guarda mientras yo edito, mi diff no se pisa: aparece un banner ámbar con `Descartar` o `Recargar`. Decisión consciente: forzar al usuario a decidir.
 - **Ctrl/Cmd+S guarda, Esc descarta.** Atajos típicos de formularios densos. Esc sólo dispara si NO hay modal abierto y NO estamos dentro de un input/textarea (no se lo quitamos al usuario mientras edita).
@@ -202,7 +202,7 @@ Socket event `role:permissions_updated`:
 ## 10. Riesgos y deuda
 
 - **Defaults sólo en backend.** Si el cliente lee antes de que el backend responda (no aplica aquí porque `loadAll` espera), no hay riesgo. Pero si en el futuro se hace un render optimista, hay que mover `DEFAULTS` a `client/utils/format.js` o similar.
-- **Footer usa `loadedAt` como proxy** de "última modificación" porque Firestore no expone `updatedAt` al cliente. El backend sí lo registra en audit; futuro: leer el último `audit.role_permissions_updated` para mostrar fecha real.
+- **Footer usa `loadedAt` como proxy** de "última modificación" porque `GET /api/roles` no expone un `updatedAt` agregado al cliente (solo hay `updated_at` por fila en `role_permissions`, no por rol). El backend sí lo registra en audit; futuro: leer el último `audit.role_permissions_updated` para mostrar fecha real.
 - **Crear un rol o un permiso nuevos sigue fuera de alcance.** Los 4 roles y los 6 permisos son fijos; el wizard de 2 pasos cubre la eliminación pero no la creación. Si se quisiera añadir un rol, hay que tocar `validators.ROLES` (backend), `ROLE_LABEL`/`ROLE_ORDER`/`ROLE_DESCRIPTIONS` (cliente) y `DEFAULTS` (backend). La creación queda como evolución explícita, no como feature oculta.
 - **Sin re-intento en error parcial.** Si 2 de 4 PATCH fallan, mostramos el error y preservamos el diff. No hay auto-retry; el usuario decide cuándo reintentar.
 - **No hay vista de "historial de cambios por rol".** El audit registra todo (`/audit`), pero `/roles` no enlaza. Mejora futura: link "Ver historial" en cada card.

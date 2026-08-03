@@ -2,7 +2,7 @@
 import { h } from '../utils/dom.js';
 import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL } from '../utils/format.js';
 
-export function activeFiltersChips(filters, onClearFilter, userNames = {}) {
+export function activeFiltersChips(filters, onClearFilter, userNames = {}, companyNames = {}) {
   const active = Object.entries(filters)
     .filter(([k, v]) => v && v !== '' && k !== 'page' && k !== 'limit')
     .map(([key, value]) => ({ key, value }));
@@ -24,6 +24,9 @@ export function activeFiltersChips(filters, onClearFilter, userNames = {}) {
       break;
     case 'assigned_to':
       label = `Responsable: ${userNames[value] || value}`;
+      break;
+    case 'company_id':
+      label = `Empresa: ${companyNames[value] || value}`;
       break;
     case 'date_from':
       label = `Desde: ${value}`;

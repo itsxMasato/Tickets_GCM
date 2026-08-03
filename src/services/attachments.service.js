@@ -2,10 +2,34 @@
 'use strict'
 const fs = require('fs');
 const path = require('path');
+const { In } = require('typeorm');
 const config = require('../config');
-const firestoreData = require('../firestoreData');
+const orm = require('../orm');
 const { notFoundError, forbiddenError } = require('../utils/validators');
 const { canViewTicket } = require('../utils/ticket-access');
+
+/**
+ * Carga un ticket con los campos mínimos de área/asignación necesarios para validar
+ * permisos de acceso a un adjunto (versión liviana, sin decorar título/descripción/etc.
+ * como hace tickets.service — no depende de esa migración).
+ * @param {String|Number} ticketId - id del ticket
+ * @returns {Promise<Object|null>} ticket con assigned_to/created_by/status/company_id/area
+ *   y el área de cada uno de esos dos usuarios, o null si no existe
+ */
+async function loadTicketAreaInfo(ticketId) {
+  const ticketRepo = await orm.getRepository(orm.Ticket);
+  const ticket = await ticketRepo.findOneBy({ id: Number(ticketId) });
+  if (!ticket) return null;
+  const userRepo = await orm.getRepository(orm.User);
+  const userIds = [ticket.assigned_to, ticket.created_by].filter((id) => id != null);
+  const users = userIds.length ? await userRepo.findBy({ id: In(userIds) }) : [];
+  const usersById = new Map(users.map((u) => [u.id, u]));
+  return {
+    ...ticket,
+    assigned_to_area: usersById.get(ticket.assigned_to)?.area || null,
+    created_by_area: usersById.get(ticket.created_by)?.area || null,
+  };
+}
 
 /**
  * Obtiene un adjunto por id, enriquecido con metadatos del ticket al que pertenece (asignación, estado, área, empresa).
@@ -13,10 +37,11 @@ const { canViewTicket } = require('../utils/ticket-access');
  * @returns {Promise<Object>} adjunto con datos del ticket asociado
  */
 async function getAttachment(id) {
-  const row = await firestoreData.getAttachment(id);
+  const repo = await orm.getRepository(orm.Attachment);
+  const row = await repo.findOneBy({ id: Number(id) });
   if (!row)
     throw notFoundError('Adjunto no encontrado.');
-  const ticket = await firestoreData.getTicketWithArea(row.ticket_id);
+  const ticket = await loadTicketAreaInfo(row.ticket_id);
   return {
     ...row,
     assigned_to: ticket?.assigned_to || null,
@@ -66,9 +91,10 @@ async function streamAttachment(id, user) {
  * @returns {Promise<String|Number>} id del adjunto creado
  */
 async function create({ ticket_id, user_id, filename, original_name, mime_type, size }) {
-  const row = await firestoreData.addAttachment({
-    ticket_id,
-    user_id,
+  const repo = await orm.getRepository(orm.Attachment);
+  const row = await repo.save({
+    ticket_id: Number(ticket_id),
+    user_id: Number(user_id),
     filename,
     original_name,
     mime_type,
@@ -98,9 +124,12 @@ async function createAsync({ ticket_id, user_id, filename, original_name, mime_t
  * @returns {Promise<Object>} adjunto con datos del usuario asociado
  */
 async function createWithJoin(attachmentId) {
-  const row = await firestoreData.getAttachmentWithUser(attachmentId);
+  const repo = await orm.getRepository(orm.Attachment);
+  const row = await repo.findOneBy({ id: Number(attachmentId) });
   if (!row) throw notFoundError('Adjunto no encontrado.');
-  return row;
+  const userRepo = await orm.getRepository(orm.User);
+  const user = await userRepo.findOneBy({ id: row.user_id });
+  return { ...row, user_name: user?.full_name || null, user_role: user?.role || null };
 }
 
 module.exports = {
@@ -112,4 +141,3 @@ module.exports = {
   createAsync,
   createWithJoin,
 };
-

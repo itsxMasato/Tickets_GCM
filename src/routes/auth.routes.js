@@ -6,13 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const authService = require('../services/auth.service');
 const membershipsService = require('../services/memberships.service');
-const firestoreData = require('../firestoreData');
 const requireAuth = require('../middleware/requireAuth');
-const firebaseAdmin = require('../firebaseAdmin');
-const { deriveAuthEmail } = require('../utils/deriveAuthEmail');
 const { avatarUpload, avatarDir } = require('../middleware/upload');
-
-const NOT_FOUND_MSG = 'No encontramos una cuenta con ese usuario o correo.';
 
 /**
  * Determina si un usuario tiene el flag de administrador de plataforma, aceptando
@@ -78,40 +73,6 @@ router.post('/login', async (req, res, next) => {
 });
 
 /**
- * POST /resolve-login - Dado un identificador (username o email) busca el usuario en Firestore
- * y resuelve el email sintético/real usado para autenticar contra Firebase Auth.
- * @returns {Promise<void>} responde con { email } o 404 si no se encuentra
- */
-router.post('/resolve-login', async (req, res, next) => {
-  try {
-    const { identifier } = req.body || {};
-    if (!identifier || typeof identifier !== 'string') {
-      return res.status(400).json({ error: { message: 'identifier missing' } });
-    }
-
-    const user = await firestoreData.getUserByIdentifier(identifier.trim());
-    if (!user) return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
-
-    const primary = deriveAuthEmail(user);
-    if (!primary)
-      return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
-
-    const candidates = Array.from(new Set([primary, (user.email || '').trim().toLowerCase()].filter(Boolean)));
-
-    const auth = firebaseAdmin.getAuth();
-    for (const email of candidates) {
-      try {
-        await auth.getUserByEmail(email);
-        return res.json({ email });
-      } catch (e) {
-        if (e.code !== 'auth/user-not-found') throw e;
-      }
-    }
-    return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
-  } catch (err) { next(err); }
-});
-
-/**
  * POST /logout - Destruye la sesión del usuario actual y limpia la cookie de sesión.
  * @returns {void} responde con { ok: true }
  */
@@ -146,44 +107,6 @@ router.post('/verify-password', requireAuth, async (req, res, next) => {
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
     res.json({ user: await buildSessionUser(req) });
-  } catch (err) { next(err); }
-});
-
-/**
- * POST /firebase - Autentica al usuario a partir de un idToken de Firebase Auth: lo verifica,
- * busca el usuario correspondiente en Firestore por email, valida que esté activo y crea la sesión.
- * @returns {Promise<void>} responde con { user } o error (400/403/404) según el caso
- */
-router.post('/firebase', async (req, res, next) => {
-  try {
-    const { idToken } = req.body || {};
-    if (!idToken) return res.status(400).json({ error: { message: 'Falta el token de autenticación.' } });
-    const decoded = await firebaseAdmin.verifyIdToken(idToken);
-    const email = (decoded.email || '').toLowerCase();
-    if (!email) return res.status(400).json({ error: { message: 'El token no contiene un correo electrónico.' } });
-
-    const user = await firestoreData.getUserByIdentifier(email);
-    if (!user)
-      return res.status(404).json({ error: { message: NOT_FOUND_MSG } });
-    if (!user.active)
-      return res.status(403).json({ error: { message: 'Usuario inactivo. Contacte al administrador.' } });
-
-    const activeCompanyId = await membershipsService.resolveDefaultCompanyId(user.id);
-    req.session.userId = user.id;
-    req.session.role = user.role;
-    req.session.full_name = user.full_name;
-    req.session.username = user.username;
-    req.session.area = user.area || null;
-    req.session.isPlatformAdmin = resolvePlatformAdminFlag(user);
-    req.session.activeCompanyId = activeCompanyId;
-    const memberships = await loadMemberships(user.id);
-    res.json({
-      user: {
-        ...authService.sanitize(user),
-        active_company_id: activeCompanyId,
-        memberships,
-      },
-    });
   } catch (err) { next(err); }
 });
 

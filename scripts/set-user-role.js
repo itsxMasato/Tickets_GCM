@@ -1,36 +1,39 @@
 #!/usr/bin/env node
 /* Documentado por: Miguel Flores */
 'use strict'
-const firebaseAdmin = require('../src/firebaseAdmin');
+const path = require('path');
+try { require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') }); } catch (_) { }
+const orm = require('../src/orm');
+const { ROLE_VALUES } = require('../src/orm/enums');
 
 async function run() {
   const argv = process.argv.slice(2);
   if (argv.length < 2) {
     console.error('Usage: node scripts/set-user-role.js <id> <role>');
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
   const [id, role] = argv;
-  try {
-    firebaseAdmin.init();
-    if (!firebaseAdmin.isInitialized()) {
-      console.error('[set-role] Firebase Admin no inicializado:', firebaseAdmin.getInitializationError());
-      process.exit(2);
-    }
-    const db = firebaseAdmin.getFirestoreInstance();
-    const ref = db.collection('users').doc(String(id));
-    const snap = await ref.get();
-    if (!snap.exists) {
-      console.error('[set-role] Usuario no encontrado:', id);
-      process.exit(2);
-    }
-    await ref.update({ role });
-    console.log(`[set-role] Usuario ${id} actualizado a role=${role}`);
-    process.exit(0);
-  } catch (err) {
-    console.error('[set-role] Error:', err && err.stack ? err.stack : err);
-    process.exit(1);
+  if (!ROLE_VALUES.includes(role)) {
+    console.error(`[set-role] Rol inválido: ${role}. Válidos: ${ROLE_VALUES.join(', ')}`);
+    process.exitCode = 2;
+    return;
   }
+
+  const repo = await orm.getRepository(orm.User);
+  const user = await repo.findOneBy({ id: Number(id) });
+  if (!user) {
+    console.error('[set-role] Usuario no encontrado:', id);
+    process.exitCode = 2;
+    return;
+  }
+  await repo.update({ id: user.id }, { role });
+  console.log(`[set-role] Usuario ${id} (${user.username}) actualizado a role=${role}`);
 }
 
-run();
-
+run()
+  .catch((err) => {
+    console.error('[set-role] Error:', err && err.stack ? err.stack : err);
+    process.exitCode = 1;
+  })
+  .finally(() => orm.closeORM().catch(() => {}));

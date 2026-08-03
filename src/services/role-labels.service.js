@@ -1,10 +1,9 @@
 /* Documentado por: Miguel Flores */
 'use strict'
-const firebaseAdmin = require('../firebaseAdmin');
+const orm = require('../orm');
 const validators = require('../utils/validators');
 const auditService = require('./audit.service');
 
-const COLLECTION = 'role_labels';
 const LABEL_MAX = 80;
 
 /**
@@ -12,20 +11,12 @@ const LABEL_MAX = 80;
  * @returns {Promise<Object>} mapa de rol a etiqueta
  */
 async function list() {
-  firebaseAdmin.init();
-  const db = firebaseAdmin.getFirestoreInstance();
+  const repo = await orm.getRepository(orm.RoleLabel);
   const roles = validators.ROLES;
   const out = {};
   for (const r of roles) {
-    const snap = await db.collection(COLLECTION).doc(r).get();
-    if (snap.exists) {
-      const data = snap.data() || {};
-      out[r] = (typeof data.label === 'string' && data.label.trim().length > 0)
-        ? data.label.trim()
-        : (validators.ROLE_LABEL[r] || r);
-    } else {
-      out[r] = validators.ROLE_LABEL[r] || r;
-    }
+    const row = await repo.findOneBy({ role: r });
+    out[r] = (row && row.label && row.label.trim().length > 0) ? row.label.trim() : (validators.ROLE_LABEL[r] || r);
   }
   return out;
 }
@@ -36,17 +27,13 @@ async function list() {
  * @returns {Promise<String>} etiqueta del rol
  */
 async function get(role) {
-  firebaseAdmin.init();
-  const db = firebaseAdmin.getFirestoreInstance();
   if (!validators.ROLES.includes(role)) {
     return validators.ROLE_LABEL[role] || role;
   }
-  const snap = await db.collection(COLLECTION).doc(role).get();
-  if (snap.exists) {
-    const data = snap.data() || {};
-    if (typeof data.label === 'string' && data.label.trim().length > 0) {
-      return data.label.trim();
-    }
+  const repo = await orm.getRepository(orm.RoleLabel);
+  const row = await repo.findOneBy({ role });
+  if (row && row.label && row.label.trim().length > 0) {
+    return row.label.trim();
   }
   return validators.ROLE_LABEL[role] || role;
 }
@@ -60,9 +47,6 @@ async function get(role) {
  * @returns {Promise<String>} etiqueta final guardada
  */
 async function update(role, body, user) {
-  firebaseAdmin.init();
-  const db = firebaseAdmin.getFirestoreInstance();
-
   if (!validators.ROLES.includes(role)) {
     const err = new Error('Rol no válido');
     err.statusCode = 400;
@@ -93,11 +77,13 @@ async function update(role, body, user) {
 
   const previous = await get(role);
 
-  await db.collection(COLLECTION).doc(role).set({
-    label: trimmed,
-    updated_at: new Date().toISOString(),
-    updated_by: user?.id || null,
-  }, { merge: true });
+  const repo = await orm.getRepository(orm.RoleLabel);
+  const existing = await repo.findOneBy({ role });
+  if (existing) {
+    await repo.update({ role }, { label: trimmed, updated_at: new Date(), updated_by: user?.id || null });
+  } else {
+    await repo.save({ role, label: trimmed, updated_by: user?.id || null });
+  }
 
   if (previous !== trimmed) {
     await auditService.logAsync({
@@ -124,4 +110,3 @@ async function update(role, body, user) {
 }
 
 module.exports = { list, get, update, LABEL_MAX };
-

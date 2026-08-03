@@ -1,7 +1,8 @@
 /* Documentado por: Miguel Flores */
-"use strict"
+'use strict'
 
-const firestoreData = require('../firestoreData');
+const { In } = require('typeorm');
+const orm = require('../orm');
 const { ROLE_VALUES } = require('../orm/enums');
 const {
   optionalEnum,
@@ -34,9 +35,9 @@ function emitMembership(event, membership, companyId, userId) {
 }
 
 /**
- * Convierte un registro de membresía de Firestore al formato plano expuesto por la API.
- * @param {Object} row - registro crudo de membresía
- * @returns {Object|null} membresía serializada, o null si no se recibió registro
+ * Convierte una fila de membresía a los tipos/formato planos expuestos por la API.
+ * @param {Object} row - fila cruda de membresía
+ * @returns {Object|null} membresía serializada, o null si no se recibió fila
  */
 function serialize(row) {
   if (!row) return null;
@@ -58,7 +59,8 @@ function serialize(row) {
  * @returns {Promise<Object>} empresa encontrada
  */
 async function loadCompanyOrThrow(companyId) {
-  const c = await firestoreData.getCompanyById(Number(companyId), { requester: null });
+  const repo = await orm.getRepository(orm.Company);
+  const c = await repo.findOneBy({ id: Number(companyId) });
   if (!c) throw notFoundError('Empresa no encontrada.');
   return c;
 }
@@ -69,67 +71,24 @@ async function loadCompanyOrThrow(companyId) {
  * @returns {Promise<Object>} usuario encontrado
  */
 async function loadUserOrThrow(userId) {
-  const u = await firestoreData.getUserById(Number(userId));
+  const repo = await orm.getRepository(orm.User);
+  const u = await repo.findOneBy({ id: Number(userId) });
   if (!u) throw notFoundError('Usuario no encontrado.');
   return u;
 }
 
 /**
- * Interpreta un valor crudo de flag "activo" almacenado en Firestore, aceptando variantes numéricas, booleanas y de texto.
- * @param {*} value - valor crudo del flag
- * @returns {Boolean} true si el valor representa "activo"
- */
-function isActiveFlag(value) {
-  return value === 1 || value === true || value === '1' || value === 'true';
-}
-
-/**
- * Normaliza un id a String para poder compararlo de forma consistente sin importar su tipo original.
- * @param {*} value - id a normalizar
- * @returns {String|null} id normalizado como string, o null si el valor era nulo
- */
-function normalizeMembershipId(value) {
-  return value == null ? null : String(value);
-}
-
-/**
- * Obtiene las membresías de un usuario probando varias estrategias de consulta en Firestore (con filtros progresivamente más laxos) para tolerar índices o datos inconsistentes, y filtra el resultado final por el usuario y el flag de activo solicitado.
+ * Obtiene las membresías (activas o no) de un usuario.
  * @param {String|Number} userId - id del usuario
  * @param {Object} [options] - opciones de consulta
  * @param {Boolean} [options.activeOnly=false] - si true, devuelve solo membresías activas
  * @returns {Promise<Array>} membresías crudas del usuario
  */
 async function getMembershipRowsForUser(userId, { activeOnly = false } = {}) {
-  const normalizedUserId = normalizeMembershipId(userId);
-  const rows = [];
-
-  for (const clauses of [[], [['user_id', '==', userId]], [['user_id', '==', userId], ['active', '==', 1]]]) {
-    try {
-      const candidateRows = await firestoreData.queryCollection('user_company_memberships', clauses, { limit: 1000 });
-      if (Array.isArray(candidateRows) && candidateRows.length) {
-        rows.push(...candidateRows);
-        break;
-      }
-    } catch (_) {}
-  }
-
-  if (!rows.length) {
-    try {
-      const fallbackRows = await firestoreData.queryCollection('user_company_memberships', [], { limit: 1000 });
-      if (Array.isArray(fallbackRows)) rows.push(...fallbackRows);
-    } catch (_) {}
-  }
-
-  if (!rows.length) {
-    const fallbackRow = await firestoreData.findOneByFields('user_company_memberships', [['user_id', '==', userId]]);
-    if (fallbackRow) rows.push(fallbackRow);
-  }
-
-  return rows.filter((row) => {
-    if (normalizeMembershipId(row.user_id) !== normalizedUserId) return false;
-    if (activeOnly && !isActiveFlag(row.active)) return false;
-    return true;
-  });
+  const repo = await orm.getRepository(orm.UserCompanyMembership);
+  const where = { user_id: Number(userId) };
+  if (activeOnly) where.active = true;
+  return repo.find({ where });
 }
 
 /**
@@ -141,9 +100,10 @@ async function getMembershipRowsForUser(userId, { activeOnly = false } = {}) {
  * @returns {Promise<Object|null>} membresía encontrada, o null si no existe
  */
 async function findMembershipForUserAndCompany(userId, companyId, { activeOnly = false } = {}) {
-  const normalizedCompanyId = normalizeMembershipId(companyId);
-  const rows = await getMembershipRowsForUser(userId, { activeOnly });
-  return rows.find((row) => normalizeMembershipId(row.company_id) === normalizedCompanyId) || null;
+  const repo = await orm.getRepository(orm.UserCompanyMembership);
+  const where = { user_id: Number(userId), company_id: Number(companyId) };
+  if (activeOnly) where.active = true;
+  return repo.findOneBy(where);
 }
 
 /**
@@ -154,7 +114,7 @@ async function findMembershipForUserAndCompany(userId, companyId, { activeOnly =
 async function resolveDefaultCompanyId(userId) {
   const rows = await getMembershipRowsForUser(userId, { activeOnly: true });
   if (!rows.length) return null;
-  const defaultRow = rows.find((row) => isActiveFlag(row.is_default));
+  const defaultRow = rows.find((row) => row.is_default);
   return Number((defaultRow || rows[0]).company_id);
 }
 
@@ -186,13 +146,14 @@ async function listByUser(userId, { requester } = {}) {
   await loadUserOrThrow(targetUserId);
   const rows = await getMembershipRowsForUser(targetUserId, { activeOnly: false });
   const memberships = rows.map((r) => serialize(r));
-  const companyIds = Array.from(new Set(memberships.map((m) => String(m.company_id)).filter(Boolean)));
-  const companiesMap = await firestoreData.cacheById('companies', companyIds);
+  const companyIds = Array.from(new Set(memberships.map((m) => m.company_id).filter((id) => id != null)));
+  const companyRepo = await orm.getRepository(orm.Company);
+  const companies = companyIds.length ? await companyRepo.findBy({ id: In(companyIds) }) : [];
+  const companiesById = new Map(companies.map((c) => [c.id, c]));
   return memberships.map((m) => {
-    const base = m;
-    const c = companiesMap[String(m.company_id)];
-    if (c) base.company = { id: c.id, name: c.name, slug: c.slug, color: c.color || null, logo_url: c.logo_url || null };
-    return base;
+    const c = companiesById.get(m.company_id);
+    if (c) m.company = { id: c.id, name: c.name, slug: c.slug, color: c.color || null, logo_url: c.logo_url || null };
+    return m;
   });
 }
 
@@ -209,17 +170,21 @@ async function listByCompany(companyId, { activeOnly = true, requester } = {}) {
   const cid = Number(companyId);
   if (!requester.isPlatformAdmin) {
     const rows = await getMembershipRowsForUser(requester.id, { activeOnly: true });
-    const hasAccess = rows.some((row) => normalizeMembershipId(row.company_id) === String(cid));
+    const hasAccess = rows.some((row) => Number(row.company_id) === cid);
     if (!hasAccess) throw forbiddenError('No es miembro de esta empresa.');
   }
   await loadCompanyOrThrow(cid);
-  const rows = await firestoreData.queryCollection('user_company_memberships', []);
-  const filtered = rows.filter((m) => normalizeMembershipId(m.company_id) === String(cid) && (!activeOnly || isActiveFlag(m.active)));
-  const userIds = Array.from(new Set(filtered.map((m) => String(m.user_id)).filter(Boolean)));
-  const usersMap = await firestoreData.cacheById('users', userIds);
+  const repo = await orm.getRepository(orm.UserCompanyMembership);
+  const where = { company_id: cid };
+  if (activeOnly) where.active = true;
+  const filtered = await repo.find({ where });
+  const userIds = Array.from(new Set(filtered.map((m) => m.user_id).filter((id) => id != null)));
+  const userRepo = await orm.getRepository(orm.User);
+  const users = userIds.length ? await userRepo.findBy({ id: In(userIds) }) : [];
+  const usersById = new Map(users.map((u) => [u.id, u]));
   return filtered.map((m) => {
     const base = serialize(m);
-    const u = usersMap[String(m.user_id)];
+    const u = usersById.get(m.user_id);
     if (u) base.user = { id: u.id, username: u.username, full_name: u.full_name };
     return base;
   });
@@ -247,27 +212,23 @@ async function create(userId, input, requester, options = {}) {
   if (!role) throw validationError('El campo "role" es obligatorio.');
   const isDefault = !!(input && input.is_default);
 
+  const repo = await orm.getRepository(orm.UserCompanyMembership);
   const dup = await findMembershipForUserAndCompany(user.id, company.id, { activeOnly: false });
   if (dup)
     { throw conflictError(`El usuario ya tiene una membresía en "${company.name}".`); }
 
   if (isDefault) {
-    const others = await firestoreData.queryCollection('user_company_memberships', [['user_id', '==', user.id], ['is_default', '==', 1]]);
-    for (const o of others) await firestoreData.updateDoc('user_company_memberships', o.id, { is_default: 0 });
+    await repo.update({ user_id: user.id, is_default: true }, { is_default: false });
   }
 
-  const now = firestoreData.nowSql ? firestoreData.nowSql() : new Date().toISOString().replace('T', ' ').slice(0, 19);
-  const payload = {
+  const createdRow = await repo.save({
     user_id: user.id,
     company_id: company.id,
     role,
-    active: 1,
-    is_default: isDefault ? 1 : 0,
-    created_at: now,
-    last_seen_at: null,
-  };
-  const createdDoc = await firestoreData.createDoc('user_company_memberships', payload);
-  const out = serialize(createdDoc);
+    active: true,
+    is_default: isDefault,
+  });
+  const out = serialize(createdRow);
   await auditService.logAsync({
     user_id: requester.id,
     company_id: company.id,
@@ -296,19 +257,17 @@ async function assertCompanyKeepsCoverage(before, { becomesInactive = false, new
   const changesRole = newRole !== undefined && newRole !== before.role;
   if (!becomesInactive && !changesRole) return;
 
+  const repo = await orm.getRepository(orm.UserCompanyMembership);
+
   if (becomesInactive) {
-    const activeMembers = await firestoreData.countCollection('user_company_memberships', [
-      ['company_id', '==', before.company_id], ['active', '==', 1],
-    ]);
+    const activeMembers = await repo.count({ where: { company_id: before.company_id, active: true } });
     if (activeMembers - 1 <= 0) {
       throw conflictError('No se puede desactivar: esta empresa quedaría sin ningún miembro activo.');
     }
   }
 
   if (before.role === 'admin_area' && (becomesInactive || changesRole)) {
-    const activeAdmins = await firestoreData.countCollection('user_company_memberships', [
-      ['company_id', '==', before.company_id], ['role', '==', 'admin_area'], ['active', '==', 1],
-    ]);
+    const activeAdmins = await repo.count({ where: { company_id: before.company_id, role: 'admin_area', active: true } });
     if (activeAdmins - 1 <= 0) {
       throw conflictError('No se puede aplicar el cambio: esta empresa quedaría sin ningún administrador de área activo.');
     }
@@ -328,7 +287,8 @@ async function update(membershipId, input, requester, options = {}) {
   if (!requester || (!requester.isPlatformAdmin && !(options && options.allowSACCreate && requester.role === 'sac'))) {
     throw forbiddenError('Solo el administrador de plataforma puede modificar membresías.');
   }
-  const before = await firestoreData.getDoc('user_company_memberships', Number(membershipId));
+  const repo = await orm.getRepository(orm.UserCompanyMembership);
+  const before = await repo.findOneBy({ id: Number(membershipId) });
   if (!before) throw notFoundError('Membresía no encontrada.');
   const patch = {};
   if (input && input.role !== undefined) {
@@ -341,25 +301,26 @@ async function update(membershipId, input, requester, options = {}) {
   await assertCompanyKeepsCoverage(before, { becomesInactive: wantsActive === false, newRole: patch.role });
   if (wantsActive !== null) {
     if (!wantsActive) {
-      const targetUser = await firestoreData.getUserById(before.user_id);
+      const userRepo = await orm.getRepository(orm.User);
+      const targetUser = await userRepo.findOneBy({ id: before.user_id });
       if (!(targetUser && targetUser.is_platform_admin)) {
-        const others = await firestoreData.countCollection('user_company_memberships', [['user_id', '==', before.user_id], ['active', '==', 1]]);
+        const others = await repo.count({ where: { user_id: before.user_id, active: true } });
         if (before.active && others <= 1) throw conflictError('No se puede desactivar la última membresía activa del usuario.');
       }
     }
-    patch.active = wantsActive ? 1 : 0;
+    patch.active = wantsActive;
   }
-  if (wantsDefault !== null) patch.is_default = wantsDefault ? 1 : 0;
+  if (wantsDefault !== null) patch.is_default = wantsDefault;
 
   if (wantsDefault === true) {
-    const others = await firestoreData.queryCollection('user_company_memberships', [['user_id', '==', before.user_id], ['is_default', '==', 1]]);
-    for (const o of others) {
-      if (String(o.id) !== String(before.id)) await firestoreData.updateDoc('user_company_memberships', o.id, { is_default: 0 });
-    }
+    await repo.createQueryBuilder()
+      .update()
+      .set({ is_default: false })
+      .where('user_id = :userId AND is_default = :isDefault AND id != :id', { userId: before.user_id, isDefault: true, id: before.id })
+      .execute();
   }
-  if (Object.keys(patch).length > 0) await firestoreData.updateDoc('user_company_memberships', before.id, patch);
-  const after = await firestoreData.getDoc('user_company_memberships', before.id);
-  const out = serialize(after);
+  if (Object.keys(patch).length > 0) await repo.update({ id: before.id }, patch);
+  const after = serialize(await repo.findOneBy({ id: before.id }));
   await auditService.logAsync({
     user_id: requester.id,
     company_id: before.company_id,
@@ -369,10 +330,10 @@ async function update(membershipId, input, requester, options = {}) {
     target_code: `user#${before.user_id}`,
     description: `Membresía actualizada (#${before.id})`,
     old_value: serialize(before),
-    new_value: out,
+    new_value: after,
   });
-  emitMembership('membership:update', out, before.company_id, before.user_id);
-  return out;
+  emitMembership('membership:update', after, before.company_id, before.user_id);
+  return after;
 }
 
 /**
@@ -383,19 +344,20 @@ async function update(membershipId, input, requester, options = {}) {
  */
 async function softDelete(membershipId, requester) {
   if (!requester || !requester.isPlatformAdmin) throw forbiddenError('Solo el administrador de plataforma puede eliminar membresías.');
-  const before = await firestoreData.getDoc('user_company_memberships', Number(membershipId));
+  const repo = await orm.getRepository(orm.UserCompanyMembership);
+  const before = await repo.findOneBy({ id: Number(membershipId) });
   if (!before) throw notFoundError('Membresía no encontrada.');
   if (!before.active)
     return serialize(before);
-  const targetUser = await firestoreData.getUserById(before.user_id);
+  const userRepo = await orm.getRepository(orm.User);
+  const targetUser = await userRepo.findOneBy({ id: before.user_id });
   if (!(targetUser && targetUser.is_platform_admin)) {
-    const others = await firestoreData.countCollection('user_company_memberships', [['user_id', '==', before.user_id], ['active', '==', 1]]);
+    const others = await repo.count({ where: { user_id: before.user_id, active: true } });
     if (others <= 1) throw conflictError('No se puede eliminar la última membresía activa del usuario.');
   }
   await assertCompanyKeepsCoverage(before, { becomesInactive: true });
-  await firestoreData.updateDoc('user_company_memberships', before.id, { active: 0 });
-  const afterDoc = await firestoreData.getDoc('user_company_memberships', before.id);
-  const after = serialize(afterDoc);
+  await repo.update({ id: before.id }, { active: false });
+  const after = serialize(await repo.findOneBy({ id: before.id }));
   await auditService.logAsync({
     user_id: requester.id,
     company_id: before.company_id,
@@ -422,4 +384,3 @@ module.exports = {
   findMembershipForUserAndCompany,
   _serialize: serialize,
 };
-

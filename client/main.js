@@ -6,7 +6,6 @@ import { api } from './api.js';
 import { connectSocket, on as onSocket } from './socket.js';
 import { toast } from './utils/toast.js';
 import { renderLayout } from './components/layout.js';
-import { initializeFirebase, signOutFirebase } from './firebase.js';
 import { init as initRoleLabels, applyRoleLabel } from './utils/role-labels.js';
 
 import { renderLogin } from './views/login.js';
@@ -138,13 +137,11 @@ async function onLogin(user) {
 }
 
 /**
- * Cierra la sesión: invalida la sesión en el backend, cierra sesión en Firebase, limpia el estado
- * de la app y navega a /login.
+ * Cierra la sesión: invalida la sesión en el backend, limpia el estado de la app y navega a /login.
  * @returns {Promise<void>}
  */
 async function onLogout() {
   try { await api.auth.logout(); } catch {}
-  await signOutFirebase();
   setState({ user: null, notifications: [], unreadCount: 0 });
   go('/login');
 }
@@ -379,16 +376,11 @@ window.addEventListener('gcm:unauthorized', () => {
 });
 
 /**
- * Punto de arranque de la app: inicializa Firebase en segundo plano, resetea el estado de usuario,
- * fuerza el hash a #/login si no hay uno, dispara la primera navegación y registra el listener
- * de cambios de hash.
+ * Punto de arranque de la app: resetea el estado de usuario, fuerza el hash a #/login si no hay
+ * uno, dispara la primera navegación y registra el listener de cambios de hash.
  * @returns {Promise<void>}
  */
 async function bootstrap() {
-  void initializeFirebase().catch((error) => {
-    console.warn('[firebase] No se pudo inicializar Firestore:', error);
-  });
-
   setState({ user: null });
   location.hash = '#/login';
   onHashChange();

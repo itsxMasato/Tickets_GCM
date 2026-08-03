@@ -2,9 +2,10 @@
 # Sube este repo a render.com/new y detecta este archivo automáticamente.
 # Variables de entorno:
 #   - SESSION_SECRET: auto-generado por Render (generateValue: true).
-#   - FIREBASE_SERVICE_ACCOUNT: pegar JSON del service account minificado
-#     en el dashboard de Render (Environment → Add Secret File o env var).
-#     El JSON no debe tener saltos de línea.
+#   - MSSQL_HOST / MSSQL_PORT / MSSQL_DATABASE / MSSQL_USER / MSSQL_PASSWORD:
+#     credenciales del SQL Server de producción, se setean manualmente en el
+#     dashboard de Render (Environment → Add Environment Variable). Ver
+#     src/orm/env.js para el resto de las variables MSSQL_* opcionales.
 services:
   - type: web
     name: tickets-gcm-api
@@ -25,17 +26,15 @@ services:
       sizeGB: 1
     # Sin healthCheckPath — Render no validará ningún endpoint al levantar.
     # El health check hace un GET al levantarse y se queda sin tiempo antes
-    # de que Express termine de inicializar Firebase Admin y conectar a
-    # Firestore, marcando el deploy como "Timed Out" aunque el servicio sí
-    # esté corriendo (verificado en logs). Esto no depende del plan.
+    # de que Express termine de conectar al ORM (SQL Server), marcando el
+    # deploy como "Timed Out" aunque el servicio sí esté corriendo (verificado
+    # en logs con el setup anterior). Esto no depende del plan.
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
       - key: SESSION_SECRET
         generateValue: true
-      - key: FIREBASE_PROJECT_ID
-        value: ticketsgcm
       - key: ALLOWED_ORIGIN
         value: https://ticketsgcm.netlify.app
       # Fotos de perfil y adjuntos de tickets viven en el disco persistente
@@ -47,7 +46,15 @@ services:
       # (también efímero) — ahora en el disco persistente.
       - key: SESSION_DIR
         value: /data/sessions
-      # FIREBASE_SERVICE_ACCOUNT se setea manualmente en el dashboard
-      # (Sync: false evita que Render intente leerlo del blueprint).
-      - key: FIREBASE_SERVICE_ACCOUNT
+      # Credenciales de SQL Server: se setean manualmente en el dashboard
+      # (sync: false evita que Render intente leerlas del blueprint).
+      - key: MSSQL_HOST
+        sync: false
+      - key: MSSQL_PORT
+        sync: false
+      - key: MSSQL_DATABASE
+        sync: false
+      - key: MSSQL_USER
+        sync: false
+      - key: MSSQL_PASSWORD
         sync: false

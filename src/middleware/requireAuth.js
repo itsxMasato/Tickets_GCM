@@ -1,7 +1,7 @@
 /* Documentado por: Miguel Flores */
 'use strict'
 
-const { toId } = require('../firestoreData');
+const { toId } = require('../utils/ids');
 
 /**
  * Middleware de Express que exige una sesión activa. Si no hay sesión responde 401;

@@ -17,10 +17,10 @@ const ENTITIES = [
   ['notifications',            orm.Notification],
   ['audit_log',                orm.AuditLog],
   ['calendar_events',          orm.CalendarEvent],
-  ['companies', orm.Company],
-  ['company_areas',            orm.CompanyArea],
+  ['companies',                orm.Company],
   ['user_company_memberships', orm.UserCompanyMembership],
   ['role_permissions',         orm.RolePermission],
+  ['role_labels',              orm.RoleLabel],
 ];
 
 async function main() {

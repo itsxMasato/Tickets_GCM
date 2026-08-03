@@ -2,7 +2,6 @@
 import { h } from '../utils/dom.js';
 import { api } from '../api.js';
 import { svg } from '../utils/icons.js';
-import { signInWithFirebaseEmail } from '../firebase.js';
 import {
   BrandLockup,
   LoginField,
@@ -24,7 +23,7 @@ const ERROR_COPY = {
 };
 
 /**
- * Traduce un error de login (HTTP o de Firebase) a un mensaje legible en español para el usuario.
+ * Traduce un error de login (HTTP) a un mensaje legible en español para el usuario.
  * @param {Object} err - error capturado durante el intento de login
  * @returns {string} mensaje de error a mostrar al usuario
  */
@@ -212,7 +211,7 @@ export async function renderLogin({ params, query, onLogin }) {
   });
 
   /**
-   * Maneja el envío del formulario de login: intenta autenticación local y, si falla, hace fallback a Firebase Auth; muestra errores y pistas tras varios intentos fallidos.
+   * Maneja el envío del formulario de login: autentica contra el backend; muestra errores y pistas tras varios intentos fallidos.
    * @param {Event} e - evento de submit del formulario
    * @returns {Promise<void>}
    */
@@ -229,20 +228,7 @@ export async function renderLogin({ params, query, onLogin }) {
 
     setBusy(true);
     try {
-      let authenticatedUser;
-      try {
-        const { user: localUser } = await api.auth.login({ username: user, password: pass });
-        authenticatedUser = localUser;
-      } catch (localErr) {
-        const status = localErr?.status;
-        if (status !== 401 && status !== 404 && status !== 400) {
-          throw localErr;
-        }
-        const { email: loginEmail } = await api.auth.resolveLogin({ identifier: user });
-        const { idToken } = await signInWithFirebaseEmail(loginEmail, pass);
-        const { user: firebaseUser } = await api.auth.firebase({ idToken });
-        authenticatedUser = firebaseUser;
-      }
+      const { user: authenticatedUser } = await api.auth.login({ username: user, password: pass });
 
       if (nextUrl) {
         try { sessionStorage.setItem('gcm:postLoginNext', nextUrl); } catch {}
@@ -250,19 +236,8 @@ export async function renderLogin({ params, query, onLogin }) {
       onLogin?.(authenticatedUser);
     } catch (err) {
       state.attempts += 1;
-      const code = err.code || '';
-      let mapped = err;
-      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-        mapped = Object.assign(new Error('invalid_credentials'), { status: 401 });
-      } else if (code === 'auth/too-many-requests') {
-        mapped = Object.assign(new Error('rate_limited'), { status: 429 });
-      } else if (code === 'auth/network-request-failed') {
-        mapped = Object.assign(new Error('network_error'), {});
-      } else if (!err.status && code.startsWith('auth/')) {
-        mapped = Object.assign(new Error('invalid_credentials'), { status: 401 });
-      }
-      showError(describeError(mapped));
-      if (mapped.status === 401) {
+      showError(describeError(err));
+      if (err.status === 401) {
         passInput.focus();
         try { passInput.select(); } catch {}
       }

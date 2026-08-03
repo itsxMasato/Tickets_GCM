@@ -1,7 +1,6 @@
 /* Documentado por: Miguel Flores */
 'use strict'
-const firebaseAdmin = require('../firebaseAdmin');
-const firestoreData = require('../firestoreData');
+const orm = require('../orm');
 const validators = require('../utils/validators');
 const auditService = require('./audit.service');
 const { assertRoleDeletable } = require('../utils/role-guards');
@@ -104,6 +103,19 @@ function readPermissions(obj) {
 }
 
 /**
+ * Convierte las filas (una por permission_key) de un rol en el objeto de permisos
+ * completo, aplicando los valores por defecto del rol para las claves sin fila propia.
+ * @param {String} role - código del rol
+ * @param {Array<Object>} rows - filas de role_permissions de ese rol
+ * @returns {Object} permisos completos como booleanos
+ */
+function rowsToPermissions(role, rows) {
+  const stored = {};
+  for (const row of rows) stored[row.permission_key] = row.value;
+  return readPermissions(rows.length > 0 ? { ...DEFAULTS[role], ...stored } : (DEFAULTS[role] || {}));
+}
+
+/**
  * Devuelve el catálogo estático de definiciones de permisos: claves, etiquetas, descripciones y cuáles son críticos.
  * @returns {Object} definiciones de permisos (keys, labels, descriptions, critical)
  */
@@ -121,17 +133,12 @@ function getPermissionDefinitions() {
  * @returns {Promise<Object>} objeto con `roles` (permisos por rol) y `permissions` (definiciones)
  */
 async function list() {
-  firebaseAdmin.init();
-  const db = firebaseAdmin.getFirestoreInstance();
+  const repo = await orm.getRepository(orm.RolePermission);
   const roles = validators.ROLES;
   const res = {};
   for (const r of roles) {
-    const snap = await db.collection('role_permissions').doc(r).get();
-    if (snap.exists) {
-      res[r] = readPermissions(snap.data() || {});
-    } else {
-      res[r] = readPermissions(DEFAULTS[r] || {});
-    }
+    const rows = await repo.find({ where: { role: r } });
+    res[r] = rowsToPermissions(r, rows);
   }
   return {
     roles: res,
@@ -145,11 +152,9 @@ async function list() {
  * @returns {Promise<Object>} permisos del rol
  */
 async function get(role) {
-  firebaseAdmin.init();
-  const db = firebaseAdmin.getFirestoreInstance();
-  const snap = await db.collection('role_permissions').doc(role).get();
-  if (snap.exists) return readPermissions(snap.data() || {});
-  return readPermissions(DEFAULTS[role] || {});
+  const repo = await orm.getRepository(orm.RolePermission);
+  const rows = await repo.find({ where: { role } });
+  return rowsToPermissions(role, rows);
 }
 
 /**
@@ -160,14 +165,21 @@ async function get(role) {
  * @returns {Promise<Object>} permisos finales guardados
  */
 async function update(role, body, user) {
-  firebaseAdmin.init();
-  const db = firebaseAdmin.getFirestoreInstance();
   if (!validators.ROLES.includes(role)) {
     const err = new Error('Rol no válido'); err.statusCode = 400; throw err;
   }
   const oldPerms = await get(role);
   const perms = normalizePermissions(body || {});
-  await db.collection('role_permissions').doc(role).set(perms, { merge: true });
+
+  const repo = await orm.getRepository(orm.RolePermission);
+  for (const key of PERMISSION_KEYS) {
+    const existing = await repo.findOneBy({ role, permission_key: key });
+    if (existing) {
+      await repo.update({ id: existing.id }, { value: perms[key] });
+    } else {
+      await repo.save({ company_id: null, role, permission_key: key, value: perms[key] });
+    }
+  }
 
   const changed = JSON.stringify(oldPerms) !== JSON.stringify(perms);
   if (changed) {
@@ -244,15 +256,13 @@ function conflict(message, code) {
  * @returns {Promise<void>}
  */
 async function deleteRole(role, body, user) {
-  firebaseAdmin.init();
-  const db = firebaseAdmin.getFirestoreInstance();
-
   if (!validators.ROLES.includes(role)) {
     throw badRequest(`Rol "${role}" no existe.`);
   }
   assertRoleDeletable(role, `El rol "${role}" es inamovible porque forma parte del flujo operativo del sistema.`);
 
-  const affectedUsers = await firestoreData.listUsers({ role });
+  const userRepo = await orm.getRepository(orm.User);
+  const affectedUsers = await userRepo.find({ where: { role } });
   const hasUsers = affectedUsers.length > 0;
 
   let reassignTo = null;
@@ -276,10 +286,11 @@ async function deleteRole(role, body, user) {
   const oldPerms = await get(role);
 
   if (hasUsers) {
-    await Promise.all(affectedUsers.map((u) => firestoreData.updateUser(u.id, { role: reassignTo })));
+    await userRepo.update({ role }, { role: reassignTo });
   }
 
-  await db.collection('role_permissions').doc(role).set({});
+  const permRepo = await orm.getRepository(orm.RolePermission);
+  await permRepo.delete({ role });
 
   await auditService.logAsync({
     user_id: user?.id || null,
@@ -310,9 +321,6 @@ async function deleteRole(role, body, user) {
  * @returns {Promise<void>}
  */
 async function deletePermission(key, body, user) {
-  firebaseAdmin.init();
-  const db = firebaseAdmin.getFirestoreInstance();
-
   if (!PERMISSION_KEYS.includes(key)) {
     throw badRequest(`El permiso "${key}" no existe.`);
   }
@@ -324,15 +332,13 @@ async function deletePermission(key, body, user) {
     throw badRequest(`El permiso de reemplazo "${replacement}" no existe.`);
   }
 
-  const snap = await db.collection('role_permissions').get();
-  const storedRoles = {};
-  for (const doc of snap.docs) storedRoles[doc.id] = doc.data() || {};
-
+  const repo = await orm.getRepository(orm.RolePermission);
   const affectedRoles = [];
   for (const role of validators.ROLES) {
-    const stored = storedRoles[role];
+    const rows = await repo.find({ where: { role } });
+    const stored = rows.length > 0 ? Object.fromEntries(rows.map((r) => [r.permission_key, r.value])) : null;
     const effective = stored
-      ? readPermissions(stored)
+      ? readPermissions({ ...DEFAULTS[role], ...stored })
       : readPermissions(DEFAULTS[role] || {});
 
     if (effective[key]) {
@@ -364,18 +370,18 @@ async function deletePermission(key, body, user) {
     }
   }
 
+  if (replacement) {
+    for (const r of affectedRoles) {
+      for (const [permKey, value] of [[key, false], [replacement, true]]) {
+        const existing = await repo.findOneBy({ role: r.role, permission_key: permKey });
+        if (existing) await repo.update({ id: existing.id }, { value });
+        else await repo.save({ company_id: null, role: r.role, permission_key: permKey, value });
+      }
+    }
+  }
+
   const roleMap = {};
   for (const r of affectedRoles) roleMap[r.role] = true;
-
-  if (replacement) {
-    const batch = db.batch();
-    for (const r of affectedRoles) {
-      const ref = db.collection('role_permissions').doc(r.role);
-      batch.set(ref, { [key]: false, [replacement]: true }, { merge: true });
-    }
-    await batch.commit();
-  } else
-    {}
 
   await auditService.logAsync({
     user_id: user?.id || null,
@@ -397,4 +403,3 @@ async function deletePermission(key, body, user) {
     at: new Date().toISOString(),
   }, { role: 'sac', broadcast: true });
 }
-

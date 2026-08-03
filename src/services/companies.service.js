@@ -1,7 +1,8 @@
 /* Documentado por: Miguel Flores */
 'use strict'
 
-const firestoreData = require('../firestoreData');
+const { In } = require('typeorm');
+const orm = require('../orm');
 const membershipsService = require('./memberships.service');
 const {
   requireString,
@@ -32,9 +33,9 @@ function emitCompany(event, company, companyId) {
 }
 
 /**
- * Convierte un registro de empresa de Firestore al formato plano expuesto por la API.
- * @param {Object} row - registro crudo de empresa
- * @returns {Object|null} empresa serializada, o null si no se recibió registro
+ * Convierte una fila de empresa de la base al formato plano expuesto por la API.
+ * @param {Object} row - fila cruda de empresa
+ * @returns {Object|null} empresa serializada, o null si no se recibió fila
  */
 function serialize(row) {
   if (!row) return null;
@@ -61,11 +62,12 @@ function serialize(row) {
  * @returns {Promise<String>} slug único disponible
  */
 async function ensureUniqueSlug(base, excludeId = null) {
+  const repo = await orm.getRepository(orm.Company);
   const seed = base && base.length > 0 ? base : `empresa-${Date.now()}`;
   for (let i = 0; i < 100; i += 1) {
     const candidate = i === 0 ? seed : `${seed}-${i + 1}`;
-    const existing = await firestoreData.findOneByFields('companies', [['slug', '==', candidate]]);
-    if (!existing || (excludeId && String(existing.id) === String(excludeId))) return candidate;
+    const existing = await repo.findOneBy({ slug: candidate });
+    if (!existing || (excludeId && existing.id === Number(excludeId))) return candidate;
   }
   throw conflictError('No se pudo generar un slug único. Probá con un slug manual.');
 }
@@ -95,14 +97,18 @@ function validateCodePrefix(value) {
  */
 async function ensureUniqueCodePrefix(prefix, excludeId = null) {
   if (!prefix) return;
-  const existing = await firestoreData.findOneByFields('companies', [['code_prefix', '==', prefix]]);
-  if (existing && (!excludeId || String(existing.id) !== String(excludeId))) {
+  const repo = await orm.getRepository(orm.Company);
+  const existing = await repo.findOneBy({ code_prefix: prefix });
+  if (existing && (!excludeId || existing.id !== Number(excludeId))) {
     throw conflictError(`El prefijo "${prefix}" ya lo usa otra empresa.`);
   }
 }
 
+// Roles elegibles como encargado de empresa: administrador de área o jefe inmediato.
+const RESPONSIBLE_ROLES = ['admin_area', 'jefe_inmediato'];
+
 /**
- * Asegura que el usuario encargado de una empresa tenga una membresía activa con rol admin_area en esa empresa, creándola o actualizándola según corresponda. Absorbe errores para no interrumpir el flujo que la invoca.
+ * Asegura que el usuario encargado de una empresa tenga una membresía activa en esa empresa, creándola si no existe. Si ya tiene una membresía, conserva su rol actual (admin_area o jefe_inmediato) en lugar de forzarlo. Absorbe errores para no interrumpir el flujo que la invoca.
  * @param {String|Number} userId - id del usuario encargado
  * @param {String|Number} companyId - id de la empresa
  * @param {Object} requester - usuario que realiza la operación
@@ -113,14 +119,17 @@ async function ensureAdminAreaMembership(userId, companyId, requester) {
   try {
     const existing = await membershipsService.findMembershipForUserAndCompany(userId, companyId, { activeOnly: false });
     if (existing) {
-      if (existing.role !== 'admin_area' || !existing.active) {
-        await membershipsService.update(existing.id, { role: 'admin_area', active: true }, requester, { allowSACCreate: true });
+      if (!existing.active) {
+        await membershipsService.update(existing.id, { active: true }, requester, { allowSACCreate: true });
       }
       return;
     }
-    await membershipsService.create(userId, { company_id: companyId, role: 'admin_area' }, requester, { allowSACCreate: true });
+    const userRepo = await orm.getRepository(orm.User);
+    const user = await userRepo.findOneBy({ id: Number(userId) });
+    const role = (user && RESPONSIBLE_ROLES.includes(user.role)) ? user.role : 'admin_area';
+    await membershipsService.create(userId, { company_id: companyId, role }, requester, { allowSACCreate: true });
   } catch (err) {
-    console.warn('[companies.service] no se pudo asegurar la membresía admin_area del encargado:', err.stack || err.message);
+    console.warn('[companies.service] no se pudo asegurar la membresía del encargado:', err.stack || err.message);
   }
 }
 
@@ -132,8 +141,18 @@ async function ensureAdminAreaMembership(userId, companyId, requester) {
  * @returns {Promise<Array>} empresas serializadas
  */
 async function list({ activeOnly = true, requester } = {}) {
-  const rows = await firestoreData.listCompanies({ activeOnly, requester });
-  if (!Array.isArray(rows)) return [];
+  const repo = await orm.getRepository(orm.Company);
+  if (requester && !requester.isPlatformAdmin) {
+    const membershipRepo = await orm.getRepository(orm.UserCompanyMembership);
+    const mems = await membershipRepo.find({ where: { user_id: Number(requester.id), active: true } });
+    const companyIds = mems.map((m) => m.company_id);
+    if (!companyIds.length) return [];
+    let rows = await repo.findBy({ id: In(companyIds) });
+    if (activeOnly) rows = rows.filter((c) => c.active);
+    return rows.map(serialize);
+  }
+  const where = activeOnly ? { active: true } : {};
+  const rows = await repo.find({ where });
   return rows.map(serialize);
 }
 
@@ -145,7 +164,13 @@ async function list({ activeOnly = true, requester } = {}) {
  * @returns {Promise<Object|null>} empresa serializada
  */
 async function getById(id, { requester } = {}) {
-  const row = await firestoreData.getCompanyById(Number(id), { requester });
+  const repo = await orm.getRepository(orm.Company);
+  const row = await repo.findOneBy({ id: Number(id) });
+  if (!row) return null;
+  if (requester && !requester.isPlatformAdmin) {
+    const isMember = await membershipsService.isActiveMemberOfCompany(requester.id, id);
+    if (!isMember) return null;
+  }
   return serialize(row);
 }
 
@@ -169,19 +194,30 @@ async function create(input, requester) {
   const isDefault = !!(input && input.is_default);
 
   const baseSlug = providedSlug || slugify(name);
+  const finalSlug = await ensureUniqueSlug(baseSlug);
   await ensureUniqueCodePrefix(codePrefix);
+
+  const repo = await orm.getRepository(orm.Company);
   if (isDefault) {
-    const defaults = await firestoreData.queryCollection('companies', [['is_default', '==', 1]]);
-    for (const d of defaults) {
-      await firestoreData.updateDoc('companies', d.id, { is_default: 0 });
-    }
+    await repo.update({ is_default: true }, { is_default: false });
   }
   let createdRow;
   try {
-    createdRow = await firestoreData.createCompany({ name, slug: baseSlug, logo_url: logoUrl, location, responsible_user_id: responsibleUserId, color, code_prefix: codePrefix, is_default: isDefault });
+    createdRow = await repo.save({
+      name,
+      slug: finalSlug,
+      logo_url: logoUrl,
+      location,
+      responsible_user_id: responsibleUserId,
+      color,
+      code_prefix: codePrefix,
+      active: true,
+      is_default: isDefault,
+    });
   } catch (err) {
-    if (err.code === 'CONFLICT')
-      throw conflictError(err.message);
+    if (err && (err.number === 2627 || err.number === 2601)) {
+      throw conflictError('El slug o el prefijo ya están en uso por otra empresa.');
+    }
     throw err;
   }
   const created = serialize(createdRow);
@@ -212,7 +248,8 @@ async function update(id, input, requester) {
     throw forbiddenError('Requiere permisos de administrador de plataforma.');
   }
   const companyId = Number(id);
-  const before = await firestoreData.getCompanyById(companyId, { requester: null });
+  const repo = await orm.getRepository(orm.Company);
+  const before = await repo.findOneBy({ id: companyId });
   if (!before) throw notFoundError('Empresa no encontrada.');
 
   const patch = {};
@@ -229,31 +266,33 @@ async function update(id, input, requester) {
     patch.code_prefix = validateCodePrefix(input.code_prefix);
     await ensureUniqueCodePrefix(patch.code_prefix, companyId);
   }
-  if (input && input.active !== undefined) patch.active = input.active ? 1 : 0;
+  if (input && input.active !== undefined) patch.active = !!input.active;
   if (input && input.location !== undefined) patch.location = optionalString(input.location, 'location', 200);
   if (input && input.responsible_user_id !== undefined) {
-    const val = input.responsible_user_id === null ? null : Number(input.responsible_user_id);
-    patch.responsible_user_id = val || null;
+    patch.responsible_user_id = input.responsible_user_id === null ? null : Number(input.responsible_user_id) || null;
   }
   const wantsDefault = input && input.is_default !== undefined ? !!input.is_default : null;
-  if (wantsDefault !== null) patch.is_default = wantsDefault ? 1 : 0;
+  if (wantsDefault !== null) patch.is_default = wantsDefault;
 
   if (wantsDefault === true) {
-    const defaults = await firestoreData.queryCollection('companies', [['is_default', '==', 1]]);
-    for (const d of defaults) {
-      if (String(d.id) !== String(companyId)) {
-        await firestoreData.updateDoc('companies', d.id, { is_default: 0 });
+    await repo.createQueryBuilder()
+      .update()
+      .set({ is_default: false })
+      .where('is_default = :isDefault AND id != :id', { isDefault: true, id: companyId })
+      .execute();
+  }
+
+  if (Object.keys(patch).length > 0) {
+    try {
+      await repo.update({ id: companyId }, patch);
+    } catch (err) {
+      if (err && (err.number === 2627 || err.number === 2601)) {
+        throw conflictError('El slug o el prefijo ya están en uso por otra empresa.');
       }
+      throw err;
     }
   }
-  let after;
-  try {
-    after = await firestoreData.updateCompany(companyId, patch);
-  } catch (err) {
-    if (err.code === 'CONFLICT') throw conflictError(err.message);
-    if (err.code === 'NOT_FOUND') throw notFoundError(err.message);
-    throw err;
-  }
+  const after = await repo.findOneBy({ id: companyId });
   const result = serialize(after);
   if (patch.responsible_user_id) {
     await ensureAdminAreaMembership(patch.responsible_user_id, result.id, requester);
@@ -284,16 +323,18 @@ async function softDelete(id, requester) {
     throw forbiddenError('Requiere permisos de administrador de plataforma.');
   }
   const companyId = Number(id);
-  const before = await firestoreData.getCompanyById(companyId, { requester: null });
+  const repo = await orm.getRepository(orm.Company);
+  const before = await repo.findOneBy({ id: companyId });
   if (!before) throw notFoundError('Empresa no encontrada.');
   if (!before.active) {
     return serialize(before);
   }
-  const activeCount = await firestoreData.countCollection('companies', [['active', '==', 1]]);
+  const activeCount = await repo.count({ where: { active: true } });
   if (activeCount <= 1) {
     throw conflictError('No se puede desactivar la última empresa activa del sistema.');
   }
-  const after = await firestoreData.softDeleteCompany(companyId);
+  await repo.update({ id: companyId }, { active: false });
+  const after = serialize(await repo.findOneBy({ id: companyId }));
   await auditService.logAsync({
     user_id: requester.id,
     company_id: companyId,
@@ -303,10 +344,10 @@ async function softDelete(id, requester) {
     target_code: before.slug,
     description: `Empresa desactivada: ${before.name}`,
     old_value: serialize(before),
-    new_value: serialize(after),
+    new_value: after,
   });
-  emitCompany('company:delete', serialize(after), companyId);
-  return serialize(after);
+  emitCompany('company:delete', after, companyId);
+  return after;
 }
 
 module.exports = {
@@ -317,4 +358,3 @@ module.exports = {
   softDelete,
   _serialize: serialize,
 };
-
