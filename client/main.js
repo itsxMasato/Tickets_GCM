@@ -15,6 +15,7 @@ import { renderTicketNew } from './views/ticket-new.js';
 import { renderTicketDetail } from './views/ticket-detail.js';
 import { renderUsers } from './views/users.js';
 import { renderCategories } from './views/categories.js';
+import { renderProviders } from './views/providers.js';
 import { renderNotifications } from './views/notifications.js';
 import { renderReports } from './views/reports.js';
 import { renderAudit } from './views/audit.js';
@@ -31,6 +32,7 @@ const handlers = {
   '/tickets/:id':   ({ params, query, user }) => ({ view: renderTicketDetail({ params, query, user }) }),
   '/users':         ({ params, query, user }) => ({ view: renderUsers({ params, query, user }) }),
   '/categories':    ({ params, query, user }) => ({ view: renderCategories({ params, query, user }) }),
+  '/providers':     ({ params, query, user }) => ({ view: renderProviders({ params, query, user }) }),
   '/notifications': ({ params, query, user }) => ({ view: renderNotifications({ params, query, user }) }),
   '/reports':       ({ params, query, user }) => ({ view: renderReports({ params, query, user }) }),
   '/audit':         ({ params, query, user }) => ({ view: renderAudit({ params, query, user }) }),
@@ -315,7 +317,7 @@ async function dispatch(rawPath, query) {
       return;
     }
   }
-  const SAC_ONLY = new Set(['/users', '/categories', '/roles', '/audit']);
+  const SAC_ONLY = new Set(['/users', '/categories', '/providers', '/roles', '/audit']);
   if (SAC_ONLY.has(path) && getState().user?.role !== 'sac') {
     toast('No tienes permiso para acceder a esa sección.', 'error');
     go('/dashboard');

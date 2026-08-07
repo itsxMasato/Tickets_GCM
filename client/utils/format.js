@@ -90,6 +90,14 @@ export const AREA_LABEL = {
   otro:          'Otro',
 };
 
+export const LOCATION_REASONS = ['garantia', 'reparacion_externa', 'compra_repuesto', 'otro'];
+export const LOCATION_REASON_LABEL = {
+  garantia:           'Garantía',
+  reparacion_externa: 'Reparación externa',
+  compra_repuesto:    'Compra de repuesto',
+  otro:                'Otro',
+};
+
 /**
  * Determina si un tipo MIME corresponde a una imagen.
  * @param {string} mime - tipo MIME a evaluar

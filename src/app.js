@@ -115,6 +115,7 @@ function createApp() {
   app.use('/api/auth', require('./routes/auth.routes'));
   app.use('/api/users', require('./routes/users.routes'));
   app.use('/api/categories', require('./routes/categories.routes'));
+  app.use('/api/providers', require('./routes/providers.routes'));
   app.use('/api/tickets', require('./routes/tickets.routes'));
   app.use('/api/notifications', require('./routes/notifications.routes'));
   app.use('/api/stats', require('./routes/stats.routes'));

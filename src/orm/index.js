@@ -15,6 +15,8 @@ const {
   RoleEnum, ROLE_VALUES,
   TicketStatusEnum, TICKET_STATUS_VALUES,
   TicketPriorityEnum, TICKET_PRIORITY_VALUES,
+  TicketLocationTypeEnum, TICKET_LOCATION_TYPE_VALUES,
+  TicketLocationReasonEnum, TICKET_LOCATION_REASON_VALUES,
   NotificationTypeEnum, NOTIFICATION_TYPE_VALUES,
 } = require('./enums');
 
@@ -29,6 +31,7 @@ module.exports = {
 
   User: Entities.User,
   Category:                Entities.Category,
+  Provider:                Entities.Provider,
   Ticket:                  Entities.Ticket,
   TicketAssignment:        Entities.TicketAssignment,
   TicketComment:           Entities.TicketComment,
@@ -44,6 +47,8 @@ module.exports = {
   RoleEnum, ROLE_VALUES,
   TicketStatusEnum, TICKET_STATUS_VALUES,
   TicketPriorityEnum, TICKET_PRIORITY_VALUES,
+  TicketLocationTypeEnum, TICKET_LOCATION_TYPE_VALUES,
+  TicketLocationReasonEnum, TICKET_LOCATION_REASON_VALUES,
   NotificationTypeEnum, NOTIFICATION_TYPE_VALUES,
 };
 

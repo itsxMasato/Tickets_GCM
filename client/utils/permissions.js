@@ -79,6 +79,19 @@ export function canAssign(user) {
 }
 
 /**
+ * Determina si el usuario puede cambiar la ubicación física de un ticket (taller / proveedor externo): SAC siempre, o el admin de área al que está asignado el ticket. Independiente del status.
+ * @param {Object} user - usuario a evaluar
+ * @param {Object} ticket - ticket a evaluar
+ * @returns {boolean} true si puede cambiar la ubicación
+ */
+export function canChangeLocation(user, ticket) {
+  if (!user || !ticket) return false;
+  if (isSAC(user)) return true;
+  if (isAdmin(user)) return sameId(ticket.assigned_to, user.id);
+  return false;
+}
+
+/**
  * Calcula los próximos estados válidos a los que un ticket puede transicionar, según el rol
  * del usuario, el estado actual del ticket, y (para admin de área) si el ticket le está asignado.
  * @param {Object} user - usuario que realizaría la transición
@@ -149,6 +162,12 @@ export function canManageUsers(user)    { return isSAC(user); }
  * @returns {boolean} true si puede administrar categorías
  */
 export function canManageCategories(user) { return isSAC(user); }
+/**
+ * Determina si el usuario puede administrar proveedores externos (solo SAC).
+ * @param {Object} user - usuario a evaluar
+ * @returns {boolean} true si puede administrar proveedores
+ */
+export function canManageProviders(user) { return isSAC(user); }
 /**
  * Determina si el usuario puede ver reportes (SAC o jefe inmediato).
  * @param {Object} user - usuario a evaluar

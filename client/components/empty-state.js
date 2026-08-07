@@ -6,6 +6,7 @@ const ICON = {
   bell:      'M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0',
   users:     'M16 11a4 4 0 10-8 0 4 4 0 008 0zM4 21a8 8 0 0116 0M22 21a6 6 0 00-12 0',
   tag:       'M20 12l-8 8-8-8 8-8h8v8z',
+  building:  'M3 21h18M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16M9 7h.01M9 11h.01M9 15h.01M15 7h.01M15 11h.01M15 15h.01',
   chart:     'M4 19V5m6 14V9m6 10v-6m4 6V3',
   search:    'M21 21l-4.3-4.3M17 10a7 7 0 11-14 0 7 7 0 0114 0z',
   inbox:     'M3 8h18M3 8l2 12h14l2-12M9 12h6',
@@ -80,6 +81,11 @@ export const EMPTY_STATES = {
     icon: 'tag',
     title: 'Sin categorías',
     message: 'Crea categorías para clasificar los tickets (red, infraestructura, mantenimiento, etc.).',
+  },
+  providers: {
+    icon: 'building',
+    title: 'Sin proveedores',
+    message: 'Crea proveedores externos (ej. AQ) para poder enviarles tickets por garantía o reparación.',
   },
   reports: {
     icon: 'chart',

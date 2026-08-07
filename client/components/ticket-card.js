@@ -1,6 +1,6 @@
 /* Documentado por: Miguel Flores */
 import { h } from '../utils/dom.js';
-import { statusBadge, priorityBadge } from './badge.js';
+import { statusBadge, priorityBadge, locationBadge } from './badge.js';
 import { relativeFromNow, PRIORITY_LABEL } from '../utils/format.js';
 import { go } from '../router.js';
 import { ICON, svg } from '../utils/icons.js';
@@ -24,6 +24,7 @@ export function ticketCard(t) {
     h('div.font-medium.text-brand-ink.line-clamp-2', {}, t.title),
     h('div.flex.items-center.gap-2.mt-2.text-xs.flex-wrap', {}, [
       statusBadge(t.status),
+      locationBadge(t.location_type, t.location_provider_name),
       h('span.text-slate-500', {}, `· ${relativeFromNow(t.created_at)}`),
     ]),
     t.assigned_to_name ? h('div.text-xs.text-slate-500.flex.items-center.gap-1', { class: 'mt-1.5' }, [

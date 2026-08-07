@@ -185,6 +185,26 @@ CREATE TABLE dbo.categories (
 GO
 
 -- ────────────────────────────────────────────────────────────────────────
+-- providers — catálogo de proveedores externos (ej. AQ) a los que se puede
+-- enviar un ticket (motor de garantía, reparación externa, etc.). Mismo
+-- patrón que `categories`: company_id NULL = proveedor global, compartido
+-- por todas las empresas del grupo; no NULL = proveedor propio de una
+-- empresa.
+-- ────────────────────────────────────────────────────────────────────────
+CREATE TABLE dbo.providers (
+  id          INT IDENTITY(1,1) NOT NULL,
+  company_id  INT             NULL,
+  name        NVARCHAR(255)   NOT NULL,
+  active      BIT             NOT NULL CONSTRAINT DF_providers_active DEFAULT (1),
+  created_at  DATETIME2       NOT NULL CONSTRAINT DF_providers_created_at DEFAULT (SYSUTCDATETIME()),
+  CONSTRAINT PK_providers PRIMARY KEY CLUSTERED (id),
+  CONSTRAINT UQ_providers_company_name UNIQUE (company_id, name),
+  CONSTRAINT FK_providers_company FOREIGN KEY (company_id)
+    REFERENCES dbo.companies(id) ON DELETE NO ACTION
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────
 -- user_company_memberships — a qué empresas pertenece cada usuario y con
 -- qué rol en cada una (tabla central del modelo multiempresa)
 -- ────────────────────────────────────────────────────────────────────────
@@ -263,6 +283,14 @@ CREATE TABLE dbo.tickets (
   created_by    INT             NOT NULL,
   assigned_to   INT             NULL,
   closed_by     INT             NULL,
+  -- Ubicación física actual del ticket, independiente de `status`: un ticket
+  -- puede seguir "en_proceso" mientras está afuera, en un proveedor externo
+  -- (ej. AQ, por garantía). Ver docs/module-*.md si se documenta este flujo.
+  location_type         NVARCHAR(20)  NOT NULL CONSTRAINT DF_tickets_location_type DEFAULT ('taller'),
+  location_provider_id  INT           NULL,
+  location_reason        NVARCHAR(20) NULL,
+  location_changed_at   DATETIME2     NULL,
+  location_changed_by   INT           NULL,
   created_at    DATETIME2       NOT NULL CONSTRAINT DF_tickets_created_at DEFAULT (SYSUTCDATETIME()),
   updated_at    DATETIME2       NOT NULL CONSTRAINT DF_tickets_updated_at DEFAULT (SYSUTCDATETIME()),
   closed_at     DATETIME2       NULL,
@@ -270,11 +298,20 @@ CREATE TABLE dbo.tickets (
   CONSTRAINT UQ_tickets_code UNIQUE (code),
   CONSTRAINT CK_tickets_status CHECK (status IN ('recibido','asignado','en_proceso','solucionado','cerrado','reabierto')),
   CONSTRAINT CK_tickets_priority CHECK (priority IN ('baja','media','alta','urgente')),
+  CONSTRAINT CK_tickets_location_type CHECK (location_type IN ('taller','proveedor')),
+  CONSTRAINT CK_tickets_location_reason CHECK (location_reason IN ('garantia','reparacion_externa','compra_repuesto','otro')),
+  CONSTRAINT CK_tickets_location_consistency CHECK (
+    (location_type = 'taller'    AND location_provider_id IS NULL     AND location_reason IS NULL)
+    OR
+    (location_type = 'proveedor' AND location_provider_id IS NOT NULL AND location_reason IS NOT NULL)
+  ),
   CONSTRAINT FK_tickets_company FOREIGN KEY (company_id) REFERENCES dbo.companies(id) ON DELETE NO ACTION,
   CONSTRAINT FK_tickets_category FOREIGN KEY (category_id) REFERENCES dbo.categories(id) ON DELETE SET NULL,
   CONSTRAINT FK_tickets_created_by FOREIGN KEY (created_by) REFERENCES dbo.users(id) ON DELETE NO ACTION,
   CONSTRAINT FK_tickets_assigned_to FOREIGN KEY (assigned_to) REFERENCES dbo.users(id) ON DELETE NO ACTION,
-  CONSTRAINT FK_tickets_closed_by FOREIGN KEY (closed_by) REFERENCES dbo.users(id) ON DELETE NO ACTION
+  CONSTRAINT FK_tickets_closed_by FOREIGN KEY (closed_by) REFERENCES dbo.users(id) ON DELETE NO ACTION,
+  CONSTRAINT FK_tickets_location_provider FOREIGN KEY (location_provider_id) REFERENCES dbo.providers(id) ON DELETE NO ACTION,
+  CONSTRAINT FK_tickets_location_changed_by FOREIGN KEY (location_changed_by) REFERENCES dbo.users(id) ON DELETE NO ACTION
 );
 GO
 CREATE INDEX IX_tickets_status        ON dbo.tickets(status);
@@ -283,12 +320,14 @@ CREATE INDEX IX_tickets_created_at    ON dbo.tickets(created_at);
 CREATE INDEX IX_tickets_priority      ON dbo.tickets(priority);
 CREATE INDEX IX_tickets_category_id   ON dbo.tickets(category_id);
 CREATE INDEX IX_tickets_area          ON dbo.tickets(area);
+CREATE INDEX IX_tickets_location_type ON dbo.tickets(location_type);
 -- Índices compuestos para los accesos multiempresa más comunes (siempre se
 -- filtra por company_id primero; ver docs/MULTITENANT.md §3.3).
 CREATE INDEX IX_tickets_company_status    ON dbo.tickets(company_id, status, created_at DESC);
 CREATE INDEX IX_tickets_company_assigned  ON dbo.tickets(company_id, assigned_to, status);
 CREATE INDEX IX_tickets_company_created   ON dbo.tickets(company_id, created_by, created_at DESC);
 CREATE INDEX IX_tickets_company_area      ON dbo.tickets(company_id, area, status);
+CREATE INDEX IX_tickets_company_location  ON dbo.tickets(company_id, location_type);
 GO
 
 -- ────────────────────────────────────────────────────────────────────────
@@ -379,7 +418,8 @@ CREATE TABLE dbo.notifications (
   CONSTRAINT PK_notifications PRIMARY KEY CLUSTERED (id),
   CONSTRAINT CK_notifications_type CHECK (type IN (
     'ticket_created','ticket_assigned','ticket_commented','ticket_status_changed',
-    'ticket_closed','ticket_reopened','ticket_transferred'
+    'ticket_closed','ticket_reopened','ticket_transferred',
+    'ticket_sent_to_provider','ticket_returned_to_shop'
   )),
   CONSTRAINT FK_notifications_user FOREIGN KEY (user_id) REFERENCES dbo.users(id) ON DELETE CASCADE,
   CONSTRAINT FK_notifications_company FOREIGN KEY (company_id) REFERENCES dbo.companies(id) ON DELETE NO ACTION,

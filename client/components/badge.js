@@ -30,5 +30,16 @@ export function priorityBadge(priority) {
   return h('span', { class: `prio-${priority}` }, PRIORITY_LABEL[priority] || priority);
 }
 
+/**
+ * Crea un badge con la ubicación de un ticket cuando está afuera, en un proveedor externo. No renderiza nada si el ticket sigue en el taller (default, no ensucia la UI).
+ * @param {string} locationType - tipo de ubicación ('taller' o 'proveedor')
+ * @param {string} [providerName] - nombre del proveedor, si corresponde
+ * @returns {HTMLElement|null} elemento span del badge, o null si está en el taller
+ */
+export function locationBadge(locationType, providerName) {
+  if (locationType !== 'proveedor') return null;
+  return h('span.badge-proveedor', {}, `En proveedor${providerName ? `: ${providerName}` : ''}`);
+}
+
 import { STATUS_LABEL, PRIORITY_LABEL } from '../utils/format.js';
 

@@ -51,6 +51,7 @@ function topbarContext(user) {
   if (pathname === '/users')          return { title: 'Usuarios',        subtitle: 'Gestión de cuentas y roles' };
   if (pathname === '/roles')          return { title: 'Roles',           subtitle: 'Matriz de permisos del sistema' };
   if (pathname === '/categories')     return { title: 'Categorías',      subtitle: 'Catálogo de incidencias' };
+  if (pathname === '/providers')      return { title: 'Proveedores',     subtitle: 'Proveedores externos y garantía' };
   if (pathname === '/notifications')  return { title: 'Notificaciones',  subtitle: 'Bandeja de entrada' };
   if (pathname === '/reports')        return { title: 'Reportes',        subtitle: 'Exportes a Excel y PDF' };
   return { title: 'GCM Tickets', subtitle: 'Sistema interno' };

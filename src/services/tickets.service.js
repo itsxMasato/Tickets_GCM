@@ -9,6 +9,7 @@ const { canViewTicket: canView, sameCompany, resolveTicketArea } = require('../u
 const {
   validationError, notFoundError, forbiddenError, conflictError,
   requireString, optionalString, optionalEnum, TICKET_STATUS, PRIORITIES, STATUS_LABEL,
+  LOCATION_TYPES, LOCATION_REASONS, LOCATION_REASON_LABEL,
 } = require('../utils/validators');
 
 const TRANSITIONS = {
@@ -90,6 +91,19 @@ function canChangeStatus(ticket, user, next) {
 }
 
 /**
+ * Determina si un usuario puede cambiar la ubicación física de un ticket (taller / proveedor externo): admins de plataforma siempre; SAC de la misma empresa; admin de área solo sobre tickets que tiene asignados. Independiente de la máquina de transiciones de `status`.
+ * @param {Object} ticket - ticket a evaluar
+ * @param {Object} user - usuario que intenta cambiar la ubicación
+ * @returns {Boolean} true si puede cambiar la ubicación
+ */
+function canChangeLocation(ticket, user) {
+  if (user.isPlatformAdmin) return true;
+  if (user.role === 'sac') return sameCompany(ticket, user);
+  if (user.role === 'admin_area') return ticket.assigned_to === user.id;
+  return false;
+}
+
+/**
  * Enriquece un ticket con el área resuelta (asignado/creador) y la etiqueta legible de su estado.
  * @param {Object} ticket - ticket crudo a decorar
  * @returns {Object|null} ticket decorado, o null si no se recibió ticket
@@ -146,25 +160,30 @@ async function generateUniqueCode(companyId, manager) {
 async function enrichTickets(rows) {
   if (!rows.length) return [];
   const categoryIds = Array.from(new Set(rows.map((t) => t.category_id).filter((id) => id != null)));
+  const providerIds = Array.from(new Set(rows.map((t) => t.location_provider_id).filter((id) => id != null)));
   const userIds = Array.from(new Set([
     ...rows.map((t) => t.created_by),
     ...rows.map((t) => t.assigned_to),
   ].filter((id) => id != null)));
 
-  const [categories, users] = await Promise.all([
+  const [categories, providers, users] = await Promise.all([
     categoryIds.length ? (await orm.getRepository(orm.Category)).findBy({ id: In(categoryIds) }) : [],
+    providerIds.length ? (await orm.getRepository(orm.Provider)).findBy({ id: In(providerIds) }) : [],
     userIds.length ? (await orm.getRepository(orm.User)).findBy({ id: In(userIds) }) : [],
   ]);
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
+  const providersById = new Map(providers.map((p) => [p.id, p]));
   const usersById = new Map(users.map((u) => [u.id, u]));
 
   return rows.map((t) => {
     const category = t.category_id != null ? categoriesById.get(t.category_id) : null;
+    const provider = t.location_provider_id != null ? providersById.get(t.location_provider_id) : null;
     const createdBy = t.created_by != null ? usersById.get(t.created_by) : null;
     const assignedTo = t.assigned_to != null ? usersById.get(t.assigned_to) : null;
     return {
       ...t,
       category_name: category?.name || null,
+      location_provider_name: provider?.name || null,
       created_by_name: createdBy?.full_name || null,
       created_by_area: createdBy?.area || null,
       created_by_role: createdBy?.role || null,
@@ -653,6 +672,94 @@ async function changeStatus(id, payload, user) {
 }
 
 /**
+ * Cambia la ubicación física de un ticket (taller / proveedor externo), validando permisos, notificando a la contraparte, registrando auditoría y emitiendo el cambio en tiempo real. Independiente de `status`: un ticket puede seguir "en_proceso" mientras está afuera, en un proveedor.
+ * @param {String|Number} id - id del ticket
+ * @param {Object} payload - datos del cambio (location_type, provider_id, reason)
+ * @param {Object} user - usuario que realiza el cambio de ubicación
+ * @returns {Promise<Object>} ticket actualizado decorado
+ */
+async function changeLocation(id, payload, user) {
+  const next = optionalEnum(payload.location_type, 'ubicación', LOCATION_TYPES);
+  if (!next) throw validationError('Debe indicar una ubicación válida.');
+
+  const repo = await orm.getRepository(orm.Ticket);
+  const raw = await repo.findOneBy({ id: Number(id) });
+  if (!raw) throw notFoundError('Ticket no encontrado.');
+  const [ticket] = await enrichTickets([raw]);
+  if (!canView(ticket, user)) throw forbiddenError();
+  if (!canChangeLocation(ticket, user)) throw forbiddenError('No puede cambiar la ubicación de este ticket.');
+
+  let provider = null;
+  let reason = null;
+  const patch = { location_type: next, location_changed_at: new Date(), location_changed_by: Number(user.id) };
+
+  if (next === 'proveedor') {
+    const providerId = payload.provider_id ? parseInt(payload.provider_id, 10) : null;
+    if (!providerId) throw validationError('Debe indicar el proveedor.');
+    provider = await (await orm.getRepository(orm.Provider)).findOneBy({ id: providerId });
+    if (!provider || !provider.active) throw validationError('El proveedor seleccionado no existe.');
+    if (provider.company_id != null && String(provider.company_id) !== String(ticket.company_id)) {
+      throw validationError('El proveedor seleccionado no pertenece a esta empresa.');
+    }
+    reason = optionalEnum(payload.reason, 'motivo', LOCATION_REASONS);
+    if (!reason) throw validationError('Debe indicar el motivo del envío al proveedor.');
+    patch.location_provider_id = provider.id;
+    patch.location_reason = reason;
+  } else {
+    patch.location_provider_id = null;
+    patch.location_reason = null;
+  }
+
+  await repo.update({ id: ticket.id }, patch);
+  const [updated] = await enrichTickets([await repo.findOneBy({ id: ticket.id })]);
+  const decorated = decorate(updated);
+
+  const counterpart = ticket.assigned_to;
+  if (counterpart && counterpart !== user.id) {
+    await notificationsService.createAsync({
+      user_id: counterpart,
+      type: next === 'proveedor' ? 'ticket_sent_to_provider' : 'ticket_returned_to_shop',
+      ticket_id: id,
+      title: next === 'proveedor' ? `Enviado a proveedor: ${ticket.code}` : `De vuelta en el taller: ${ticket.code}`,
+      body: next === 'proveedor'
+        ? `${user.full_name} envió el ticket a "${provider.name}" (motivo: ${LOCATION_REASON_LABEL[reason]}).`
+        : `${user.full_name} trajo el ticket de vuelta al taller.`,
+    });
+  }
+
+  await auditService.logAsync({
+    user_id: user.id,
+    company_id: user.activeCompanyId,
+    action_type: 'ticket_location_changed',
+    target_type: 'ticket',
+    target_id: id,
+    target_code: ticket.code,
+    description: next === 'proveedor'
+      ? `Envió el ticket a proveedor "${provider.name}" (motivo: ${LOCATION_REASON_LABEL[reason]})`
+      : `Regresó el ticket al taller`,
+    old_value: {
+      location_type: ticket.location_type,
+      location_provider_id: ticket.location_provider_id,
+      location_reason: ticket.location_reason,
+    },
+    new_value: {
+      location_type: next,
+      location_provider_id: patch.location_provider_id,
+      location_reason: patch.location_reason,
+    },
+  });
+
+  emit('ticket:location_changed', {
+    ticketId: id,
+    location_type: next,
+    location_provider_id: patch.location_provider_id,
+    by: user.id,
+  }, { user: counterpart, role: 'sac', room: 'tickets' });
+
+  return decorated;
+}
+
+/**
  * Agrega un comentario a un ticket, notifica a la contraparte (encargado o creador, según quién comenta) y registra auditoría.
  * @param {String|Number} id - id del ticket
  * @param {Object} payload - datos del comentario (comment)
@@ -775,7 +882,7 @@ function emit(event, payload, { room, role, user } = {}) {
 
 module.exports = {
   createTicket, listTickets, getTicket, updateTicket,
-  assignTicket, changeStatus, addComment, addAttachment,
-  canView, canEditMeta, canAssign, canClose, canReopen, canChangeStatus,
+  assignTicket, changeStatus, changeLocation, addComment, addAttachment,
+  canView, canEditMeta, canAssign, canClose, canReopen, canChangeStatus, canChangeLocation,
   TRANSITIONS, STATUS_LABEL, TICKET_STATUS,
 };

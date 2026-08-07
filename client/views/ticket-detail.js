@@ -3,13 +3,13 @@ import { h, escapeHtml } from '../utils/dom.js';
 import { api } from '../api.js';
 import { go } from '../router.js';
 import { toast } from '../utils/toast.js';
-import { statusBadge, priorityBadge } from '../components/badge.js';
+import { statusBadge, priorityBadge, locationBadge } from '../components/badge.js';
 import { renderChat } from '../components/chat.js';
 import { chatComposer } from '../components/chat-composer.js';
 import { openModal, confirmModal, passwordConfirmModal } from '../components/modal.js';
 import { verifyCurrentPassword } from '../auth-reverify.js';
-import { canAssign, canEditMeta, canComment, canUpload, canSeeTicket, nextStates } from '../utils/permissions.js';
-import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, formatDateTime, relativeFromNow } from '../utils/format.js';
+import { canAssign, canEditMeta, canComment, canUpload, canSeeTicket, nextStates, canChangeLocation } from '../utils/permissions.js';
+import { STATUS_LABEL, PRIORITY_LABEL, AREA_LABEL, LOCATION_REASONS, LOCATION_REASON_LABEL, formatDateTime, relativeFromNow } from '../utils/format.js';
 import { getRoleLabel } from '../utils/role-labels.js';
 import { exportTicketToPDF, exportToExcel, TICKET_EXPORT_COLUMNS } from '../utils/exports.js';
 import { on as onSocket } from '../socket.js';
@@ -145,6 +145,7 @@ export async function renderTicketDetail({ params, user }) {
           priorityBadge(ticket.priority),
           h('span.badge.bg-slate-100.text-slate-700', {}, ticket.category_name || 'Sin categoría'),
           h('span.badge.bg-slate-100.text-slate-700', {}, AREA_LABEL[ticket.area] || 'Sin área'),
+          locationBadge(ticket.location_type, ticket.location_provider_name),
         ]),
         h('div.mt-3.grid.grid-cols-2.gap-3.text-sm', {}, [
           h('div', {}, [
@@ -375,6 +376,13 @@ function renderActions(ticket, user, onChange) {
     ]));
   }
 
+  if (canChangeLocation(user, ticket)) {
+    wrap.appendChild(h('button.btn.btn-secondary.btn-sm.justify-start.gap-2', { onclick: () => changeLocation(ticket, onChange) }, [
+      svg(h, ICON.extLink, 'w-4 h-4'),
+      'Cambiar ubicación',
+    ]));
+  }
+
   if (canEditMeta(user, ticket)) {
     wrap.appendChild(h('button.btn.btn-ghost.btn-sm.justify-start.gap-2', { onclick: () => openEditModal(ticket, onChange) }, [
       svg(h, ICON.edit, 'w-4 h-4'),
@@ -496,6 +504,62 @@ async function changeStatus(ticket, next, onChange) {
     } }, 'Cambiar'),
   ];
   openModal({ title: `Cambiar estado · ${ticket.code}`, body, actions });
+}
+
+/**
+ * Abre el modal para cambiar la ubicación física del ticket (taller / proveedor externo), independiente del estado. Si se elige "proveedor externo", exige seleccionar el proveedor y el motivo del envío.
+ * @param {Object} ticket - ticket a modificar
+ * @param {Function} [onChange] - callback invocado tras cambiar la ubicación exitosamente
+ * @returns {Promise<void>}
+ */
+async function changeLocation(ticket, onChange) {
+  const { providers } = await api.providers.list().catch(() => ({ providers: [] }));
+
+  const type = h('select.input', {}, [
+    h('option', { value: 'taller' }, 'En el taller'),
+    h('option', { value: 'proveedor' }, 'En proveedor externo'),
+  ]);
+  type.value = ticket.location_type || 'taller';
+
+  const providerSelect = h('select.input', {}, providers.map((p) => h('option', { value: String(p.id) }, p.name)));
+  if (ticket.location_provider_id) providerSelect.value = String(ticket.location_provider_id);
+
+  const reasonSelect = h('select.input', {}, LOCATION_REASONS.map((r) => h('option', { value: r }, LOCATION_REASON_LABEL[r])));
+  if (ticket.location_reason) reasonSelect.value = ticket.location_reason;
+
+  const providerFields = h('div.flex.flex-col.gap-3', {}, [
+    h('div', {}, [h('label.label', {}, 'Proveedor *'), providerSelect]),
+    h('div', {}, [h('label.label', {}, 'Motivo *'), reasonSelect]),
+  ]);
+  providerFields.classList.toggle('hidden', type.value !== 'proveedor');
+  type.onchange = () => providerFields.classList.toggle('hidden', type.value !== 'proveedor');
+
+  const error = h('div.hidden.text-sm.text-red-600', {});
+  const body = h('div.flex.flex-col.gap-3', {}, [
+    !providers.length ? h('p.text-xs.text-slate-500', {}, 'No hay proveedores activos — pueden crearse en Administración › Proveedores.') : null,
+    h('div', {}, [h('label.label', {}, 'Ubicación'), type]),
+    providerFields,
+    error,
+  ]);
+  const actions = (close) => [
+    h('button.btn.btn-ghost', { onclick: close }, 'Cancelar'),
+    h('button.btn.btn-primary', { onclick: async () => {
+      try {
+        await api.tickets.changeLocation(ticket.id, {
+          location_type: type.value,
+          provider_id: type.value === 'proveedor' ? parseInt(providerSelect.value, 10) : null,
+          reason: type.value === 'proveedor' ? reasonSelect.value : null,
+        });
+        toast('Ubicación actualizada.', 'success');
+        close();
+        onChange?.();
+      } catch (e) {
+        error.textContent = e.message;
+        error.classList.remove('hidden');
+      }
+    } }, 'Guardar'),
+  ];
+  openModal({ title: `Cambiar ubicación · ${ticket.code}`, body, actions });
 }
 
 /**

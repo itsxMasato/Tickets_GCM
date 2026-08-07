@@ -76,6 +76,17 @@ router.post('/:id/status', requireAuth, async (req, res, next) => {
 });
 
 /**
+ * POST /:id/location - Cambia la ubicación física de un ticket (taller / proveedor externo).
+ * @returns {Promise<void>} responde con { ticket } actualizado
+ */
+router.post('/:id/location', requireAuth, async (req, res, next) => {
+  try {
+    const ticket = await ticketsService.changeLocation(parseInt(req.params.id, 10), req.body || {}, req.user);
+    res.json({ ticket });
+  } catch (err) { next(err); }
+});
+
+/**
  * POST /:id/comments - Agrega un comentario a un ticket.
  * @returns {Promise<void>} responde 201 con { comment }
  */

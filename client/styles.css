@@ -528,6 +528,9 @@
   .prio-alta::before     { @apply bg-amber-600; }
   .prio-urgente  { @apply badge-dot bg-red-100 text-red-900; }
   .prio-urgente::before  { @apply bg-red-600; }
+
+  .badge-proveedor   { @apply badge-dot bg-violet-100 text-violet-900; }
+  .badge-proveedor::before   { @apply bg-violet-600; }
   .login-root {
     @apply relative overflow-x-hidden flex flex-col lg:flex-row bg-brand text-white;
     min-height: 100dvh;

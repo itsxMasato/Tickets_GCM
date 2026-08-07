@@ -6,6 +6,7 @@
 module.exports = {
   User:                    require('./user.entity'),
   Category:                require('./category.entity'),
+  Provider:                require('./provider.entity'),
   Ticket:                  require('./ticket.entity'),
   TicketAssignment:        require('./ticket-assignment.entity'),
   TicketComment:           require('./ticket-comment.entity'),

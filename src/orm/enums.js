@@ -31,14 +31,32 @@ const TicketPriorityEnum = Object.freeze({
 });
 const TICKET_PRIORITY_VALUES = Object.freeze(Object.values(TicketPriorityEnum));
 
+// Ubicación física actual del ticket, independiente de `status`: un ticket
+// puede seguir "en_proceso" mientras está afuera, en un proveedor externo.
+const TicketLocationTypeEnum = Object.freeze({
+  TALLER:    'taller',
+  PROVEEDOR: 'proveedor',
+});
+const TICKET_LOCATION_TYPE_VALUES = Object.freeze(Object.values(TicketLocationTypeEnum));
+
+const TicketLocationReasonEnum = Object.freeze({
+  GARANTIA:           'garantia',
+  REPARACION_EXTERNA: 'reparacion_externa',
+  COMPRA_REPUESTO:    'compra_repuesto',
+  OTRO:               'otro',
+});
+const TICKET_LOCATION_REASON_VALUES = Object.freeze(Object.values(TicketLocationReasonEnum));
+
 const NotificationTypeEnum = Object.freeze({
-  TICKET_CREATED:        'ticket_created',
-  TICKET_ASSIGNED:       'ticket_assigned',
-  TICKET_COMMENTED:      'ticket_commented',
-  TICKET_STATUS_CHANGED: 'ticket_status_changed',
-  TICKET_CLOSED:         'ticket_closed',
-  TICKET_REOPENED:       'ticket_reopened',
-  TICKET_TRANSFERRED:    'ticket_transferred',
+  TICKET_CREATED:            'ticket_created',
+  TICKET_ASSIGNED:           'ticket_assigned',
+  TICKET_COMMENTED:          'ticket_commented',
+  TICKET_STATUS_CHANGED:     'ticket_status_changed',
+  TICKET_CLOSED:             'ticket_closed',
+  TICKET_REOPENED:           'ticket_reopened',
+  TICKET_TRANSFERRED:        'ticket_transferred',
+  TICKET_SENT_TO_PROVIDER:   'ticket_sent_to_provider',
+  TICKET_RETURNED_TO_SHOP:   'ticket_returned_to_shop',
 });
 const NOTIFICATION_TYPE_VALUES = Object.freeze(Object.values(NotificationTypeEnum));
 
@@ -57,6 +75,10 @@ module.exports = {
   TICKET_STATUS_VALUES,
   TicketPriorityEnum,
   TICKET_PRIORITY_VALUES,
+  TicketLocationTypeEnum,
+  TICKET_LOCATION_TYPE_VALUES,
+  TicketLocationReasonEnum,
+  TICKET_LOCATION_REASON_VALUES,
   NotificationTypeEnum,
   NOTIFICATION_TYPE_VALUES,
   CalendarEventTypeEnum,

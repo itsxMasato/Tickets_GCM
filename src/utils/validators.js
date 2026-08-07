@@ -18,6 +18,17 @@ const STATUS_LABEL = {
 
 const PRIORITY_LABEL = { baja: 'Baja', media: 'Media', alta: 'Alta', urgente: 'Urgente' };
 
+const LOCATION_TYPES = ['taller', 'proveedor'];
+const LOCATION_TYPE_LABEL = { taller: 'En el taller', proveedor: 'En proveedor externo' };
+
+const LOCATION_REASONS = ['garantia', 'reparacion_externa', 'compra_repuesto', 'otro'];
+const LOCATION_REASON_LABEL = {
+  garantia:           'Garantía',
+  reparacion_externa: 'Reparación externa',
+  compra_repuesto:    'Compra de repuesto',
+  otro:                'Otro',
+};
+
 const ROLE_LABEL = {
   supervisor_campo: 'Supervisor de campo',
   sac:              'Servicio al cliente (SAC)',
@@ -154,6 +165,10 @@ module.exports = {
   ROLE_LABEL,
   AREAS,
   AREA_LABEL,
+  LOCATION_TYPES,
+  LOCATION_TYPE_LABEL,
+  LOCATION_REASONS,
+  LOCATION_REASON_LABEL,
   isOneOf,
   requireString,
   optionalString,

@@ -10,6 +10,7 @@ const orm = require('../src/orm');
 const ENTITIES = [
   ['users',                    orm.User],
   ['categories',               orm.Category],
+  ['providers',                orm.Provider],
   ['tickets',                  orm.Ticket],
   ['ticket_assignments',       orm.TicketAssignment],
   ['ticket_comments',          orm.TicketComment],

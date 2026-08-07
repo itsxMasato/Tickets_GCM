@@ -111,6 +111,12 @@ export const api = {
     update: (id, body)    => request('PATCH', `/api/categories/${id}`, { body }),
     delete: (id)          => request('DELETE', `/api/categories/${id}`),
   },
+  providers: {
+    list:   (all = false) => request('GET', `/api/providers?all=${all ? 'true' : 'false'}`),
+    create: (body)        => request('POST', '/api/providers', { body }),
+    update: (id, body)    => request('PATCH', `/api/providers/${id}`, { body }),
+    delete: (id)          => request('DELETE', `/api/providers/${id}`),
+  },
   tickets: {
     list:        (q = {})         => request('GET',  '/api/tickets?' + new URLSearchParams(q)),
     get:         (id)             => request('GET',  `/api/tickets/${id}`),
@@ -118,6 +124,7 @@ export const api = {
     update:      (id, body)       => request('PATCH', `/api/tickets/${id}`, { body }),
     assign:      (id, body)       => request('POST', `/api/tickets/${id}/assign`, { body }),
     changeStatus:(id, body)       => request('POST', `/api/tickets/${id}/status`, { body }),
+    changeLocation:(id, body)     => request('POST', `/api/tickets/${id}/location`, { body }),
     comment:     (id, body)       => request('POST', `/api/tickets/${id}/comments`, { body }),
     upload:      (id, file)       => request('POST', `/api/tickets/${id}/attachments`, { body: file }),
     downloadUrl: (id, attId)      => `/api/tickets/${id}/attachments/${attId}`,

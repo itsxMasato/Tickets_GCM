@@ -2,7 +2,10 @@
 'use strict'
 
 const { EntitySchema } = require('typeorm');
-const { TICKET_STATUS_VALUES, TICKET_PRIORITY_VALUES } = require('../enums');
+const {
+  TICKET_STATUS_VALUES, TICKET_PRIORITY_VALUES,
+  TICKET_LOCATION_TYPE_VALUES, TICKET_LOCATION_REASON_VALUES,
+} = require('../enums');
 
 // Entidad ORM: tabla `tickets`. Es la entidad central del sistema: representa cada incidencia
 // reportada. Campos principales: code (identificador visible), title/description, category_id,
@@ -24,6 +27,11 @@ module.exports = new EntitySchema({
     created_by:   { type: 'integer', nullable: false },
     assigned_to:  { type: 'integer', nullable: true },
     closed_by:    { type: 'integer', nullable: true },
+    location_type:         { type: 'simple-enum', enum: TICKET_LOCATION_TYPE_VALUES, default: 'taller', nullable: false },
+    location_provider_id:  { type: 'integer', nullable: true },
+    location_reason:       { type: 'simple-enum', enum: TICKET_LOCATION_REASON_VALUES, nullable: true },
+    location_changed_at:   { type: 'datetime', nullable: true },
+    location_changed_by:   { type: 'integer', nullable: true },
     created_at:   { type: 'datetime', default: require('../timestamp-default').timestampDefault, nullable: false },
     updated_at:   { type: 'datetime', default: require('../timestamp-default').timestampDefault, nullable: false },
     closed_at:    { type: 'datetime', nullable: true },
